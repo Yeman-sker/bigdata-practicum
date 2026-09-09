@@ -9,3 +9,6 @@
 *.log
 *.swp
 *~
+
+# Local student profile & identity environment (do not commit personal info)
+.practicum.env
