@@ -96,11 +96,16 @@ version: 1.2.0
   - Cua 直接在宿主机聚焦 VSCode 截取纯原生、高清晰度的代码片段（免去远程桌面/SSH 延迟与字体模糊）。
   - 虚拟机通过挂载/共享路径仅读取代码并执行大数据运算任务。
 
-### 4. 计算机界面交互与截图 (GUI Automation)
-所有针对宿主机桌面（浏览器 Web UI、活动终端输出、VSCode 代码片段）的窗口激活与截图存证操作，**统一由项目内置的 `gui-automation` Skill (`.agents/skills/gui-automation`) 全权驱动**。
-- **Web UI 存证**：使用 `gui-automation` 激活浏览器并对 HDFS / YARN 看板截图，存至 `docs/assets/screenshots/YYYY-MM-DD/`。
-- **CLI 终端存证**：使用 `gui-automation` 捕获终端执行完成画面。
-- **代码片段存证**：使用 `gui-automation` 截取 VSCode 编辑器区域。
+### 4. 计算机界面交互与单窗口截图规范 (Window-Only GUI Capture)
+所有针对宿主机桌面（浏览器 Web UI、活动终端输出、VSCode 代码片段）的截图存证操作，**严格遵循「独立应用单窗口截图」铁律，严禁截取整张桌面全屏**：
+- **禁止全屏截图**：严禁将桌面壁纸、macOS 顶部系统菜单栏、底部 Dock 栏或 Windows 任务栏等无关外部元素截入日志，避免文档版面发虚、字体缩小及个人桌面信息泄露；
+- **独立单窗口纯净截图 (Window-Only)**：
+  - **终端实操存证**：推荐使用现代化 GPU 渲染终端 **Ghostty**（macOS/Linux）或 Windows Terminal。截图必须为终端独立单窗口，完整包含输入的命令提示符与全部输出字符；
+  - **Web UI 界面存证**：使用 **Google Chrome / Edge** 独立浏览器窗口，直达目标端口（如 HDFS `localhost:9870` 或 YARN `8088`）并仅截取浏览器自身视口；
+  - **代码片段存证**：聚焦在 **VSCode** 独立编辑器窗口中截取核心类与配置；
+- **截屏技术通道**：
+  - macOS 宿主机：通过 Quartz 获取目标应用窗口的 Window ID，调用系统原生 `screencapture -l <window_id> -o` 实现零背景像素级纯净截屏；
+  - Windows 宿主机：使用 Cua (`trycua/cua`) 针对活动应用句柄进行窗口级捕获；
 - **大报告双轨规范**：每日日志中配图证明实操，但在最终实习大报告正文中同步保持纯文本等宽排版，避免违反“代码不能截图”的评分红线。
 
 ---

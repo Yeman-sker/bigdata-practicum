@@ -12,8 +12,9 @@
 | **电脑操作驱动** | `cua-driver`<br>(trycua/cua) | 跨平台驱动宿主机浏览器、终端与 VSCode 截图 | 0.23+ | `pip install cua-driver` 或从 [trycua/cua Releases](https://github.com/trycua/cua/releases) 下载二进制放至 PATH |
 | **文档处理** | `python-docx` | 动态填充封面表头、增量追加表格、插入图片与排版 | 1.1.0+ | `pip install python-docx` |
 | **环境解析** | `python-dotenv` | 跨平台安全解析 `.practicum.env` 身份配置 | 1.0+ | `pip install python-dotenv` |
-| **宿主机桌面工具** | Google Chrome / Edge | 打开 HDFS 9870、YARN 8088 等 Web UI 供 Cua 截图 | 最新稳定版 | 系统原生安装并设为默认或就绪 |
-| **宿主机代码工具** | VSCode | 原生打开当前项目，供 Cua 截取高保真代码片段 | 最新稳定版 | 系统原生安装，建议具备 `code` 命令行别名 |
+| **宿主机桌面工具** | Google Chrome / Edge | 打开 HDFS 9870、YARN 8088 等 Web UI 供独立单窗口截图 | 最新稳定版 | 系统原生安装并设为默认或就绪 |
+| **宿主机代码工具** | VSCode | 原生打开当前项目，供独立截取高保真代码片段 | 最新稳定版 | 系统原生安装，建议具备 `code` 命令行别名 |
+| **推荐终端工具** | Ghostty (优先) / Windows Terminal | 运行大数据与集群实操命令，供独立单窗口截图 | 最新稳定版 | **macOS**: `brew install --cask ghostty`<br>**Windows**: Windows Terminal |
 
 ---
 
