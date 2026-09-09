@@ -12,3 +12,9 @@
 
 # Local student profile & identity environment (do not commit personal info)
 .practicum.env
+
+# Local student deliverables & personal daily logs (do not commit to shared repo)
+docs/daily-logs/
+docs/assets/screenshots/
+docs/生产实习日志_*.docx
+*.docx
