@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="920" viewBox="0 0 1400 920">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f7f9ff"/><stop offset="1" stop-color="#eef4ff"/></linearGradient>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#16213e"/><stop offset="1" stop-color="#274690"/></linearGradient>
+    <style>
+      .t{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;fill:#132238}
+      .muted{fill:#61708a}.card{fill:#fff;stroke:#dbe5f5;stroke-width:1.5}.blue{fill:#3478f6}.green{fill:#20a779}.orange{fill:#f59e42}.purple{fill:#7568e8}
+      .h1{font-size:34px;font-weight:700}.h2{font-size:21px;font-weight:700}.h3{font-size:17px;font-weight:700}.p{font-size:15px}.small{font-size:13px}
+    </style>
+  </defs>
+  <rect width="1400" height="920" fill="url(#bg)"/>
+  <text x="55" y="58" class="t h1">候选方向 #1 · 科研趋势雷达</text>
+  <text x="55" y="88" class="t p muted">不是“搜论文”，而是看懂一个研究方向正在爆发、成熟还是退潮 · 以下数字均为产品示意</text>
+
+  <rect x="45" y="115" rx="22" width="1310" height="140" fill="url(#hero)"/>
+  <text x="80" y="160" class="t h2" fill="#fff" style="fill:#fff">输入一个研究方向</text>
+  <rect x="80" y="180" rx="14" width="900" height="46" fill="#fff" opacity="0.97"/>
+  <text x="105" y="209" class="t p muted">例如：AI Agent / RAG / 具身智能 / 脑机接口</text>
+  <rect x="1000" y="180" rx="14" width="150" height="46" fill="#4f8cff"/>
+  <text x="1048" y="209" class="t p" style="fill:#fff;font-weight:700">开始体检</text>
+  <text x="1175" y="164" class="t small" style="fill:#cddcff">数据 → 指标 → 图表 → AI 解读</text>
+  <text x="1175" y="190" class="t small" style="fill:#cddcff">OpenAlex 子集 + Spark 批处理</text>
+
+  <!-- row 1 -->
+  <rect x="45" y="280" rx="18" width="400" height="250" class="card"/>
+  <text x="70" y="318" class="t h2">① 趋势体检</text>
+  <text x="70" y="343" class="t small muted">这个方向现在处于什么阶段？</text>
+  <rect x="70" y="365" rx="12" width="350" height="55" fill="#eef4ff"/>
+  <text x="90" y="392" class="t h3">AI Agent</text><text x="315" y="392" class="t h3 blue">🚀 快速增长</text>
+  <text x="90" y="412" class="t small muted">论文量 ↑ · 活跃机构 ↑ · 子主题分化 ↑</text>
+  <polyline points="85,490 130,475 175,470 220,445 265,438 310,405 365,385" fill="none" stroke="#3478f6" stroke-width="5"/>
+  <line x1="85" y1="495" x2="390" y2="495" stroke="#cad5e6"/>
+  <text x="86" y="515" class="t small muted">2020</text><text x="350" y="515" class="t small muted">2026</text>
+
+  <rect x="470" y="280" rx="18" width="430" height="250" class="card"/>
+  <text x="495" y="318" class="t h2">② 正在升温的子方向</text>
+  <text x="495" y="343" class="t small muted">不只看总量，更看研究注意力往哪里迁移</text>
+  <text x="500" y="383" class="t p">Agent Memory</text><rect x="650" y="368" width="195" height="18" rx="9" fill="#3478f6"/><text x="855" y="383" class="t small green">+320%</text>
+  <text x="500" y="420" class="t p">Tool Use</text><rect x="650" y="405" width="155" height="18" rx="9" fill="#5f95f7"/><text x="815" y="420" class="t small green">+240%</text>
+  <text x="500" y="457" class="t p">Multi-Agent</text><rect x="650" y="442" width="128" height="18" rx="9" fill="#83adf8"/><text x="788" y="457" class="t small green">+180%</text>
+  <text x="500" y="494" class="t p">Prompt Eng.</text><rect x="650" y="479" width="70" height="18" rx="9" fill="#c8d9fb"/><text x="730" y="494" class="t small orange">-12%</text>
+
+  <rect x="925" y="280" rx="18" width="430" height="250" class="card"/>
+  <text x="950" y="318" class="t h2">③ 演化时间线</text>
+  <text x="950" y="343" class="t small muted">同一个大方向，内部热点如何换位？</text>
+  <line x1="980" y1="420" x2="1305" y2="420" stroke="#b8c6da" stroke-width="4"/>
+  <circle cx="990" cy="420" r="10" class="blue"/><circle cx="1090" cy="420" r="10" class="green"/><circle cx="1195" cy="420" r="10" class="purple"/><circle cx="1295" cy="420" r="10" class="orange"/>
+  <text x="970" y="395" class="t small">2021</text><text x="1070" y="395" class="t small">2023</text><text x="1175" y="395" class="t small">2025</text><text x="1275" y="395" class="t small">2026</text>
+  <text x="955" y="458" class="t small muted">Prompting</text><text x="1060" y="458" class="t small muted">RAG</text><text x="1160" y="458" class="t small muted">Agent</text><text x="1260" y="458" class="t small muted">Memory</text>
+  <text x="950" y="492" class="t small blue">→ 用户一眼看出“研究重心在迁移”</text>
+
+  <!-- row 2 -->
+  <rect x="45" y="555" rx="18" width="400" height="280" class="card"/>
+  <text x="70" y="593" class="t h2">④ 谁在持续投入？</text>
+  <text x="70" y="618" class="t small muted">机构 / 国家不只看累计量，也看最近两年活跃度</text>
+  <text x="80" y="663" class="t p">机构 A</text><rect x="160" y="648" width="220" height="18" rx="9" fill="#3478f6"/><text x="385" y="663" class="t small">1260</text>
+  <text x="80" y="700" class="t p">机构 B</text><rect x="160" y="685" width="170" height="18" rx="9" fill="#5f95f7"/><text x="335" y="700" class="t small">930</text>
+  <text x="80" y="737" class="t p">机构 C</text><rect x="160" y="722" width="130" height="18" rx="9" fill="#83adf8"/><text x="295" y="737" class="t small">710</text>
+  <rect x="80" y="770" rx="10" width="320" height="42" fill="#f0f7ff"/>
+  <text x="95" y="796" class="t small blue">🌍 还能切换国家/地区分布地图</text>
+
+  <rect x="470" y="555" rx="18" width="430" height="280" class="card"/>
+  <text x="495" y="593" class="t h2">⑤ 两个方向直接 PK</text>
+  <text x="495" y="618" class="t small muted">选毕设 / 科研方向时，统一维度比较</text>
+  <text x="555" y="655" class="t h3 blue">RAG</text><text x="770" y="655" class="t h3 purple">AI Agent</text>
+  <text x="500" y="690" class="t small muted">论文规模</text><rect x="585" y="678" width="105" height="14" rx="7" fill="#5f95f7"/><rect x="790" y="678" width="85" height="14" rx="7" fill="#8f82ef"/>
+  <text x="500" y="725" class="t small muted">增长速度</text><rect x="585" y="713" width="70" height="14" rx="7" fill="#5f95f7"/><rect x="790" y="713" width="120" height="14" rx="7" fill="#8f82ef"/>
+  <text x="500" y="760" class="t small muted">活跃机构</text><rect x="585" y="748" width="90" height="14" rx="7" fill="#5f95f7"/><rect x="790" y="748" width="108" height="14" rx="7" fill="#8f82ef"/>
+  <text x="500" y="797" class="t small blue">不是“谁更好”，而是“谁正处于什么状态”</text>
+
+  <rect x="925" y="555" rx="18" width="430" height="280" class="card"/>
+  <text x="950" y="593" class="t h2">⑥ AI 趋势解说员 + Agent API</text>
+  <text x="950" y="618" class="t small muted">Spark 算事实，AI 只负责把数字讲明白</text>
+  <rect x="950" y="645" rx="14" width="380" height="105" fill="#f7f8fc" stroke="#e3e7ef"/>
+  <text x="970" y="672" class="t small">“过去三年该方向持续扩张，</text>
+  <text x="970" y="697" class="t small">其中 Agent Memory 与 Tool Use 的份额</text>
+  <text x="970" y="722" class="t small">增长最明显；参与机构也在同步增加。”</text>
+  <rect x="950" y="770" rx="10" width="380" height="42" fill="#eef8f4"/>
+  <text x="970" y="796" class="t small green">🤖 GET /api/trends/{topic} · 可被个人 Agent 调用</text>
+
+  <text x="55" y="885" class="t h3">一句话看懂：</text>
+  <text x="170" y="885" class="t h3 blue">把“海量论文”压缩成“研究方向正在怎么变化”的可视化体检报告。</text>
+</svg>
