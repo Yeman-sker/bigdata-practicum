@@ -9,7 +9,7 @@
 | 组件类别 | 工具/依赖项 | 作用说明 | 推荐版本 | 安装/配置命令 |
 | :--- | :--- | :--- | :--- | :--- |
 | **音视频预处理** | `ffmpeg` | 极速剥离视频并压缩音频至 32k mono mp3（原生高效支持老师的 `.wmv` 及 `.mp4` 格式） | 4.x+ / 6.x+ | **macOS**: `brew install ffmpeg`<br>**Ubuntu/WSL2**: `sudo apt update && sudo apt install -y ffmpeg` |
-| **电脑操作驱动** | `cua-driver`<br>(trycua/cua) | 跨平台驱动宿主机浏览器、终端与 VSCode 截图 | 0.23+ | `pip install cua-driver` 或从 [trycua/cua Releases](https://github.com/trycua/cua/releases) 下载二进制放至 PATH |
+| **电脑操作驱动** | `cua-driver`<br>(trycua/cua) | 跨平台驱动宿主机浏览器、终端与 VSCode 截图 | 0.23+ | Windows + WSL2：在 Windows PowerShell 执行 `py -m pip install --user cua-driver`；其他环境再使用对应平台安装方式 |
 | **文档处理** | `python-docx` | 动态填充封面表头、增量追加表格、插入图片与排版 | 1.1.0+ | `pip install python-docx` |
 | **环境解析** | `python-dotenv` | 跨平台安全解析 `.practicum.env` 身份配置 | 1.0+ | `pip install python-dotenv` |
 | **宿主机桌面工具** | Google Chrome / Edge | 打开 HDFS 9870、YARN 8088 等 Web UI 供独立单窗口截图 | 最新稳定版 | 系统原生安装并设为默认或就绪 |
@@ -91,7 +91,9 @@ Cua 需要直接控制宿主机的窗口与截屏能力：
      - 需要在「系统设置 $\to$ 隐私与安全性」中，为当前运行终端（如 Terminal / iTerm2 / VSCode）授予 **辅助功能 (Accessibility)** 和 **屏幕录制 (Screen Recording)** 权限。
      - 检查命令：`cua-driver permissions status`
    * **Windows 宿主机**：
-     - 确保当前运行 Agent 的命令行终端拥有桌面交互权限，防止窗口激活被后台安全策略静默拦截。
+     - Windows + WSL2 时，必须启动 Windows 侧 `cua-driver.exe serve`；仅安装 WSL 版驱动可能只能看到 WSLg 窗口，无法枚举 Windows 原生 Chrome。
+     - 确保 Windows daemon 与 Chrome 位于同一个交互式用户桌面，防止窗口激活被后台安全策略静默拦截。
+     - 完整安装、daemon 启动、PowerShell JSON 调用和窗口级截图流程见 [wsl_cua_host_setup.md](wsl_cua_host_setup.md)。
 
 ---
 

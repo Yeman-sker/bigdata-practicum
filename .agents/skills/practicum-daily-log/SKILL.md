@@ -1,7 +1,6 @@
 ---
 name: practicum-daily-log
 description: 自动化从教学视频中提取实操任务，统一采用开源 Cua (trycua/cua) 跨平台驱动真实电脑截取 Web UI 与终端成果，回填带图文的每日实习日志。
-version: 1.2.0
 ---
 
 # 生产实习每日日志自动化实操与 Cua 驱动规范 (Practicum Daily Log & Cua Computer-Use)
@@ -108,12 +107,18 @@ version: 1.2.0
   - Windows 宿主机：使用 Cua (`trycua/cua`) 针对活动应用句柄进行窗口级捕获；
 - **大报告双轨规范**：每日日志中配图证明实操，但在最终实习大报告正文中同步保持纯文本等宽排版，避免违反“代码不能截图”的评分红线。
 
+### 5. WSL2 下 Cua 宿主机路由（必须遵守）
+当 `PRACTICUM_DEV_ENV=wsl2` 且目标是 Windows 原生 Chrome、Edge、Windows Terminal 或 VSCode 时，必须阅读 [references/wsl_cua_host_setup.md](references/wsl_cua_host_setup.md)。不要默认在 WSL 内安装并调用 `cua` CLI：WSL 版驱动可能只能看到 WSLg 窗口，且 PyPI 的 `cua` 包不一定提供 `cua do` 命令。
+
+应优先检查 Windows 原生 `py/python` 与 `cua-driver`，经用户明确同意后在 Windows 侧执行 `py -m pip install --user cua-driver`，启动 Windows daemon，再通过 Windows 侧 `list_windows` 获取目标窗口句柄。窗口截图使用 `get_window_state`；严禁用 `get_desktop_state` 代替应用级捕获。
+
 ---
 
 ## 五、 参考文献与规约索引
 
 本 Skill 相关的详细规约与指南已固化在：
 * **前置工具与运行环境准备**：`references/prerequisites_and_tooling.md`
+* **WSL2 下 Cua 宿主机安装与排障**：`references/wsl_cua_host_setup.md`（WSL 环境控制 Windows 原生 GUI 时必读）
 * **文档排版与格式规范指南**：`references/document_format_spec.md`
 * **去 AI 味与大学生人设语言指南**：`references/humanize_student_tone_guide.md`
 
