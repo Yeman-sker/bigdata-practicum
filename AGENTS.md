@@ -14,3 +14,13 @@
 - 执行构建、测试或服务启动时，将工作目录、输出目录和日志路径显式指向 `/tmp/practicum-daily-log/` 下的对应任务目录。
 - 只有用户明确要求保留的最终交付物，才能从 `/tmp/practicum-daily-log/` 复制回代码库；复制前确认不包含临时产物、个人信息或无关文件。
 - 任务结束后优先保留临时目录供用户复核；如需清理，必须只清理本次任务创建的明确目录，不得影响仓库或其他临时任务。
+
+## Agent skills
+
+### Issue tracker
+
+本项目使用 GitHub Issues 驱动任务。组长发布 Issue，组员提交 PR，组长审核并合并。详见 `docs/agents/issue-tracker.md`。
+
+### Domain docs
+
+本项目采用 single-context 文档布局。详见 `docs/agents/domain.md`。
