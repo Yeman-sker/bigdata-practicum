@@ -56,10 +56,75 @@ class TrackCContractTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(result["metrics"]["timestamp_null_counts"]["started_at"], 1)
 
+    def test_historical_not_null_fields_fail(self):
+        source = (FIXTURES / "historical_trip_sample.csv").read_text(encoding="utf-8")
+        source = source.replace("sample-001,electric_bike", ",electric_bike", 1)
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "invalid_required.csv"
+            temporary.write_text(source, encoding="utf-8")
+            code, result = run("historical", temporary)
+        self.assertEqual(code, 1)
+        self.assertIn("ride_id", " ".join(result["errors"]))
+
+    def test_historical_offset_timestamp_fails(self):
+        source = (FIXTURES / "historical_trip_sample.csv").read_text(encoding="utf-8")
+        source = source.replace("01/15/2025 08:10:00", "2025-01-15T08:10:00-05:00", 1)
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "invalid_offset.csv"
+            temporary.write_text(source, encoding="utf-8")
+            code, result = run("historical", temporary)
+        self.assertEqual(code, 1)
+        self.assertGreater(result["metrics"]["timestamp_parse_failures"]["started_at"], 0)
+
     def test_missing_gbfs_required_timestamp_fails(self):
         code, result = run("discovery", "invalid_missing_last_updated.json")
         self.assertEqual(code, 1)
         self.assertIn("last_updated", " ".join(result["errors"]))
+
+    def test_missing_station_last_reported_fails(self):
+        source = json.loads((FIXTURES / "station_status.json").read_text(encoding="utf-8"))
+        del source["data"]["stations"][0]["last_reported"]
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "invalid_station_status.json"
+            temporary.write_text(json.dumps(source), encoding="utf-8")
+            code, result = run("station_status", temporary)
+        self.assertEqual(code, 1)
+        self.assertIn("last_reported", " ".join(result["errors"]))
+
+    def test_null_gbfs_required_fields_fail(self):
+        source = json.loads((FIXTURES / "station_status.json").read_text(encoding="utf-8"))
+        source["data"]["stations"][0]["last_reported"] = None
+        source["data"]["stations"][0]["num_bikes_available"] = None
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "invalid_nulls.json"
+            temporary.write_text(json.dumps(source), encoding="utf-8")
+            code, result = run("station_status", temporary)
+        self.assertEqual(code, 1)
+        errors = " ".join(result["errors"])
+        self.assertIn("last_reported", errors)
+        self.assertIn("num_bikes_available", errors)
+
+    def test_string_posix_and_numeric_version_fail(self):
+        discovery = json.loads((FIXTURES / "gbfs.json").read_text(encoding="utf-8"))
+        discovery["last_updated"] = "1736930000"
+        discovery["version"] = 2.3
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "invalid_types.json"
+            temporary.write_text(json.dumps(discovery), encoding="utf-8")
+            code, result = run("discovery", temporary)
+        self.assertEqual(code, 1)
+        self.assertIn("last_updated", " ".join(result["errors"]))
+        self.assertIn("version", " ".join(result["errors"]))
+
+    def test_missing_feed_url_fails(self):
+        discovery = json.loads((FIXTURES / "gbfs.json").read_text(encoding="utf-8"))
+        del discovery["data"]["en"]["feeds"][0]["url"]
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "invalid_url.json"
+            temporary.write_text(json.dumps(discovery), encoding="utf-8")
+            code, result = run("discovery", temporary)
+        self.assertEqual(code, 1)
+        self.assertIn("URLs", " ".join(result["errors"]))
 
     def test_non_object_json_fails_structurally(self):
         code, result = run("station_status", "invalid_top_level.json")

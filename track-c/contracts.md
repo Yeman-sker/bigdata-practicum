@@ -24,9 +24,9 @@ Discovery 必须声明 `version=2.3`，并提供 `station_information`、`statio
 
 ## Fail Fast 与 Warn/Observe
 
-以下情况失败：必需列/结构缺失、必填字段为 null、关键时间无法解析、station_id 不是字符串、POSIX 时间不是整数、GBFS 版本或必需 Feed 不匹配。
+以下情况失败：必需列/结构缺失、必填字段为 null、关键时间无法解析、station_id 不是字符串、POSIX 时间不是 JSON 整数、GBFS 版本或必需 Feed/URL 不匹配。
 
-以下情况只记录质量指标：少量站点 ID/名称为空、可选字段缺失、未知枚举值、异常坐标或负库存值。校验器不会为了“全绿”静默删除或修正原始数据。
+以下情况只记录质量指标并返回 PASS：Historical 中允许为空的 station ID/名称、GBFS 可选字段缺失、未知枚举值、异常坐标或负库存值。库存负值当前明确采用 Warn/Observe 策略，必须交给上游处理，校验器不会为了“全绿”静默删除或修正原始数据；契约要求的必填字段错误仍会阻止通过。
 
 ## 运行
 

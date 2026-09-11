@@ -27,7 +27,7 @@
 | `station_status.station_id` | `station_id` | STRING | 必须是 JSON string，作为 Kafka key |
 | Collector snapshot time | `snapshot_at_utc` | TIMESTAMP | 采集快照时间统一保存 UTC |
 | `snapshot_at_utc` 转换 | `snapshot_at_local` | TIMESTAMP | UTC → `America/New_York` |
-| `station_status.last_reported` | `last_reported_at_utc` | TIMESTAMP | POSIX 秒 → UTC |
+| `station_status.last_reported` | `last_reported_at_utc` | TIMESTAMP | 必填；POSIX 秒 → UTC |
 | Collector time | `ingested_at_utc` | TIMESTAMP | 采集程序生成，不信任 provider |
 | `station_status.num_bikes_available` | `num_bikes_available` | INT | 不得为负 |
 | `station_status.num_bikes_disabled` | `num_bikes_disabled` | INT NULL | 可选且不得为负 |
