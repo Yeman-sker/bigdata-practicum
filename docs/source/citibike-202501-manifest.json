@@ -1,0 +1,32 @@
+{
+  "source_name": "Citi Bike Historical Trips",
+  "source_page_url": "https://citibikenyc.com/system-data",
+  "source_url": "https://s3.amazonaws.com/tripdata/202501-citibike-tripdata.zip",
+  "source_month": "2025-01",
+  "downloaded_at": "2026-09-11T07:34:34Z",
+  "staging_path": "/tmp/citibike-day1/202501",
+  "zip_filename": "202501-citibike-tripdata.zip",
+  "zip_size_bytes": 414213312,
+  "zip_sha256": "ed3b0138903960afe50386ab44fec8bf52d69474b26f5c0af83e648094aea096",
+  "zip_members": ["202501-citibike-tripdata_1.csv", "202501-citibike-tripdata_3.csv", "202501-citibike-tripdata_2.csv"],
+  "csv_file_count": 3,
+  "csv_files": [
+    {"filename": "202501-citibike-tripdata_1.csv", "size_bytes": 195009639, "record_count": 1000000, "header": ["ride_id", "rideable_type", "started_at", "ended_at", "start_station_name", "start_station_id", "end_station_name", "end_station_id", "start_lat", "start_lng", "end_lat", "end_lng", "member_casual"]},
+    {"filename": "202501-citibike-tripdata_3.csv", "size_bytes": 24209588, "record_count": 124475, "header": ["ride_id", "rideable_type", "started_at", "ended_at", "start_station_name", "start_station_id", "end_station_name", "end_station_id", "start_lat", "start_lng", "end_lat", "end_lng", "member_casual"]},
+    {"filename": "202501-citibike-tripdata_2.csv", "size_bytes": 194993655, "record_count": 1000000, "header": ["ride_id", "rideable_type", "started_at", "ended_at", "start_station_name", "start_station_id", "end_station_name", "end_station_id", "start_lat", "start_lng", "end_lat", "end_lng", "member_casual"]}
+  ],
+  "record_count": 2124475,
+  "count_method": "python3 scripts/citibike/verify_source.py using streaming csv.DictReader",
+  "schema_version_or_observed_format": "2025 Citi Bike Historical Trips 13-column CSV",
+  "observed": {
+    "header": ["ride_id", "rideable_type", "started_at", "ended_at", "start_station_name", "start_station_id", "end_station_name", "end_station_id", "start_lat", "start_lng", "end_lat", "end_lng", "member_casual"],
+    "missing_values": {"ride_id": 0, "rideable_type": 0, "started_at": 0, "ended_at": 0, "start_station_name": 564, "start_station_id": 564, "end_station_name": 3975, "end_station_id": 4322, "start_lat": 564, "start_lng": 564, "end_lat": 4310, "end_lng": 4310, "member_casual": 0},
+    "rideable_type_values": ["classic_bike", "electric_bike"],
+    "member_casual_values": ["casual", "member"],
+    "time_format": "%Y-%m-%d %H:%M:%S.%f",
+    "invalid_time_count": 0,
+    "station_id": {"read_as": "STRING", "decimal_looking_start_count": 2123692, "decimal_looking_end_count": 2119752, "examples": ["6182.02", "5238.05", "6197.08", "6659.09", "5379.10"]}
+  },
+  "contract_mapping": {"ride_id": "ride_id", "rideable_type": "rideable_type", "started_at": "started_at", "ended_at": "ended_at", "start_station_name": "start_station_name", "start_station_id": "start_station_id", "end_station_name": "end_station_name", "end_station_id": "end_station_id", "start_lat": "start_lat", "start_lng": "start_lng", "end_lat": "end_lat", "end_lng": "end_lng", "member_casual": "member_casual"},
+  "notes": ["The ZIP contains three CSV files and no extra non-CSV members.", "Station IDs include decimal-looking identifiers and must remain strings; station names/IDs and coordinates have nulls.", "Full ZIP and extracted CSVs are staging artifacts outside Git; the repository contains only this manifest and a 20-row fixture."]
+}

@@ -9,3 +9,7 @@
 *.log
 *.swp
 *~
+
+# Local Citi Bike source staging; raw monthly archives are intentionally not committed.
+/staging/
+*.zip
