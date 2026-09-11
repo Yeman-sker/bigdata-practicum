@@ -17,11 +17,14 @@ def main() -> int:
     args = parser.parse_args()
     payload = json.loads(args.fixture.read_text())
     events = payload if isinstance(payload, list) else [payload]
-    errors = {
-        str(index): validate_event(event)
-        for index, event in enumerate(events)
-        if not isinstance(event, dict) or validate_event(event)
-    }
+    errors = {}
+    for index, event in enumerate(events):
+        if not isinstance(event, dict):
+            errors[str(index)] = ["event must be a JSON object"]
+            continue
+        event_errors = validate_event(event)
+        if event_errors:
+            errors[str(index)] = event_errors
     if errors:
         print(json.dumps(errors, indent=2), file=sys.stderr)
         return 1

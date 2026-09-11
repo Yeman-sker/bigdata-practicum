@@ -1,17 +1,17 @@
 {
-  "last_updated": 1789116259,
+  "last_updated": 1789118479,
   "ttl": 60,
   "version": "2.3",
   "data": {
     "stations": [
       {
-        "station_id": "2235290248874043146",
-        "name": "Linden Blvd & E 91 St",
-        "short_name": "3437.03",
-        "lon": -73.9208,
-        "lat": 40.6546,
+        "station_id": "0c923abb-298a-4a47-b132-9fae73cc59e6",
+        "name": "Hudson St & W 13 St",
+        "short_name": "6115.06",
+        "lon": -74.0052741765976,
+        "lat": 40.74005708567285,
         "region_id": "71",
-        "capacity": 12
+        "capacity": 42
       },
       {
         "station_id": "06439006-11b6-44f0-8545-c9d39035f32a",

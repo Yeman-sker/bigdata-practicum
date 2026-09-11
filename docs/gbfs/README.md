@@ -14,6 +14,9 @@ ride events.
   - `vehicle_types`
 - The collector resolves these URLs from discovery and does not hard-code the
   provider's redirected host/path.
+- The observed `vehicle_types` records contain `vehicle_type_id`,
+  `form_factor`, and `propulsion_type`, but no `name` field. The fixture keeps
+  that provider shape; a name must not be invented downstream.
 
 The checked-in files under `fixtures/gbfs/` are small samples captured from the
 live feed. Full snapshots must stay outside Git. The collector ignores neither
@@ -27,7 +30,8 @@ python3 scripts/gbfs_collector.py \
   --output-dir data/gbfs/citibike/$(date -u +%F) \
   --snapshots 3 \
   --interval-seconds 60 \
-  --sample-size 5
+  --sample-size 5 \
+  --sample-station-id 0c923abb-298a-4a47-b132-9fae73cc59e6
 ```
 
 The output contains `discovery.json`, `feed_manifest.json`, three timestamped
@@ -37,6 +41,19 @@ must not be committed.
 
 Each collection-log snapshot records the provider `last_updated`, local
 `ingested_at_utc`, station count, and a small set of sample station states.
+Use repeatable `--sample-station-id` options when the same station must be
+tracked across snapshots.
+
+The checked-in collection log tracks station
+`0c923abb-298a-4a47-b132-9fae73cc59e6` across three real responses. Provider
+`last_updated` advanced from `1789118479` to `1789118539` to `1789118600`;
+the station changed from 1 bike / 37 docks to 2 bikes / 36 docks in the third
+snapshot. This is evidence of both feed refresh and inventory change, not a
+copy of one response.
+
+In the observed `station_information` response, `region_id` was absent or
+null for 13 of 2,507 stations. `capacity` was populated in that capture, but
+the validator and downstream contract still allow it to be nullable.
 
 ## Validate the normalized fixture
 
