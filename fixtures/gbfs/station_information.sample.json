@@ -1,0 +1,27 @@
+{
+  "last_updated": 1789116259,
+  "ttl": 60,
+  "version": "2.3",
+  "data": {
+    "stations": [
+      {
+        "station_id": "2235290248874043146",
+        "name": "Linden Blvd & E 91 St",
+        "short_name": "3437.03",
+        "lon": -73.9208,
+        "lat": 40.6546,
+        "region_id": "71",
+        "capacity": 12
+      },
+      {
+        "station_id": "06439006-11b6-44f0-8545-c9d39035f32a",
+        "name": "Vesey St & Church St",
+        "short_name": "5216.06",
+        "lon": -74.01047229766846,
+        "lat": 40.71221958009051,
+        "region_id": "71",
+        "capacity": 78
+      }
+    ]
+  }
+}

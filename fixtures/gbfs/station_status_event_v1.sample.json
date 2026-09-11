@@ -1,0 +1,32 @@
+[
+  {
+    "station_id": "ba33c334-e17d-4478-ae3c-9c2f4dbfbb51",
+    "snapshot_at_utc": "2026-09-11T08:44:19Z",
+    "snapshot_at_local": "2026-09-11T04:44:19-04:00",
+    "num_bikes_available": 0,
+    "num_bikes_disabled": 0,
+    "num_docks_available": 0,
+    "num_docks_disabled": 19,
+    "is_installed": false,
+    "is_renting": false,
+    "is_returning": false,
+    "last_reported_at_utc": "2026-09-10T17:43:48Z",
+    "ingested_at_utc": "2026-09-11T08:44:23Z",
+    "source_version": "2.3"
+  },
+  {
+    "station_id": "1822663031356509142",
+    "snapshot_at_utc": "2026-09-11T08:44:19Z",
+    "snapshot_at_local": "2026-09-11T04:44:19-04:00",
+    "num_bikes_available": 0,
+    "num_bikes_disabled": 0,
+    "num_docks_available": 0,
+    "num_docks_disabled": 0,
+    "is_installed": false,
+    "is_renting": false,
+    "is_returning": false,
+    "last_reported_at_utc": "1970-01-02T00:00:00Z",
+    "ingested_at_utc": "2026-09-11T08:44:23Z",
+    "source_version": "2.3"
+  }
+]

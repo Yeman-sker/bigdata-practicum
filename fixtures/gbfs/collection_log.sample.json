@@ -1,0 +1,42 @@
+{
+  "discovery_url": "https://gbfs.citibikenyc.com/gbfs/2.3/gbfs.json",
+  "source_version": "2.3",
+  "snapshots": [
+    {
+      "snapshot_directory": "snapshots/20260911T084943Z",
+      "provider_last_updated": 1789116560,
+      "ingested_at_utc": "2026-09-11T08:49:43Z",
+      "station_count": 2507,
+      "sample_station_ids": [
+        "ba33c334-e17d-4478-ae3c-9c2f4dbfbb51",
+        "1822663031356509142",
+        "7a6fc75f-a605-4dd6-b567-b2bbbfb862f3"
+      ],
+      "source_version": "2.3"
+    },
+    {
+      "snapshot_directory": "snapshots/20260911T084953Z",
+      "provider_last_updated": 1789116560,
+      "ingested_at_utc": "2026-09-11T08:49:53Z",
+      "station_count": 2507,
+      "sample_station_ids": [
+        "ba33c334-e17d-4478-ae3c-9c2f4dbfbb51",
+        "1822663031356509142",
+        "7a6fc75f-a605-4dd6-b567-b2bbbfb862f3"
+      ],
+      "source_version": "2.3"
+    },
+    {
+      "snapshot_directory": "snapshots/20260911T084959Z",
+      "provider_last_updated": 1789116560,
+      "ingested_at_utc": "2026-09-11T08:49:59Z",
+      "station_count": 2507,
+      "sample_station_ids": [
+        "ba33c334-e17d-4478-ae3c-9c2f4dbfbb51",
+        "1822663031356509142",
+        "7a6fc75f-a605-4dd6-b567-b2bbbfb862f3"
+      ],
+      "source_version": "2.3"
+    }
+  ]
+}

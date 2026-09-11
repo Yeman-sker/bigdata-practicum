@@ -9,6 +9,7 @@
 *.log
 *.swp
 *~
+__pycache__/
 
 # Local student profile & identity environment (do not commit personal info)
 .practicum.env
@@ -18,3 +19,6 @@ docs/daily-logs/
 docs/assets/screenshots/
 docs/生产实习日志_*.docx
 *.docx
+
+# GBFS collector output (raw full snapshots stay local)
+data/gbfs/
