@@ -1,29 +1,27 @@
-# GBFS 2.3 PoC
+# GBFS 2.3 实时站点数据 PoC
 
-This directory documents the Citi Bike GBFS collector delivered for Issue #7.
-The feed is a station inventory snapshot source, not a stream of individual
-ride events.
+本文档说明 Issue #7 交付的 Citi Bike GBFS 采集器。GBFS 提供的是站点
+库存快照，不是逐笔骑行事件流。
 
-## Verified source
+## 已验证的数据源
 
-- Discovery: `https://gbfs.citibikenyc.com/gbfs/2.3/gbfs.json`
-- Provider version observed: `2.3`
-- Discovery currently advertises English feeds through `gbfs.lyft.com`:
+- Discovery：`https://gbfs.citibikenyc.com/gbfs/2.3/gbfs.json`
+- 实际观测到的 provider 版本：`2.3`
+- Discovery 当前为英文环境发布以下 feed：
   - `station_information`
   - `station_status`
   - `vehicle_types`
-- The collector resolves these URLs from discovery and does not hard-code the
-  provider's redirected host/path.
-- The observed `vehicle_types` records contain `vehicle_type_id`,
-  `form_factor`, and `propulsion_type`, but no `name` field. The fixture keeps
-  that provider shape; a name must not be invented downstream.
+- 采集器会先解析 discovery，再使用其中的 URL，不依赖 provider 当前的
+  重定向域名或路径。
+- 当前观测到的 `vehicle_types` 记录包含 `vehicle_type_id`、`form_factor`
+  和 `propulsion_type`，但没有 `name` 字段。fixture 保留 provider 的真实
+  结构，下游不得自行猜测车辆名称。
 
-The checked-in files under `fixtures/gbfs/` are small samples captured from the
-live feed. Full snapshots must stay outside Git. The collector ignores neither
-the raw response nor its provider metadata: it writes both locally so the
-normalization can be audited.
+仓库中的 `fixtures/gbfs/` 只保存从真实 feed 提取的小样本。完整 raw 快照
+必须保存在 Git 仓库之外。采集器会同时保存 raw 响应和 provider 元数据，
+便于审计标准化结果。
 
-## Run a three-snapshot collection
+## 执行三次快照采集
 
 ```bash
 python3 scripts/gbfs_collector.py \
@@ -34,49 +32,54 @@ python3 scripts/gbfs_collector.py \
   --sample-station-id 0c923abb-298a-4a47-b132-9fae73cc59e6
 ```
 
-The output contains `discovery.json`, `feed_manifest.json`, three timestamped
-snapshot directories, `station_status_event_v1.sample.json` in each snapshot,
-and `collection_log.json`. `data/gbfs/` is ignored because full raw payloads
-must not be committed.
+`--snapshots` 至少必须为 3。`--sample-station-id` 可以重复指定，使同一
+站点优先出现在每次 sample 中，便于比较状态变化。
 
-Each collection-log snapshot records the provider `last_updated`, local
-`ingested_at_utc`, station count, and a small set of sample station states.
-Use repeatable `--sample-station-id` options when the same station must be
-tracked across snapshots.
+输出目录包含：
 
-The checked-in collection log tracks station
-`0c923abb-298a-4a47-b132-9fae73cc59e6` across three real responses. Provider
-`last_updated` advanced from `1789118479` to `1789118539` to `1789118600`;
-the station changed from 1 bike / 37 docks to 2 bikes / 36 docks in the third
-snapshot. This is evidence of both feed refresh and inventory change, not a
-copy of one response.
+- `discovery.json`
+- `feed_manifest.json`
+- 三个带时间戳的 snapshot 目录
+- 每个 snapshot 中的 `station_status_event_v1.sample.json`
+- `collection_log.json`
 
-In the observed `station_information` response, `region_id` was absent or
-null for 13 of 2,507 stations. `capacity` was populated in that capture, but
-the validator and downstream contract still allow it to be nullable.
+`data/gbfs/` 已加入 `.gitignore`，完整 raw 数据不会被提交。
 
-## Validate the normalized fixture
+每条 collection log 会记录 provider 的 `last_updated`、本地
+`ingested_at_utc`、站点数量和 sample station 状态。
+
+本次真实采集跟踪站点
+`0c923abb-298a-4a47-b132-9fae73cc59e6`。三次 provider
+`last_updated` 分别为 `1789118479`、`1789118539`、`1789118600`；该站点
+从 `1 bike / 37 docks` 变为第三次的 `2 bikes / 36 docks`。这证明了 feed
+刷新和站点库存变化，不是复制同一个响应。
+
+在本次 `station_information` 响应中，2507 个站点有 13 个的 `region_id`
+缺失或为 `null`。本次采集中的 `capacity` 都有值，但 validator 和下游
+契约仍允许该字段为 `null`。
+
+## 校验 normalized fixture
 
 ```bash
 PYTHONPATH=scripts python3 scripts/validate_gbfs_fixture.py \
   fixtures/gbfs/station_status_event_v1.sample.json
 ```
 
-## Provider-to-contract mapping
+## Provider 字段到内部契约的映射
 
-| GBFS provider field | Internal field | Rule |
+| GBFS provider 字段 | 内部字段 | 规则 |
 | --- | --- | --- |
-| `data.stations[].station_id` | `station_id` | Preserve as string, including numeric-looking IDs |
-| `station_status.last_updated` | `snapshot_at_utc` | POSIX seconds converted to UTC RFC 3339 |
-| `snapshot_at_utc` | `snapshot_at_local` | Convert with `America/New_York` zone rules |
-| `num_bikes_available` | `num_bikes_available` | Required integer |
-| `num_bikes_disabled` | `num_bikes_disabled` | Nullable integer |
-| `num_docks_available` | `num_docks_available` | Nullable integer |
-| `num_docks_disabled` | `num_docks_disabled` | Nullable integer |
-| `is_installed`, `is_renting`, `is_returning` | same names | Accept GBFS `0/1`, emit booleans |
-| `last_reported` | `last_reported_at_utc` | Nullable POSIX seconds converted to UTC |
-| local request time | `ingested_at_utc` | Collector clock, always UTC |
-| response `version` | `source_version` | Required; Issue #4 expects `2.3` |
+| `data.stations[].station_id` | `station_id` | 保留为字符串，包括看起来像数字的 ID |
+| `station_status.last_updated` | `snapshot_at_utc` | POSIX 秒转换为 UTC RFC 3339 |
+| `snapshot_at_utc` | `snapshot_at_local` | 使用 `America/New_York` 时区转换 |
+| `num_bikes_available` | `num_bikes_available` | 必填整数 |
+| `num_bikes_disabled` | `num_bikes_disabled` | 可为空整数 |
+| `num_docks_available` | `num_docks_available` | 可为空整数 |
+| `num_docks_disabled` | `num_docks_disabled` | 可为空整数 |
+| `is_installed`、`is_renting`、`is_returning` | 同名字段 | 接受 GBFS `0/1`，输出布尔值 |
+| `last_reported` | `last_reported_at_utc` | 可为空的 POSIX 秒转换为 UTC |
+| 本地请求时间 | `ingested_at_utc` | 采集器时钟，统一使用 UTC |
+| 响应 `version` | `source_version` | 必填，Issue #4 固定为 `2.3` |
 
-`capacity` and `region_id` are station-information metadata and are not part of
-`station_status_event_v1`; both remain nullable in the station dimension.
+`capacity` 和 `region_id` 属于站点信息元数据，不属于
+`station_status_event_v1`；两者在站点维度中都允许为空。
