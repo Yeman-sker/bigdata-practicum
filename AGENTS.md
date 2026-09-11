@@ -1,5 +1,9 @@
 # 仓库协作说明
 
+## 开发规范 skill
+
+涉及本仓库代码、配置、文档或其他开发改动时，必须先读取并遵循 [repository-development-workflow](.agents/skills/repository-development-workflow/SKILL.md)。该 skill 规定远程同步、Issue 驱动的敏捷开发、Codex worktree、PR 关联 Issue 以及仓库负责人评估和合并流程。
+
 ## `practicum-daily-log` 日志任务的临时文件隔离
 
 调用 `.agents/skills/practicum-daily-log` 生成实习日志时，凡是任务执行过程中涉及代码或产生的临时内容，必须放在 WSL 临时目录中，不得污染本代码库。
