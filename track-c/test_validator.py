@@ -56,6 +56,17 @@ class TrackCContractTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(result["metrics"]["timestamp_null_counts"]["started_at"], 1)
 
+    def test_missing_gbfs_required_timestamp_fails(self):
+        code, result = run("discovery", "invalid_missing_last_updated.json")
+        self.assertEqual(code, 1)
+        self.assertIn("last_updated", " ".join(result["errors"]))
+
+    def test_non_object_json_fails_structurally(self):
+        code, result = run("station_status", "invalid_top_level.json")
+        self.assertEqual(code, 1)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertIn("top-level JSON", result["errors"][0])
+
 
 if __name__ == "__main__":
     unittest.main()

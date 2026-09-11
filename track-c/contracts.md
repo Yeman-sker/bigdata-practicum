@@ -24,7 +24,7 @@ Discovery 必须声明 `version=2.3`，并提供 `station_information`、`statio
 
 ## Fail Fast 与 Warn/Observe
 
-以下情况失败：必需列/结构缺失、关键时间无法解析、station_id 不是字符串、POSIX 时间不是整数、GBFS 版本或必需 Feed 不匹配。
+以下情况失败：必需列/结构缺失、必填字段为 null、关键时间无法解析、station_id 不是字符串、POSIX 时间不是整数、GBFS 版本或必需 Feed 不匹配。
 
 以下情况只记录质量指标：少量站点 ID/名称为空、可选字段缺失、未知枚举值、异常坐标或负库存值。校验器不会为了“全绿”静默删除或修正原始数据。
 
@@ -40,6 +40,35 @@ python3 -m unittest track-c/test_validator.py
 ```
 
 退出码 `0` 表示 PASS，退出码 `1` 表示存在契约错误；标准输出为带有 `status`、`errors`、`warnings` 和质量指标的 JSON，可直接保存为 CI 或 Day 1 验收证据。
+
+正常输出示例（节选）：
+
+```json
+{
+  "kind": "station_status",
+  "status": "PASS",
+  "errors": [],
+  "warnings": [],
+  "metrics": {
+    "records": 2507,
+    "station_id_type": "STRING",
+    "distinct_station_ids": 2507,
+    "invalid_station_id_records": 0
+  }
+}
+```
+
+错误输出示例：
+
+```json
+{
+  "kind": "station_information",
+  "status": "FAIL",
+  "errors": ["station_id must be STRING and non-empty: 1 invalid records"]
+}
+```
+
+`historical_trip_sample.csv`、GBFS Fixture 和 `station_status_event_v1.json` 均为 synthetic 小样本，仅用于复现 schema 和测试边界，不代表完整生产数据；其字段结构来自 #4 冻结契约和 #7 实测 GBFS 结构。
 
 ## 真实源观察记录
 

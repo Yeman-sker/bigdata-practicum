@@ -25,6 +25,8 @@
 | GBFS Feed/字段 | Internal field | Type | Rule |
 |---|---|---|---|
 | `station_status.station_id` | `station_id` | STRING | 必须是 JSON string，作为 Kafka key |
+| Collector snapshot time | `snapshot_at_utc` | TIMESTAMP | 采集快照时间统一保存 UTC |
+| `snapshot_at_utc` 转换 | `snapshot_at_local` | TIMESTAMP | UTC → `America/New_York` |
 | `station_status.last_reported` | `last_reported_at_utc` | TIMESTAMP | POSIX 秒 → UTC |
 | Collector time | `ingested_at_utc` | TIMESTAMP | 采集程序生成，不信任 provider |
 | `station_status.num_bikes_available` | `num_bikes_available` | INT | 不得为负 |
@@ -37,3 +39,5 @@
 | Discovery `version` | `source_version` | STRING | 当前必须为 `2.3` |
 
 `station_information` 提供站点名称、经纬度、可选容量和区域；它进入 `dim_station_v1`，不直接作为实时事件。`vehicle_types` 只冻结 provider 的车辆类型 ID，供适配器记录。
+
+完整 normalized 示例见 [fixtures/station_status_event_v1.json](fixtures/station_status_event_v1.json)。

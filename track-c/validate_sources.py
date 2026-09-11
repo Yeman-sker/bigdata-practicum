@@ -27,7 +27,6 @@ TIME_FORMATS = (
     "%m/%d/%Y %H:%M:%S",
     "%Y-%m-%d %H:%M:%S",
     "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S%z",
 )
 STATION_ID_RE = re.compile(r"^[^\s]+$")
 
@@ -68,7 +67,7 @@ def _try_datetime(value: str, fmt: str) -> bool:
         return False
 
 
-def number(value: Any, integer: bool = False) -> bool:
+def is_numeric(value: Any, integer: bool = False) -> bool:
     try:
         if isinstance(value, bool):
             return False
@@ -78,9 +77,17 @@ def number(value: Any, integer: bool = False) -> bool:
         return False
 
 
+def is_posix(value: Any) -> bool:
+    return is_numeric(value, integer=True) and int(value) >= 0
+
+
 def load_json(path: Path, report: Report) -> dict[str, Any] | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            report.error("top-level JSON value must be an object")
+            return None
+        return value
     except (OSError, json.JSONDecodeError) as exc:
         report.error(f"cannot read JSON: {exc}")
         return None
@@ -124,6 +131,8 @@ def validate_historical(path: Path) -> Report:
             invalid_coords = 0
             unknown_rideable: set[str] = set()
             unknown_member: set[str] = set()
+            rideable_values: set[str] = set()
+            member_values: set[str] = set()
             ride_ids: set[str] = set()
             duplicate_ids = 0
             for line, row in enumerate(reader, start=2):
@@ -144,10 +153,14 @@ def validate_historical(path: Path) -> Report:
                         parse_failures[field] += 1
                 for field in ("start_lat", "start_lng", "end_lat", "end_lng"):
                     value = (row.get(field) or "").strip()
-                    if value and not number(value):
+                    if value and not is_numeric(value):
                         invalid_coords += 1
                 rideable = (row.get("rideable_type") or "").strip()
                 member = (row.get("member_casual") or "").strip()
+                if rideable:
+                    rideable_values.add(rideable)
+                if member:
+                    member_values.add(member)
                 if rideable and rideable not in RIDEABLE_TYPES:
                     unknown_rideable.add(rideable)
                 if member and member not in MEMBER_TYPES:
@@ -160,8 +173,10 @@ def validate_historical(path: Path) -> Report:
                 "timestamp_parse_failures": parse_failures,
                 "timestamp_null_counts": null_timestamps,
                 "invalid_coordinate_values": invalid_coords,
-                "unknown_rideable_type": sorted(unknown_rideable),
-                "unknown_member_casual": sorted(unknown_member),
+                "rideable_type_values": sorted(rideable_values),
+                "member_casual_values": sorted(member_values),
+                "unknown_rideable_type_values": sorted(unknown_rideable),
+                "unknown_member_casual_values": sorted(unknown_member),
             }
             if unknown_rideable:
                 report.warn(f"unknown rideable_type values: {sorted(unknown_rideable)}")
@@ -183,6 +198,10 @@ def validate_discovery(path: Path) -> Report:
     data = load_json(path, report)
     if data is None:
         return report
+    if not isinstance(data.get("data"), dict):
+        report.error("GBFS data must be an object")
+    if not is_posix(data.get("last_updated")):
+        report.error("top-level last_updated must be a non-negative POSIX integer")
     version = str(data.get("version", ""))
     if version != "2.3":
         report.error(f"expected GBFS version 2.3, got {version!r}")
@@ -201,6 +220,10 @@ def validate_gbfs(path: Path, kind: str) -> Report:
     data = load_json(path, report)
     if data is None:
         return report
+    if not isinstance(data.get("data"), dict):
+        report.error("GBFS data must be an object")
+    if not is_posix(data.get("last_updated")):
+        report.error("top-level last_updated must be a non-negative POSIX integer")
     rows = payload(data)
     required = {
         "station_information": {"station_id", "name", "lat", "lon"},
@@ -217,6 +240,7 @@ def validate_gbfs(path: Path, kind: str) -> Report:
     bad_coordinates = 0
     bad_capacity = 0
     bad_booleans = 0
+    required_nulls = 0
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
             report.error(f"record {index} is not an object")
@@ -224,6 +248,10 @@ def validate_gbfs(path: Path, kind: str) -> Report:
         record_missing = sorted(required - set(row))
         if record_missing:
             report.error(f"record {index} missing required fields: {record_missing}")
+        null_required = sorted(field for field in required if field in row and row[field] is None)
+        if null_required:
+            required_nulls += len(null_required)
+            report.error(f"record {index} has null required fields: {null_required}")
         if "station_id" in row:
             station_id = row["station_id"]
             if not isinstance(station_id, str) or not STATION_ID_RE.match(station_id):
@@ -232,15 +260,17 @@ def validate_gbfs(path: Path, kind: str) -> Report:
                 station_ids.append(station_id)
         if kind == "station_information":
             for field in ("lat", "lon"):
-                if field in row and not number(row[field]):
+                if field in row and row[field] is not None and not is_numeric(row[field]):
                     bad_coordinates += 1
-            if "capacity" in row and row["capacity"] is not None and (not number(row["capacity"], True) or int(row["capacity"]) < 0):
+            if "capacity" in row and row["capacity"] is not None and (not is_numeric(row["capacity"], True) or int(row["capacity"]) < 0):
                 bad_capacity += 1
+            if "name" in row and row["name"] is not None and (not isinstance(row["name"], str) or not row["name"].strip()):
+                report.error(f"record {index} name must be non-empty STRING")
         if kind == "station_status":
             for field in ("num_bikes_available", "num_bikes_disabled", "num_docks_available", "num_docks_disabled"):
-                if field in row and row[field] is not None and (not number(row[field], True) or int(row[field]) < 0):
+                if field in row and row[field] is not None and (not is_numeric(row[field], True) or int(row[field]) < 0):
                     negative_counts += 1
-            if "last_reported" in row and row["last_reported"] is not None and not number(row["last_reported"], True):
+            if "last_reported" in row and row["last_reported"] is not None and not is_posix(row["last_reported"]):
                 bad_timestamps += 1
             for field in ("is_installed", "is_renting", "is_returning"):
                 if field in row and row[field] not in (0, 1, False, True):
@@ -273,6 +303,7 @@ def validate_gbfs(path: Path, kind: str) -> Report:
         "invalid_coordinate_values": bad_coordinates,
         "invalid_capacity_values": bad_capacity,
         "invalid_service_flags": bad_booleans,
+        "null_required_fields": required_nulls,
         "invalid_vehicle_type_id_records": bad_vehicle_ids,
     }
     return report
