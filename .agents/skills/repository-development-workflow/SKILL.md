@@ -1,6 +1,6 @@
 ---
 name: repository-development-workflow
-description: Use for code, configuration, documentation, or maintenance changes in this repository; enforces GitHub CLI checks, safe cleanup of merged Codex worktrees, remote synchronization, issue-driven development, and PR linkage.
+description: Use for code, configuration, documentation, or maintenance changes in this repository; enforces GitHub CLI checks, safe cleanup of merged Codex worktrees, remote synchronization, and issue-driven development.
 ---
 
 # 仓库开发规范
@@ -38,13 +38,12 @@ description: Use for code, configuration, documentation, or maintenance changes 
 3. **创建 Codex worktree**：创建前重复完整 `gh` 先验门禁；然后从已同步的 `origin/main` 创建独立分支和 worktree，分支命名为 `codex/<issue-number>-<short-slug>`；所有实现和验证都在该 worktree 中进行，避免直接修改 `main`。
 4. **敏捷实现**：以 Issue 验收标准为最小交付切片，优先复用仓库现有实现；每次只做能形成可验证反馈的改动。范围变化先回到 Issue 记录并确认，不做推测性功能。
 5. **验证与交付**：运行与改动匹配的最小测试、检查或构建，并把实际结果记录在 PR 中。提交聚焦的变更，推送 `codex/...` 分支，创建 PR 到默认分支。
-6. **关联 Issue**：PR 标题或正文必须包含 Issue 编号。默认使用 `Refs #<issue-number>` 建立关联，只有项目明确希望合并时自动关闭 Issue 才使用 `Closes #<issue-number>`。
-7. **负责人评估**：Agent 不自行合并 PR。仓库负责人评估代码质量后：
+6. **负责人评估**：Agent 不自行合并 PR。仓库负责人评估代码质量后：
    - 通过：由负责人合并 PR；
    - 未通过或需补充：在 Issue 下发布评估报告，后续修改继续更新同一 Issue/PR，不另起无关分支。
 
 ## 交付门禁
 
-- 未同步远程、未在 Codex worktree 中开发、未关联 Issue 或未记录验证结果，不得发布“完成”的 PR。
+- 未同步远程、未在 Codex worktree 中开发或未记录验证结果，不得发布“完成”的 PR。
 - 不提交密钥、个人信息、构建产物、缓存和临时截图。
 - 未得到负责人合并结果或后续指示前，不关闭 Issue，也不删除仍需复核的 worktree。
