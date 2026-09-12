@@ -14,6 +14,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 HISTORICAL_COLUMNS = [
     "ride_id", "rideable_type", "started_at", "ended_at",
@@ -67,12 +68,12 @@ def _try_datetime(value: str, fmt: str) -> bool:
         return False
 
 
-def is_numeric(value: Any, integer: bool = False) -> bool:
+def is_numeric(value: Any) -> bool:
     try:
         if isinstance(value, bool):
             return False
-        f = float(value)
-        return f.is_integer() if integer else True
+        float(value)
+        return True
     except (TypeError, ValueError):
         return False
 
@@ -101,7 +102,7 @@ def load_json(path: Path, report: Report) -> dict[str, Any] | None:
         return None
 
 
-def payload(data: dict[str, Any]) -> list[dict[str, Any]]:
+def extract_records(data: dict[str, Any]) -> list[Any]:
     value = data.get("data", data)
     if isinstance(value, dict):
         for key in ("stations", "vehicle_types", "feeds"):
@@ -146,6 +147,7 @@ def validate_historical(path: Path) -> Report:
             required_nulls = {"ride_id": 0, "rideable_type": 0, "member_casual": 0}
             coordinate_nulls = {field: 0 for field in ("start_lat", "start_lng", "end_lat", "end_lng")}
             out_of_range_coords = 0
+            nonpositive_duration_count = 0
             for line, row in enumerate(reader, start=2):
                 rows += 1
                 for field in nulls:
@@ -168,6 +170,13 @@ def validate_historical(path: Path) -> Report:
                         null_timestamps[field] += 1
                     elif not parse_time(value):
                         parse_failures[field] += 1
+                started = (row.get("started_at") or "").strip()
+                ended = (row.get("ended_at") or "").strip()
+                if started and ended and parse_time(started) and parse_time(ended):
+                    start_dt = next(datetime.strptime(started, fmt) for fmt in TIME_FORMATS if _try_datetime(started, fmt))
+                    end_dt = next(datetime.strptime(ended, fmt) for fmt in TIME_FORMATS if _try_datetime(ended, fmt))
+                    if (end_dt - start_dt).total_seconds() <= 0:
+                        nonpositive_duration_count += 1
                 for field in ("start_lat", "start_lng", "end_lat", "end_lng"):
                     value = (row.get(field) or "").strip()
                     if not value:
@@ -198,6 +207,7 @@ def validate_historical(path: Path) -> Report:
                 "invalid_coordinate_values": invalid_coords,
                 "coordinate_null_counts": coordinate_nulls,
                 "coordinate_out_of_range_count": out_of_range_coords,
+                "nonpositive_duration_count": nonpositive_duration_count,
                 "required_null_counts": required_nulls,
                 "null_rates": {field: count / rows if rows else 0 for field, count in nulls.items()},
                 "rideable_type_values": sorted(rideable_values),
@@ -229,17 +239,32 @@ def validate_discovery(path: Path) -> Report:
         return report
     validate_gbfs_envelope(data, report, require_version=True)
     version = data.get("version")
-    feeds = payload(data)
+    feeds = extract_records(data)
     names = {item.get("name") for item in feeds if isinstance(item, dict)}
     required = {"station_information", "station_status", "vehicle_types"}
     missing = sorted(required - names)
     if missing:
         report.error(f"missing required feeds: {missing}")
-    invalid_urls = [item.get("name", "<unnamed>") for item in feeds if not isinstance(item, dict) or not isinstance(item.get("url"), str) or not item["url"].startswith(("http://", "https://"))]
+    malformed_entries = [index for index, item in enumerate(feeds, start=1) if not isinstance(item, dict)]
+    if malformed_entries:
+        report.error(f"discovery feed records must be objects: records {malformed_entries}")
+    invalid_urls = [
+        item.get("name", "<unnamed>")
+        for item in feeds
+        if isinstance(item, dict)
+        and (not isinstance(item.get("url"), str) or not _valid_http_url(item["url"]))
+    ]
     if invalid_urls:
         report.error(f"required/declared feed URLs must be non-empty http(s) URLs: {invalid_urls}")
-    report.metrics = {"version": version, "feed_names": sorted(x for x in names if x), "invalid_feed_urls": invalid_urls}
+    report.metrics = {"version": version, "feed_names": sorted(x for x in names if x), "invalid_feed_urls": invalid_urls, "malformed_feed_records": malformed_entries}
     return report
+
+
+def _valid_http_url(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc) and bool(parsed.hostname)
 
 
 def validate_gbfs_envelope(data: dict[str, Any], report: Report, require_version: bool = False) -> None:
@@ -259,7 +284,7 @@ def validate_gbfs(path: Path, kind: str) -> Report:
     if data is None:
         return report
     validate_gbfs_envelope(data, report)
-    rows = payload(data)
+    rows = extract_records(data)
     required = {
         "station_information": {"station_id", "name", "lat", "lon"},
         "station_status": {"station_id", "num_bikes_available", "is_installed", "is_renting", "is_returning", "last_reported"},
@@ -269,13 +294,23 @@ def validate_gbfs(path: Path, kind: str) -> Report:
     if missing:
         report.error(f"missing required fields: {missing}")
     station_ids = []
-    invalid_availability_values = 0
+    invalid_availability_types = 0
+    negative_availability_values = 0
     bad_types = 0
     bad_timestamps = 0
     bad_coordinates = 0
     bad_capacity = 0
     bad_booleans = 0
     required_nulls = 0
+    optional_missing = 0
+    optional_fields = {
+        "station_information": ("capacity", "region_id"),
+        "station_status": ("num_bikes_disabled", "num_docks_available", "num_docks_disabled"),
+        "vehicle_types": ("name", "form_factor"),
+    }[kind]
+    optional_missing_counts = {field: 0 for field in optional_fields}
+    coordinate_nulls = {"lat": 0, "lon": 0}
+    coordinate_out_of_range = 0
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
             report.error(f"record {index} is not an object")
@@ -287,6 +322,10 @@ def validate_gbfs(path: Path, kind: str) -> Report:
         if null_required:
             required_nulls += len(null_required)
             report.error(f"record {index} has null required fields: {null_required}")
+        for field in optional_fields:
+            if field not in row:
+                optional_missing += 1
+                optional_missing_counts[field] += 1
         if "station_id" in row:
             station_id = row["station_id"]
             if not isinstance(station_id, str) or not STATION_ID_RE.match(station_id):
@@ -295,8 +334,14 @@ def validate_gbfs(path: Path, kind: str) -> Report:
                 station_ids.append(station_id)
         if kind == "station_information":
             for field in ("lat", "lon"):
-                if field in row and row[field] is not None and not is_json_number(row[field]):
+                if field not in row or row[field] is None:
+                    coordinate_nulls[field] += 1
+                elif not is_json_number(row[field]):
                     bad_coordinates += 1
+                elif field == "lat" and not -90 <= row[field] <= 90:
+                    coordinate_out_of_range += 1
+                elif field == "lon" and not -180 <= row[field] <= 180:
+                    coordinate_out_of_range += 1
             if "capacity" in row and row["capacity"] is not None and (not is_json_integer(row["capacity"]) or row["capacity"] < 0):
                 bad_capacity += 1
             if "name" in row and row["name"] is not None and (not isinstance(row["name"], str) or not row["name"].strip()):
@@ -304,7 +349,10 @@ def validate_gbfs(path: Path, kind: str) -> Report:
         if kind == "station_status":
             for field in ("num_bikes_available", "num_bikes_disabled", "num_docks_available", "num_docks_disabled"):
                 if field in row and row[field] is not None and (not is_json_integer(row[field]) or row[field] < 0):
-                    invalid_availability_values += 1
+                    if not is_json_integer(row[field]):
+                        invalid_availability_types += 1
+                    elif row[field] < 0:
+                        negative_availability_values += 1
             if "last_reported" in row and row["last_reported"] is not None and not is_posix(row["last_reported"]):
                 bad_timestamps += 1
             for field in ("is_installed", "is_renting", "is_returning"):
@@ -312,16 +360,22 @@ def validate_gbfs(path: Path, kind: str) -> Report:
                     bad_booleans += 1
     if bad_types:
         report.error(f"station_id must be STRING and non-empty: {bad_types} invalid records")
-    if invalid_availability_values:
-        report.warn(f"negative/non-integer availability values: {invalid_availability_values}")
+    if invalid_availability_types:
+        report.error(f"availability fields must be JSON integers: {invalid_availability_types} invalid values")
+    if negative_availability_values:
+        report.warn(f"negative availability values observed: {negative_availability_values}")
     if bad_timestamps:
         report.error(f"invalid POSIX last_reported values: {bad_timestamps}")
     if bad_coordinates:
         report.warn(f"invalid lat/lon values: {bad_coordinates}")
+    if coordinate_out_of_range:
+        report.warn(f"out-of-range lat/lon values: {coordinate_out_of_range}")
     if bad_capacity:
         report.warn(f"negative/non-integer capacity values: {bad_capacity}")
     if bad_booleans:
         report.error(f"service flags must be boolean or 0/1: {bad_booleans} invalid values")
+    if optional_missing:
+        report.warn(f"optional GBFS fields missing: {optional_missing_counts}")
     if kind == "vehicle_types":
         bad_vehicle_ids = sum(not isinstance(row.get("vehicle_type_id"), str) or not row.get("vehicle_type_id", "").strip() for row in rows if isinstance(row, dict))
         if bad_vehicle_ids:
@@ -333,13 +387,18 @@ def validate_gbfs(path: Path, kind: str) -> Report:
         "station_id_type": "STRING",
         "distinct_station_ids": len(set(station_ids)),
         "invalid_station_id_records": bad_types,
-        "invalid_availability_values": invalid_availability_values,
+        "invalid_availability_types": invalid_availability_types,
+        "negative_availability_values": negative_availability_values,
         "invalid_posix_timestamps": bad_timestamps,
         "invalid_coordinate_values": bad_coordinates,
         "invalid_capacity_values": bad_capacity,
         "invalid_service_flags": bad_booleans,
         "null_required_fields": required_nulls,
         "invalid_vehicle_type_id_records": bad_vehicle_ids,
+        "optional_missing_counts": optional_missing_counts,
+        "optional_missing_total": optional_missing,
+        "coordinate_null_counts": coordinate_nulls,
+        "coordinate_out_of_range_count": coordinate_out_of_range,
     }
     return report
 

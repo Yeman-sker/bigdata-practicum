@@ -126,6 +126,65 @@ class TrackCContractTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("URLs", " ".join(result["errors"]))
 
+    def test_url_without_host_fails(self):
+        discovery = json.loads((FIXTURES / "gbfs.json").read_text(encoding="utf-8"))
+        discovery["data"]["en"]["feeds"][0]["url"] = "https://"
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "invalid_url_host.json"
+            temporary.write_text(json.dumps(discovery), encoding="utf-8")
+            code, result = run("discovery", temporary)
+        self.assertEqual(code, 1)
+        self.assertIn("URLs", " ".join(result["errors"]))
+
+    def test_malformed_discovery_entry_fails_structurally(self):
+        discovery = json.loads((FIXTURES / "gbfs.json").read_text(encoding="utf-8"))
+        discovery["data"]["en"]["feeds"].append([])
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "invalid_entry.json"
+            temporary.write_text(json.dumps(discovery), encoding="utf-8")
+            code, result = run("discovery", temporary)
+        self.assertEqual(code, 1)
+        self.assertIn("records", " ".join(result["errors"]))
+
+    def test_invalid_inventory_type_fails_but_negative_is_observed(self):
+        source = json.loads((FIXTURES / "station_status.json").read_text(encoding="utf-8"))
+        source["data"]["stations"][0]["num_bikes_available"] = 2.5
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "invalid_inventory_type.json"
+            temporary.write_text(json.dumps(source), encoding="utf-8")
+            code, result = run("station_status", temporary)
+        self.assertEqual(code, 1)
+        self.assertEqual(result["metrics"]["invalid_availability_types"], 1)
+
+        source["data"]["stations"][0]["num_bikes_available"] = -1
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "negative_inventory.json"
+            temporary.write_text(json.dumps(source), encoding="utf-8")
+            code, result = run("station_status", temporary)
+        self.assertEqual(code, 0)
+        self.assertEqual(result["metrics"]["negative_availability_values"], 1)
+
+    def test_gbfs_coordinate_range_is_observed(self):
+        source = json.loads((FIXTURES / "station_information.json").read_text(encoding="utf-8"))
+        source["data"]["stations"][0]["lat"] = 91
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "out_of_range.json"
+            temporary.write_text(json.dumps(source), encoding="utf-8")
+            code, result = run("station_information", temporary)
+        self.assertEqual(code, 0)
+        self.assertEqual(result["metrics"]["coordinate_out_of_range_count"], 1)
+        self.assertTrue(result["warnings"])
+
+    def test_nonpositive_duration_is_counted(self):
+        source = (FIXTURES / "historical_trip_sample.csv").read_text(encoding="utf-8")
+        source = source.replace("01/15/2025 08:24:00", "01/15/2025 08:10:00", 1)
+        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+            temporary = Path(directory) / "nonpositive_duration.csv"
+            temporary.write_text(source, encoding="utf-8")
+            code, result = run("historical", temporary)
+        self.assertEqual(code, 0)
+        self.assertEqual(result["metrics"]["nonpositive_duration_count"], 1)
+
     def test_non_object_json_fails_structurally(self):
         code, result = run("station_status", "invalid_top_level.json")
         self.assertEqual(code, 1)

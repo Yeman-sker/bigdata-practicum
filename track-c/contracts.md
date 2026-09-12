@@ -28,6 +28,8 @@ Discovery 必须声明 `version=2.3`，并提供 `station_information`、`statio
 
 以下情况只记录质量指标并返回 PASS：Historical 中允许为空的 station ID/名称、GBFS 可选字段缺失、未知枚举值、异常坐标或负库存值。库存负值当前明确采用 Warn/Observe 策略，必须交给上游处理，校验器不会为了“全绿”静默删除或修正原始数据；契约要求的必填字段错误仍会阻止通过。
 
+Historical 校验还输出 `nonpositive_duration_count`：时长由已成功解析的开始/结束时间计算，`duration_seconds <= 0` 只作为可追踪质量指标，不在 Source 层生成 DWD 字段。
+
 ## 运行
 
 ```bash
