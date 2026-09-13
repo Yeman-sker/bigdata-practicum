@@ -1,0 +1,17 @@
+[
+  {
+    "station_id": "0c923abb-298a-4a47-b132-9fae73cc59e6",
+    "snapshot_at_utc": "2026-09-11T09:23:20Z",
+    "snapshot_at_local": "2026-09-11T05:23:20-04:00",
+    "num_bikes_available": 2,
+    "num_bikes_disabled": 2,
+    "num_docks_available": 36,
+    "num_docks_disabled": 0,
+    "is_installed": true,
+    "is_renting": true,
+    "is_returning": true,
+    "last_reported_at_utc": "2026-09-11T09:22:07Z",
+    "ingested_at_utc": "2026-09-11T09:24:04Z",
+    "source_version": "2.3"
+  }
+]
