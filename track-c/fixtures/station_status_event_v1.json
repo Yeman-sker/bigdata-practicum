@@ -1,0 +1,20 @@
+{
+  "schema": "station_status_event_v1",
+  "events": [
+    {
+      "station_id": "5484.09",
+      "snapshot_at_utc": "2025-01-15T13:00:00Z",
+      "snapshot_at_local": "2025-01-15T08:00:00-05:00",
+      "num_bikes_available": 4,
+      "num_bikes_disabled": 0,
+      "num_docks_available": 26,
+      "num_docks_disabled": 0,
+      "is_installed": true,
+      "is_renting": true,
+      "is_returning": true,
+      "last_reported_at_utc": "2025-01-15T12:59:40Z",
+      "ingested_at_utc": "2025-01-15T13:00:02Z",
+      "source_version": "2.3"
+    }
+  ]
+}

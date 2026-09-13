@@ -1,0 +1,20 @@
+{
+  "last_updated": 1789116257,
+  "ttl": 60,
+  "version": "2.3",
+  "data": {
+    "vehicle_types": [
+      {
+        "vehicle_type_id": "1",
+        "form_factor": "bicycle",
+        "propulsion_type": "human"
+      },
+      {
+        "vehicle_type_id": "2",
+        "form_factor": "bicycle",
+        "propulsion_type": "electric_assist",
+        "max_range_meters": 69201.62
+      }
+    ]
+  }
+}

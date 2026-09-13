@@ -1,0 +1,1 @@
+{"version":"2.3","ttl":60,"data":{"en":{"feeds":[{"name":"station_information","url":"https://example.test/station_information.json"},{"name":"station_status","url":"https://example.test/station_status.json"},{"name":"vehicle_types","url":"https://example.test/vehicle_types.json"}]}}}

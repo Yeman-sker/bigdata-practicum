@@ -1,6 +1,6 @@
 ---
 name: repository-development-workflow
-description: Use for code, configuration, documentation, or maintenance changes in this repository; enforces GitHub CLI checks, safe cleanup of merged Codex worktrees, remote synchronization, and issue-driven development.
+description: Use for code, configuration, documentation, or maintenance changes in this repository; enforces GitHub CLI checks, safe cleanup of merged Codex worktrees, remote synchronization, issue-driven development, pre-flight code-review self-checks, and PR quality gates.
 ---
 
 # 仓库开发规范
@@ -17,7 +17,7 @@ description: Use for code, configuration, documentation, or maintenance changes 
    - 其他情况，提供 [GitHub CLI 官方安装指引](https://cli.github.com/manual/installation) 并停止流程。
    安装命令失败或安装后仍找不到 `gh` 时停止，不继续后续 worktree 操作。
 2. **确认认证**：执行 `gh auth status --hostname github.com`。未认证或认证失效时，引导组员执行 `gh auth login --hostname github.com --web`，随后再次执行上述状态检查。Agent 不代替组员输入凭据；状态检查未成功时停止，不删除、不创建 worktree。
-3. **确认仓库权限**：执行 `gh repo view --json nameWithOwner --jq '.nameWithOwner'` 获取当前仓库的 `owner/name`。命令因私有仓库权限不足、网络异常或其他原因失败时，视为门禁失败并停止，不绕过认证。
+3. **确认仓库权限**：执行 `gh repo view --json nameWithOwner --jq '.nameWithOwner'` 获取当前仓库的 `owner/name`。命令因仓库权限不足、网络异常或其他原因失败时，视为门禁失败并停止，不绕过认证。
 
 认证和仓库权限确认成功后，先执行 `git worktree list --porcelain` 回收已完成的并行任务：
 
@@ -37,13 +37,21 @@ description: Use for code, configuration, documentation, or maintenance changes 
    - 同步失败或远程历史无法快进时，停止开发并报告原因，不绕过同步门禁。
 3. **创建 Codex worktree**：创建前重复完整 `gh` 先验门禁；然后从已同步的 `origin/main` 创建独立分支和 worktree，分支命名为 `codex/<issue-number>-<short-slug>`；所有实现和验证都在该 worktree 中进行，避免直接修改 `main`。
 4. **敏捷实现**：以 Issue 验收标准为最小交付切片，优先复用仓库现有实现；每次只做能形成可验证反馈的改动。范围变化先回到 Issue 记录并确认，不做推测性功能。
-5. **验证与交付**：运行与改动匹配的最小测试、检查或构建，并把实际结果记录在 PR 中。提交聚焦的变更，推送 `codex/...` 分支，创建 PR 到默认分支。
-6. **负责人评估**：Agent 不自行合并 PR。仓库负责人评估代码质量后：
-   - 通过：由负责人合并 PR；
-   - 未通过或需补充：在 Issue 下发布评估报告，后续修改继续更新同一 Issue/PR，不另起无关分支。
+5. **本地自检 (Pre-flight Self-Review)**：
+   在推送分支和提交 PR 前，必须在 worktree 内调用 `code-review` 技能对本次改动（`origin/main...HEAD`）执行本地自检：
+   - **灭红灯（原地自愈）**：若自检报告存在 `🔴 阻断项 (Blockers)`（违反 ADR-0001 契约、单元测试不通过、遗漏 Issue 验收标准），**必须在本地就地修复**，直至消除所有阻断项。
+   - **放行黄灯（严禁内耗）**：若自检报告仅包含 `🟡 建议项 (Non-blocking / Nits)`（Fowler 异味、命名建议、非关键重构），**严禁在本地耗费时间过度设计，直接放行**，允许带入主干。
+6. **验证与创建 PR**：
+   - 运行与改动匹配的最小测试（例如 `python3 -m unittest discover` 或契约校验脚本），确保本地与 CI 门禁一致。
+   - 推送 `codex/...` 分支，严格按照 `.github/pull_request_template.md` 模板创建 Pull Request，明确填写关联 Issue、契约核验项以及实际验证命令输出。
+7. **负责人评估与快速收敛**：
+   Agent 不自行合并 PR。仓库负责人根据收敛型代码审查规范进行复审：
+   - **通过（APPROVE）**：无阻断项且 CI 自动化流水线（`Code Quality & Lint` / `Contract & Unit Tests`）全绿时，由负责人执行合并（`gh pr merge`）。
+   - **需修改（REQUEST_CHANGES）**：仅针对未修复的 Blocker 提出具体修改点。组员修复后触发复审模式（仅核验上轮 Blocker 是否解除，不增加新阻断项），确保 2 轮内快速收敛闭环。
 
 ## 交付门禁
 
-- 未同步远程、未在 Codex worktree 中开发或未记录验证结果，不得发布“完成”的 PR。
-- 不提交密钥、个人信息、构建产物、缓存和临时截图。
+- 未同步远程、未在 Codex worktree 中开发、未执行本地自检消除 Blocker 或未记录验证结果，不得发布正式 PR。
+- 绝不提交密钥、个人信息、全量源数据大文件、构建产物、缓存和临时截图。
+- 必须确保 GitHub Actions 自动化门禁全绿（绿色通过）。
 - 未得到负责人合并结果或后续指示前，不关闭 Issue，也不删除仍需复核的 worktree。

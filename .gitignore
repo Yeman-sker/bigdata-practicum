@@ -9,6 +9,7 @@
 *.log
 *.swp
 *~
+__pycache__/
 
 # Local student profile & identity environment (do not commit personal info)
 .practicum.env
@@ -21,3 +22,6 @@ docs/生产实习日志_*.docx
 
 # Local Citi Bike source staging; raw monthly archives are intentionally not committed.
 /staging/
+
+# GBFS collector output (raw full snapshots stay local)
+data/gbfs/
