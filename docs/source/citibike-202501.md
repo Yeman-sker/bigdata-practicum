@@ -28,7 +28,8 @@ python3 scripts/citibike/verify_source.py \
   --source-page-url 'https://citibikenyc.com/system-data' \
   --source-url 'https://s3.amazonaws.com/tripdata/202501-citibike-tripdata.zip' \
   --source-month 2025-01 \
-  --source-name 'Citi Bike Historical Trips'
+  --source-name 'Citi Bike Historical Trips' \
+  --downloaded-at '2026-09-11T07:34:34Z'
 ```
 
 The verifier uses a streaming `csv.DictReader` count, enumerates every ZIP
@@ -64,3 +65,37 @@ for local inspection only and stays under `/tmp`.
   anomaly counts are recorded rather than silently dropping rows.
 - The full ZIP and extracted CSVs are in `/tmp/citibike-day1/202501` on the
   verification machine and are not Git-tracked.
+
+## Track D handoff evidence
+
+On 2026-09-13, the three extracted source CSVs were uploaded to a local
+Hadoop 3.3.6 single-node validation instance using the frozen RAW path. The
+temporary NameNode/DataNode state was kept under `/tmp/citibike-hdfs`; no
+source data was copied into Git.
+
+The upload and directory verification returned:
+
+```text
+$ hdfs dfs -ls -h /raw/citibike/trips/year=2025/month=01
+Found 3 items
+-rw-r--r--  1 ohn supergroup  186.0 M  2026-09-13 20:16 /raw/citibike/trips/year=2025/month=01/202501-citibike-tripdata_1.csv
+-rw-r--r--  1 ohn supergroup  186.0 M  2026-09-13 20:16 /raw/citibike/trips/year=2025/month=01/202501-citibike-tripdata_2.csv
+-rw-r--r--  1 ohn supergroup   23.1 M  2026-09-13 20:16 /raw/citibike/trips/year=2025/month=01/202501-citibike-tripdata_3.csv
+
+$ hdfs dfs -count /raw/citibike/trips/year=2025/month=01
+1  3  414212882  /raw/citibike/trips/year=2025/month=01
+
+$ hdfs fsck /raw/citibike/trips/year=2025/month=01 -files -blocks -locations
+/raw/citibike/trips/year=2025/month=01/202501-citibike-tripdata_1.csv 195009639 bytes, replicated: replication=1, 2 block(s): OK
+/raw/citibike/trips/year=2025/month=01/202501-citibike-tripdata_2.csv 194993655 bytes, replicated: replication=1, 2 block(s): OK
+/raw/citibike/trips/year=2025/month=01/202501-citibike-tripdata_3.csv 24209588 bytes, replicated: replication=1, 1 block(s): OK
+Status: HEALTHY
+Total files: 3
+Total blocks (validated): 5
+Missing blocks: 0
+Corrupt blocks: 0
+```
+
+The HDFS byte total (`414212882`) equals the sum of the three CSV sizes in
+the manifest; the manifest's ZIP size and SHA-256 independently identify the
+original download.
