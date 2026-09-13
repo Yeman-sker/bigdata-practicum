@@ -23,7 +23,8 @@ python3 scripts/citibike/verify_source.py \
   --zip "$STAGING/raw/202501-citibike-tripdata.zip" \
   --extract-dir "$STAGING/extracted" \
   --manifest docs/source/citibike-202501-manifest.json \
-  --sample-output fixtures/citibike/202501_sample.csv \
+  --sample-output "$STAGING/verified_sample.csv" \
+  --sample-rows 20 \
   --source-page-url 'https://citibikenyc.com/system-data' \
   --source-url 'https://s3.amazonaws.com/tripdata/202501-citibike-tripdata.zip' \
   --source-month 2025-01 \
@@ -32,17 +33,24 @@ python3 scripts/citibike/verify_source.py \
 
 The verifier uses a streaming `csv.DictReader` count, enumerates every ZIP
 member, validates every header against the 13-field source contract, and
-records nulls, timestamp parse formats, enum values, and station-id examples.
+records nulls and ratios, duplicate ride IDs, timestamp parse formats,
+non-positive durations, coordinate anomalies, enum values, unknown enum counts,
+and station-id examples. It keeps all original rows in staging; the tracked
+fixture is not generated from the source ZIP.
 
-To hand the verified CSVs to Track D without placing them in Git:
+To hand the verified CSVs to Track D without placing them in Git, use the
+frozen RAW path:
 
 ```bash
-hdfs dfs -mkdir -p /data/citibike/2025-01
-hdfs dfs -put -f "$STAGING"/extracted/*.csv /data/citibike/2025-01/
+hdfs dfs -mkdir -p /raw/citibike/trips/year=2025/month=01
+hdfs dfs -put -f "$STAGING"/extracted/*.csv /raw/citibike/trips/year=2025/month=01/
+hdfs dfs -count /raw/citibike/trips/year=2025/month=01
 ```
 
-Tracks C/E can use the checked-in 20-row fixture for schema and parser tests;
-it is derived from the first CSV by the verifier's `--sample-output` option.
+The tracked 20-row fixture is synthetic and hand-authored for schema/parser
+tests. It deliberately contains no source ride IDs, station names, station IDs,
+or source coordinates. The verifier's `--sample-output` is a raw source sample
+for local inspection only and stays under `/tmp`.
 
 ## Handoff notes
 
@@ -50,6 +58,9 @@ it is derived from the first CSV by the verifier's `--sample-output` option.
 - All three CSVs have the same 13-column header.
 - `start_station_id` and `end_station_id` are intentionally strings. They are
   identifiers, may be blank, and must not be coerced to numeric values.
-- The manifest records the observed values and counts needed by Tracks C–E.
+- Source `started_at` and `ended_at` are naive `America/New_York` wall-clock
+  values and map to the internal `started_at_local` and `ended_at_local` fields.
+- The manifest records the observed values and quality metrics needed by Tracks C–E;
+  anomaly counts are recorded rather than silently dropping rows.
 - The full ZIP and extracted CSVs are in `/tmp/citibike-day1/202501` on the
   verification machine and are not Git-tracked.

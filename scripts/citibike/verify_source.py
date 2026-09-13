@@ -13,6 +13,7 @@ import csv
 import datetime as dt
 import hashlib
 import json
+import math
 import re
 import sys
 import zipfile
@@ -37,6 +38,13 @@ SOURCE_FIELDS = [
 ]
 TIME_FIELDS = ("started_at", "ended_at")
 STATION_ID_FIELDS = ("start_station_id", "end_station_id")
+COORDINATE_FIELDS = ("start_lat", "start_lng", "end_lat", "end_lng")
+LATITUDE_FIELDS = {"start_lat", "end_lat"}
+LONGITUDE_FIELDS = {"start_lng", "end_lng"}
+ALLOWED_ENUMS = {
+    "rideable_type": {"classic_bike", "electric_bike"},
+    "member_casual": {"casual", "member"},
+}
 DECIMAL_ID = re.compile(r"^[+-]?\d+\.\d+$")
 TIME_FORMATS = (
     "%Y-%m-%d %H:%M:%S",
@@ -57,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-name", default="Citi Bike Historical Trips")
     parser.add_argument("--downloaded-at", help="UTC ISO-8601 timestamp")
     parser.add_argument("--sample-output", type=Path)
-    parser.add_argument("--sample-rows", type=int, default=100)
+    parser.add_argument("--sample-rows", type=int, default=20)
     return parser.parse_args()
 
 
@@ -81,7 +89,38 @@ def safe_member_path(name: str) -> Path:
     return Path(*pure.parts)
 
 
-def read_csv_stats(path: Path, sample_writer: csv.writer | None, sample_state: dict[str, int]) -> dict[str, Any]:
+def parse_timestamp(value: str) -> tuple[dt.datetime | None, str | None]:
+    """Parse a source timestamp and retain the format that matched it."""
+    for fmt in TIME_FORMATS:
+        try:
+            return dt.datetime.strptime(value, fmt), fmt
+        except ValueError:
+            continue
+    return None, None
+
+
+def new_quality_state() -> dict[str, Any]:
+    """Create cross-file quality counters without putting implementation state in JSON."""
+    return {
+        "seen_ride_ids": set(),
+        "duplicate_ride_ids": set(),
+        "duplicate_ride_id_count": 0,
+        "duration_non_positive_count": 0,
+        "duration_uncomputable_count": 0,
+        "coordinate_quality": {
+            field: {"invalid_count": 0, "out_of_range_count": 0} for field in COORDINATE_FIELDS
+        },
+        "coordinate_anomaly_row_count": 0,
+        "unknown_enum_counts": {field: 0 for field in ALLOWED_ENUMS},
+    }
+
+
+def read_csv_stats(
+    path: Path,
+    sample_writer: csv.writer | None,
+    sample_state: dict[str, int],
+    quality_state: dict[str, Any],
+) -> dict[str, Any]:
     missing = {field: 0 for field in SOURCE_FIELDS}
     enum_values = {"rideable_type": set(), "member_casual": set()}
     time_formats = {field: set() for field in TIME_FIELDS}
@@ -103,25 +142,65 @@ def read_csv_stats(path: Path, sample_writer: csv.writer | None, sample_state: d
                 value = (row.get(field) or "").strip()
                 if not value:
                     missing[field] += 1
+
+            ride_id = (row.get("ride_id") or "").strip()
+            if ride_id:
+                if ride_id in quality_state["seen_ride_ids"]:
+                    quality_state["duplicate_ride_id_count"] += 1
+                    quality_state["duplicate_ride_ids"].add(ride_id)
+                else:
+                    quality_state["seen_ride_ids"].add(ride_id)
+
             for field in enum_values:
                 value = (row.get(field) or "").strip()
                 if value:
                     enum_values[field].add(value)
+                    if value not in ALLOWED_ENUMS[field]:
+                        quality_state["unknown_enum_counts"][field] += 1
+
+            parsed_times: dict[str, dt.datetime | None] = {}
             for field in TIME_FIELDS:
+                value = (row.get(field) or "").strip()
+                parsed, fmt = parse_timestamp(value) if value else (None, None)
+                parsed_times[field] = parsed
+                if fmt is not None:
+                    time_formats[field].add(fmt)
+                elif value:
+                    invalid_times[field] += 1
+
+            if parsed_times["started_at"] is not None and parsed_times["ended_at"] is not None:
+                duration_seconds = (
+                    parsed_times["ended_at"] - parsed_times["started_at"]
+                ).total_seconds()
+                if duration_seconds <= 0:
+                    quality_state["duration_non_positive_count"] += 1
+            else:
+                quality_state["duration_uncomputable_count"] += 1
+
+            row_coordinate_anomaly = False
+            for field in COORDINATE_FIELDS:
                 value = (row.get(field) or "").strip()
                 if not value:
                     continue
-                parsed = False
-                for fmt in TIME_FORMATS:
-                    try:
-                        dt.datetime.strptime(value, fmt)
-                        time_formats[field].add(fmt)
-                        parsed = True
-                        break
-                    except ValueError:
-                        continue
-                if not parsed:
-                    invalid_times[field] += 1
+                try:
+                    coordinate = float(value)
+                except ValueError:
+                    quality_state["coordinate_quality"][field]["invalid_count"] += 1
+                    row_coordinate_anomaly = True
+                    continue
+                if not math.isfinite(coordinate):
+                    quality_state["coordinate_quality"][field]["invalid_count"] += 1
+                    row_coordinate_anomaly = True
+                    continue
+                if field in LATITUDE_FIELDS and not -90 <= coordinate <= 90:
+                    quality_state["coordinate_quality"][field]["out_of_range_count"] += 1
+                    row_coordinate_anomaly = True
+                elif field in LONGITUDE_FIELDS and not -180 <= coordinate <= 180:
+                    quality_state["coordinate_quality"][field]["out_of_range_count"] += 1
+                    row_coordinate_anomaly = True
+            if row_coordinate_anomaly:
+                quality_state["coordinate_anomaly_row_count"] += 1
+
             for field in STATION_ID_FIELDS:
                 value = (row.get(field) or "").strip()
                 if not value:
@@ -143,6 +222,11 @@ def read_csv_stats(path: Path, sample_writer: csv.writer | None, sample_state: d
         "invalid_time_count": invalid_times,
         "station_id_observations": station_id_types,
     }
+
+
+def ratio(count: int, total: int) -> float:
+    """Return a stable, readable proportion for manifest quality metrics."""
+    return round(count / total, 6) if total else 0.0
 
 
 def main() -> int:
@@ -173,8 +257,11 @@ def main() -> int:
         sample_writer = csv.writer(sample_handle, lineterminator="\n")
         sample_writer.writerow(SOURCE_FIELDS)
 
+    quality_state = new_quality_state()
     try:
-        csv_stats = [read_csv_stats(path, sample_writer, sample_state) for path in csv_paths]
+        csv_stats = [
+            read_csv_stats(path, sample_writer, sample_state, quality_state) for path in csv_paths
+        ]
     finally:
         if sample_handle is not None:
             sample_handle.close()
@@ -193,6 +280,9 @@ def main() -> int:
     }
     all_station_ids = {
         field: {
+            "read_as": "STRING",
+            "missing_count": all_missing[field],
+            "missing_ratio": ratio(all_missing[field], total_records),
             "decimal_looking_count": sum(
                 item["station_id_observations"][field]["decimal_looking_count"] for item in csv_stats
             ),
@@ -223,7 +313,8 @@ def main() -> int:
         "record_count": total_records,
         "count_method": (
             "Python csv.DictReader streaming count; each physical CSV row is read and counted; "
-            "run scripts/citibike/verify_source.py with the command in the accompanying README."
+            "run scripts/citibike/verify_source.py with the command in "
+            "docs/source/citibike-202501.md."
         ),
         "schema_version_or_observed_format": "2025 Citi Bike Historical Trips 13-column CSV",
         "observed": {
@@ -236,12 +327,73 @@ def main() -> int:
                 field: sum(item["invalid_time_count"][field] for item in csv_stats) for field in TIME_FIELDS
             },
             "station_id_observations": all_station_ids,
+            "quality_metrics": {
+                "ride_id": {
+                    "missing_count": all_missing["ride_id"],
+                    "missing_ratio": ratio(all_missing["ride_id"], total_records),
+                    "duplicate_row_count": quality_state["duplicate_ride_id_count"],
+                    "duplicate_value_count": len(quality_state["duplicate_ride_ids"]),
+                },
+                "station_id_nulls": {
+                    field: {
+                        "missing_count": all_missing[field],
+                        "missing_ratio": ratio(all_missing[field], total_records),
+                    }
+                    for field in STATION_ID_FIELDS
+                },
+                "duration": {
+                    "non_positive_count": quality_state["duration_non_positive_count"],
+                    "uncomputable_count": quality_state["duration_uncomputable_count"],
+                },
+                "coordinates": {
+                    field: {
+                        "missing_count": all_missing[field],
+                        "missing_ratio": ratio(all_missing[field], total_records),
+                        **quality_state["coordinate_quality"][field],
+                    }
+                    for field in COORDINATE_FIELDS
+                }
+                | {"anomaly_row_count": quality_state["coordinate_anomaly_row_count"]},
+                "unknown_enum_counts": quality_state["unknown_enum_counts"],
+            },
         },
-        "contract_mapping": {field: field for field in SOURCE_FIELDS},
+        "contract_mapping": {
+            "ride_id": "ride_id",
+            "rideable_type": "rideable_type",
+            "started_at": "started_at_local",
+            "ended_at": "ended_at_local",
+            "start_station_name": "start_station_name",
+            "start_station_id": "start_station_id",
+            "end_station_name": "end_station_name",
+            "end_station_id": "end_station_id",
+            "start_lat": "start_lat",
+            "start_lng": "start_lng",
+            "end_lat": "end_lat",
+            "end_lng": "end_lng",
+            "member_casual": "member_casual",
+        },
+        "contract_mapping_notes": {
+            "started_at": "Naive source wall-clock time; parse as America/New_York and store as started_at_local.",
+            "ended_at": "Naive source wall-clock time; parse as America/New_York and store as ended_at_local.",
+            "station_ids": "Read and stored as STRING identifiers; never coerce to numeric types.",
+        },
+        "downstream_derivations": {
+            "duration_seconds": "ended_at_local - started_at_local",
+            "service_date": "date(started_at_local) in America/New_York",
+            "start_hour": "hour(started_at_local) in America/New_York",
+            "day_of_week": "weekday(started_at_local) in America/New_York",
+            "is_weekend": "day_of_week in {6, 7}",
+            "is_valid_station_trip": "both station IDs are non-empty and both timestamps parse",
+            "source_year": "year(source_month)",
+            "source_month": "month(source_month)",
+            "ingest_batch_id": "assigned by the downstream ingestion job",
+        },
         "notes": [
             "ZIP contains multiple CSV files; all members were enumerated before extraction.",
             "Station identifiers are read as strings; decimal-looking values were counted explicitly.",
             "Original ZIP and extracted full CSVs are staging artifacts outside the Git repository.",
+            "The tracked fixture is synthetic and is not copied from the official source rows.",
+            "Quality metrics count anomalies instead of silently dropping records.",
         ],
     }
     args.manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -21,4 +21,3 @@ docs/生产实习日志_*.docx
 
 # Local Citi Bike source staging; raw monthly archives are intentionally not committed.
 /staging/
-*.zip
