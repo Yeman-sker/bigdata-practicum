@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from io import StringIO
 from pathlib import Path
 
 
@@ -72,9 +73,6 @@ class VerifySourceTest(unittest.TestCase):
 
             csv_texts = []
             for member_rows in (rows[:2], rows[2:]):
-                lines = []
-                from io import StringIO
-
                 buffer = StringIO()
                 writer = csv.DictWriter(buffer, fieldnames=SOURCE_FIELDS, lineterminator="\n")
                 writer.writeheader()
