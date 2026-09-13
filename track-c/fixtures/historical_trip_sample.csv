@@ -1,0 +1,4 @@
+ride_id,rideable_type,started_at,ended_at,start_station_name,start_station_id,end_station_name,end_station_id,start_lat,start_lng,end_lat,end_lng,member_casual
+sample-001,electric_bike,01/15/2025 08:10:00,01/15/2025 08:24:00,Start A,5484.09,End A,4199.12,40.741,-73.989,40.748,-73.985,member
+sample-002,classic_bike,01/15/2025 17:30:00,01/15/2025 17:47:00,Start B,7354.01,End B,5484.09,40.752,-73.977,40.741,-73.989,casual
+sample-003,electric_bike,01/18/2025 11:00:00,01/18/2025 11:12:00,Start C,,End C,4199.12,40.730,-73.995,40.748,-73.985,member
