@@ -1,0 +1,440 @@
+{
+  "source_name": "Citi Bike Historical Trips",
+  "source_page_url": "https://citibikenyc.com/system-data",
+  "source_url": "https://s3.amazonaws.com/tripdata/202501-citibike-tripdata.zip",
+  "source_month": "2025-01",
+  "downloaded_at": "2026-09-11T07:34:34Z",
+  "staging_path": "/tmp/citibike-day1/202501",
+  "zip_filename": "202501-citibike-tripdata.zip",
+  "zip_size_bytes": 414213312,
+  "zip_sha256": "ed3b0138903960afe50386ab44fec8bf52d69474b26f5c0af83e648094aea096",
+  "zip_members": [
+    "202501-citibike-tripdata_1.csv",
+    "202501-citibike-tripdata_3.csv",
+    "202501-citibike-tripdata_2.csv"
+  ],
+  "csv_files": [
+    {
+      "filename": "202501-citibike-tripdata_1.csv",
+      "size_bytes": 195009639,
+      "header": [
+        "ride_id",
+        "rideable_type",
+        "started_at",
+        "ended_at",
+        "start_station_name",
+        "start_station_id",
+        "end_station_name",
+        "end_station_id",
+        "start_lat",
+        "start_lng",
+        "end_lat",
+        "end_lng",
+        "member_casual"
+      ],
+      "record_count": 1000000,
+      "missing_values": {
+        "ride_id": 0,
+        "rideable_type": 0,
+        "started_at": 0,
+        "ended_at": 0,
+        "start_station_name": 315,
+        "start_station_id": 315,
+        "end_station_name": 1949,
+        "end_station_id": 2152,
+        "start_lat": 315,
+        "start_lng": 315,
+        "end_lat": 2147,
+        "end_lng": 2147,
+        "member_casual": 0
+      },
+      "enum_values": {
+        "rideable_type": [
+          "classic_bike",
+          "electric_bike"
+        ],
+        "member_casual": [
+          "casual",
+          "member"
+        ]
+      },
+      "time_formats": {
+        "started_at": [
+          "%Y-%m-%d %H:%M:%S.%f"
+        ],
+        "ended_at": [
+          "%Y-%m-%d %H:%M:%S.%f"
+        ]
+      },
+      "invalid_time_count": {
+        "started_at": 0,
+        "ended_at": 0
+      },
+      "station_id_observations": {
+        "start_station_id": {
+          "string_examples": [
+            "6182.02",
+            "5238.05",
+            "6197.08",
+            "6659.09",
+            "5379.10"
+          ],
+          "decimal_looking_count": 999571
+        },
+        "end_station_id": {
+          "string_examples": [
+            "5746.02",
+            "6004.07",
+            "5137.11",
+            "5414.06",
+            "7800.03"
+          ],
+          "decimal_looking_count": 997666
+        }
+      }
+    },
+    {
+      "filename": "202501-citibike-tripdata_3.csv",
+      "size_bytes": 24209588,
+      "header": [
+        "ride_id",
+        "rideable_type",
+        "started_at",
+        "ended_at",
+        "start_station_name",
+        "start_station_id",
+        "end_station_name",
+        "end_station_id",
+        "start_lat",
+        "start_lng",
+        "end_lat",
+        "end_lng",
+        "member_casual"
+      ],
+      "record_count": 124475,
+      "missing_values": {
+        "ride_id": 0,
+        "rideable_type": 0,
+        "started_at": 0,
+        "ended_at": 0,
+        "start_station_name": 30,
+        "start_station_id": 30,
+        "end_station_name": 105,
+        "end_station_id": 109,
+        "start_lat": 30,
+        "start_lng": 30,
+        "end_lat": 109,
+        "end_lng": 109,
+        "member_casual": 0
+      },
+      "enum_values": {
+        "rideable_type": [
+          "classic_bike",
+          "electric_bike"
+        ],
+        "member_casual": [
+          "casual",
+          "member"
+        ]
+      },
+      "time_formats": {
+        "started_at": [
+          "%Y-%m-%d %H:%M:%S.%f"
+        ],
+        "ended_at": [
+          "%Y-%m-%d %H:%M:%S.%f"
+        ]
+      },
+      "invalid_time_count": {
+        "started_at": 0,
+        "ended_at": 0
+      },
+      "station_id_observations": {
+        "start_station_id": {
+          "string_examples": [
+            "6019.04",
+            "5484.09",
+            "4199.12",
+            "6857.09",
+            "7453.01"
+          ],
+          "decimal_looking_count": 124438
+        },
+        "end_station_id": {
+          "string_examples": [
+            "6814.01",
+            "4354.07",
+            "7026.08",
+            "7253.04",
+            "6756.01"
+          ],
+          "decimal_looking_count": 124343
+        }
+      }
+    },
+    {
+      "filename": "202501-citibike-tripdata_2.csv",
+      "size_bytes": 194993655,
+      "header": [
+        "ride_id",
+        "rideable_type",
+        "started_at",
+        "ended_at",
+        "start_station_name",
+        "start_station_id",
+        "end_station_name",
+        "end_station_id",
+        "start_lat",
+        "start_lng",
+        "end_lat",
+        "end_lng",
+        "member_casual"
+      ],
+      "record_count": 1000000,
+      "missing_values": {
+        "ride_id": 0,
+        "rideable_type": 0,
+        "started_at": 0,
+        "ended_at": 0,
+        "start_station_name": 219,
+        "start_station_id": 219,
+        "end_station_name": 1921,
+        "end_station_id": 2061,
+        "start_lat": 219,
+        "start_lng": 219,
+        "end_lat": 2054,
+        "end_lng": 2054,
+        "member_casual": 0
+      },
+      "enum_values": {
+        "rideable_type": [
+          "classic_bike",
+          "electric_bike"
+        ],
+        "member_casual": [
+          "casual",
+          "member"
+        ]
+      },
+      "time_formats": {
+        "started_at": [
+          "%Y-%m-%d %H:%M:%S.%f"
+        ],
+        "ended_at": [
+          "%Y-%m-%d %H:%M:%S.%f"
+        ]
+      },
+      "invalid_time_count": {
+        "started_at": 0,
+        "ended_at": 0
+      },
+      "station_id_observations": {
+        "start_station_id": {
+          "string_examples": [
+            "6711.13",
+            "6839.04",
+            "6750.16",
+            "6659.09",
+            "6563.12"
+          ],
+          "decimal_looking_count": 999683
+        },
+        "end_station_id": {
+          "string_examples": [
+            "6307.07",
+            "7020.02",
+            "6759.15",
+            "7126.01",
+            "6398.08"
+          ],
+          "decimal_looking_count": 997743
+        }
+      }
+    }
+  ],
+  "csv_file_count": 3,
+  "record_count": 2124475,
+  "count_method": "Python csv.DictReader streaming count; each physical CSV row is read and counted; run scripts/citibike/verify_source.py with the command in docs/source/citibike-202501.md.",
+  "schema_version_or_observed_format": "2025 Citi Bike Historical Trips 13-column CSV",
+  "observed": {
+    "header": [
+      "ride_id",
+      "rideable_type",
+      "started_at",
+      "ended_at",
+      "start_station_name",
+      "start_station_id",
+      "end_station_name",
+      "end_station_id",
+      "start_lat",
+      "start_lng",
+      "end_lat",
+      "end_lng",
+      "member_casual"
+    ],
+    "missing_values": {
+      "ride_id": 0,
+      "rideable_type": 0,
+      "started_at": 0,
+      "ended_at": 0,
+      "start_station_name": 564,
+      "start_station_id": 564,
+      "end_station_name": 3975,
+      "end_station_id": 4322,
+      "start_lat": 564,
+      "start_lng": 564,
+      "end_lat": 4310,
+      "end_lng": 4310,
+      "member_casual": 0
+    },
+    "rideable_type_values": [
+      "classic_bike",
+      "electric_bike"
+    ],
+    "member_casual_values": [
+      "casual",
+      "member"
+    ],
+    "time_formats": {
+      "started_at": [
+        "%Y-%m-%d %H:%M:%S.%f"
+      ],
+      "ended_at": [
+        "%Y-%m-%d %H:%M:%S.%f"
+      ]
+    },
+    "invalid_time_count": {
+      "started_at": 0,
+      "ended_at": 0
+    },
+    "station_id_observations": {
+      "start_station_id": {
+        "read_as": "STRING",
+        "missing_count": 564,
+        "missing_ratio": 0.000265,
+        "decimal_looking_count": 2123692,
+        "examples": [
+          "4199.12",
+          "5238.05",
+          "5379.10",
+          "5484.09",
+          "6019.04",
+          "6182.02",
+          "6197.08",
+          "6563.12",
+          "6659.09",
+          "6711.13"
+        ]
+      },
+      "end_station_id": {
+        "read_as": "STRING",
+        "missing_count": 4322,
+        "missing_ratio": 0.002034,
+        "decimal_looking_count": 2119752,
+        "examples": [
+          "4354.07",
+          "5137.11",
+          "5414.06",
+          "5746.02",
+          "6004.07",
+          "6307.07",
+          "6398.08",
+          "6756.01",
+          "6759.15",
+          "6814.01"
+        ]
+      }
+    },
+    "quality_metrics": {
+      "ride_id": {
+        "missing_count": 0,
+        "missing_ratio": 0.0,
+        "duplicate_row_count": 0,
+        "duplicate_value_count": 0
+      },
+      "station_id_nulls": {
+        "start_station_id": {
+          "missing_count": 564,
+          "missing_ratio": 0.000265
+        },
+        "end_station_id": {
+          "missing_count": 4322,
+          "missing_ratio": 0.002034
+        }
+      },
+      "duration": {
+        "non_positive_count": 0,
+        "uncomputable_count": 0
+      },
+      "coordinates": {
+        "start_lat": {
+          "missing_count": 564,
+          "missing_ratio": 0.000265,
+          "invalid_count": 0,
+          "out_of_range_count": 0
+        },
+        "start_lng": {
+          "missing_count": 564,
+          "missing_ratio": 0.000265,
+          "invalid_count": 0,
+          "out_of_range_count": 0
+        },
+        "end_lat": {
+          "missing_count": 4310,
+          "missing_ratio": 0.002029,
+          "invalid_count": 0,
+          "out_of_range_count": 0
+        },
+        "end_lng": {
+          "missing_count": 4310,
+          "missing_ratio": 0.002029,
+          "invalid_count": 0,
+          "out_of_range_count": 0
+        },
+        "anomaly_row_count": 0
+      },
+      "unknown_enum_counts": {
+        "rideable_type": 0,
+        "member_casual": 0
+      }
+    }
+  },
+  "contract_mapping": {
+    "ride_id": "ride_id",
+    "rideable_type": "rideable_type",
+    "started_at": "started_at_local",
+    "ended_at": "ended_at_local",
+    "start_station_name": "start_station_name",
+    "start_station_id": "start_station_id",
+    "end_station_name": "end_station_name",
+    "end_station_id": "end_station_id",
+    "start_lat": "start_lat",
+    "start_lng": "start_lng",
+    "end_lat": "end_lat",
+    "end_lng": "end_lng",
+    "member_casual": "member_casual"
+  },
+  "contract_mapping_notes": {
+    "started_at": "Naive source wall-clock time; parse as America/New_York and store as started_at_local.",
+    "ended_at": "Naive source wall-clock time; parse as America/New_York and store as ended_at_local.",
+    "station_ids": "Read and stored as STRING identifiers; never coerce to numeric types."
+  },
+  "downstream_derivations": {
+    "duration_seconds": "ended_at_local - started_at_local",
+    "service_date": "date(started_at_local) in America/New_York",
+    "start_hour": "hour(started_at_local) in America/New_York",
+    "day_of_week": "weekday(started_at_local) in America/New_York",
+    "is_weekend": "day_of_week in {6, 7}",
+    "is_valid_station_trip": "both station IDs are non-empty and both timestamps parse",
+    "source_year": "year(source_month)",
+    "source_month": "month(source_month)",
+    "ingest_batch_id": "assigned by the downstream ingestion job"
+  },
+  "notes": [
+    "ZIP contains multiple CSV files; all members were enumerated before extraction.",
+    "Station identifiers are read as strings; decimal-looking values were counted explicitly.",
+    "Original ZIP and extracted full CSVs are staging artifacts outside the Git repository.",
+    "The tracked fixture is synthetic and is not copied from the official source rows.",
+    "Quality metrics count anomalies instead of silently dropping records."
+  ]
+}
