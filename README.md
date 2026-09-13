@@ -1,6 +1,47 @@
-# 大数据生产实习技术栈版本与环境规范
+# 共享单车智能运营与调度大数据平台
 
-东华理工大学 2023 级数据科学与大数据技术专业生产实习统一技术栈与运行环境规范。项目主题待定，本规范用于锁定底层基础设施、大数据组件及服务端版本一致性，并提供面向 AI Agent 的自动化编排与环境验收 Skill。
+东华理工大学 2023 级数据科学与大数据技术专业生产实习项目。平台面向共享单车运营与调度人员，结合历史骑行记录和实时站点库存，识别站点供需规律、缺车/满桩风险，并给出可解释的调度建议。
+
+项目主题见 [Issue #3](https://github.com/Yeman-sker/bigdata-practicum/issues/3)，产品范围与数据契约以 [Issue #4](https://github.com/Yeman-sker/bigdata-practicum/issues/4) 和 [ADR-0001](docs/adr/0001-product-data-contract-v1.md) 为准。
+
+## 项目开发内容
+
+### 核心业务闭环
+
+1. 查看全部站点当前车辆、空桩、可借/可还状态及风险。
+2. 统计站点在不同日期、星期和小时的历史流入、流出与净流量。
+3. 用历史同时段基线估计未来一小时的库存与缺车/满桩风险。
+4. 从富余站点向短缺站点生成按距离和风险排序的调度建议。
+
+### 技术链路
+
+```text
+历史骑行 ZIP/CSV → HDFS → Hive → Spark → DWS/ADS → Sqoop → MySQL → Spring Boot → ECharts
+实时 GBFS → 采集器/标准化适配器 → Kafka → 实时风险计算 → ADS/MySQL → Spring Boot → ECharts
+```
+
+### v1 范围
+
+- **P0**：历史数据下载与清洗、站点小时供需分析、GBFS 站点库存采集、Kafka 标准化事件、当前风险、调度建议、API 和实时站点展示。
+- **P1**：运营总览及核心 KPI。
+- **暂不做**：登录注册、AI/LLM、天气融合、复杂机器学习预测、VRP 路径优化、逐车追踪、逐笔实时骑行事件和旧版 Citi Bike schema 全兼容。
+
+### 数据契约摘要
+
+| 数据对象 | 一行/粒度 | 主要用途 |
+| :--- | :--- | :--- |
+| Historical Trips | 一次骑行 | `station_id × service_date × hour` 流量与历史基线 |
+| GBFS 2.3 station status | 一个站点在一个时刻的库存快照 | 当前库存、风险与实时调度 |
+| DWS | 站点 × 日期 × 小时，或站点 × 星期 × 小时 | Spark 聚合分析 |
+| ADS | 当前站点风险、调度建议、运营总览薄表 | MySQL、Spring Boot、ECharts |
+
+跨层统一使用字符串类型的 `station_id`；历史时间按 `America/New_York` 本地时间处理，实时 POSIX 时间同时保存 UTC 和本地派生值。GBFS 快照不是官方逐笔骑行事件流，内部 Kafka topic 为 `bike.station.status.v1`，key 为 `station_id`。
+
+字段、阈值、分层和变更规则见 [ADR-0001](docs/adr/0001-product-data-contract-v1.md)。
+
+## 基础环境与技术栈
+
+本节锁定底层基础设施、大数据组件及服务端版本一致性，并提供面向 AI Agent 的自动化编排与环境验收 Skill。
 
 ---
 
@@ -47,8 +88,10 @@ source ~/use-jdk17.sh
 
 ```text
 bigdata-practicum/
-├── README.md               # 本技术栈规范与索引指南
+├── README.md               # 项目说明、技术栈规范与索引指南
 ├── docs/                   # 教学资料与原始模板
+│   ├── adr/                # 架构与数据契约决策记录
+│   │   └── 0001-product-data-contract-v1.md
 │   ├── handbook/           # 教师实战授课手册 (PDF)
 │   ├── notes/              # 课堂操作笔记与配置参考 (HTML + Assets)
 │   └── templates/          # 生产日志与实习报告官方 Word 模板
