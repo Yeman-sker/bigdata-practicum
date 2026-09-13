@@ -13,6 +13,7 @@ from gbfs_collector import (  # noqa: E402
     validate_station_information,
     validate_station_status_feed,
     validate_vehicle_types,
+    station_status_quality_warnings,
     validate_event,
 )
 
@@ -75,7 +76,7 @@ class GbfsCollectorTest(unittest.TestCase):
                 "is_installed": 1,
                 "is_renting": 1,
                 "is_returning": 1,
-                "last_reported": None,
+                "last_reported": 0,
                 "vehicle_types_available": [],
             }]},
         })[0]
@@ -97,6 +98,54 @@ class GbfsCollectorTest(unittest.TestCase):
         }
         with self.assertRaisesRegex(ValueError, "version"):
             normalize_station_status(status)
+
+    def test_provider_nullable_counts_are_optional_but_last_reported_is_required(self):
+        status = {
+            "version": "2.3",
+            "last_updated": 1,
+            "data": {"stations": [{
+                "station_id": "123",
+                "num_bikes_available": 1,
+                "is_installed": 1,
+                "is_renting": 1,
+                "is_returning": 1,
+                "last_reported": 1,
+                "vehicle_types_available": [],
+            }]},
+        }
+        event = normalize_station_status(status)[0]
+        self.assertIsNone(event["num_bikes_disabled"])
+        self.assertIsNone(event["num_docks_available"])
+        self.assertIsNone(event["num_docks_disabled"])
+
+        missing_last_reported = {
+            **status,
+            "data": {"stations": [{**status["data"]["stations"][0]}]},
+        }
+        del missing_last_reported["data"]["stations"][0]["last_reported"]
+        with self.assertRaisesRegex(ValueError, "last_reported"):
+            normalize_station_status(missing_last_reported)
+
+    def test_vehicle_count_mismatch_is_recorded_as_quality_warning(self):
+        status = {
+            "version": "2.3",
+            "last_updated": 1,
+            "data": {"stations": [{
+                "station_id": "123",
+                "num_bikes_available": 1,
+                "is_installed": 1,
+                "is_renting": 1,
+                "is_returning": 1,
+                "last_reported": 1,
+                "vehicle_types_available": [
+                    {"vehicle_type_id": "1", "count": 2},
+                ],
+            }]},
+        }
+        warnings = station_status_quality_warnings(status)
+        self.assertEqual(warnings[0]["type"], "vehicle_count_mismatch")
+        self.assertEqual(warnings[0]["num_bikes_available"], 1)
+        self.assertEqual(warnings[0]["vehicle_types_available_total"], 2)
 
     def test_station_information_and_vehicle_type_schema_checks(self):
         station_information = {

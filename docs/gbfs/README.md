@@ -46,13 +46,18 @@ python3 scripts/gbfs_collector.py \
 `data/gbfs/` 已加入 `.gitignore`，完整 raw 数据不会被提交。
 
 每条 collection log 会记录 provider 的 `last_updated`、本地
-`ingested_at_utc`、站点数量和 sample station 状态。
+`ingested_at_utc`、站点数量、sample station 状态和 provider 质量 warning。
 
 本次真实采集跟踪站点
 `0c923abb-298a-4a47-b132-9fae73cc59e6`。三次 provider
 `last_updated` 分别为 `1789118479`、`1789118539`、`1789118600`；该站点
 从 `1 bike / 37 docks` 变为第三次的 `2 bikes / 36 docks`。这证明了 feed
 刷新和站点库存变化，不是复制同一个响应。
+
+第二次快照中，provider 的 `num_bikes_available` 为 1，但
+`vehicle_types_available[].count` 合计为 2。该不一致被保留在
+`quality_warnings` 中；标准化事件使用 `num_bikes_available` 作为站点库存
+总数权威值，不静默覆盖 provider raw 数据。
 
 在本次 `station_information` 响应中，2507 个站点有 13 个的 `region_id`
 缺失或为 `null`。本次采集中的 `capacity` 都有值，但 validator 和下游

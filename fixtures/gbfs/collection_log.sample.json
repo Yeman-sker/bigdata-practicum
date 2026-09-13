@@ -22,6 +22,7 @@
           "last_reported_at_utc": "2026-09-11T09:20:57Z"
         }
       ],
+      "quality_warnings": [],
       "source_version": "2.3"
     },
     {
@@ -41,6 +42,15 @@
           "is_renting": true,
           "is_returning": true,
           "last_reported_at_utc": "2026-09-11T09:21:07Z"
+        }
+      ],
+      "quality_warnings": [
+        {
+          "type": "vehicle_count_mismatch",
+          "station_id": "0c923abb-298a-4a47-b132-9fae73cc59e6",
+          "num_bikes_available": 1,
+          "vehicle_types_available_total": 2,
+          "resolution": "num_bikes_available 是 station_status_event_v1 的权威总数"
         }
       ],
       "source_version": "2.3"
@@ -64,6 +74,7 @@
           "last_reported_at_utc": "2026-09-11T09:22:07Z"
         }
       ],
+      "quality_warnings": [],
       "source_version": "2.3"
     }
   ]

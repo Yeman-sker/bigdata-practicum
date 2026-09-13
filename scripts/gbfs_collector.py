@@ -85,21 +85,18 @@ def fetch_json(url: str, timeout: float = 30.0) -> dict[str, Any]:
 
 
 def _feed_entries(discovery: Mapping[str, Any], locale: str) -> list[Mapping[str, Any]]:
-    """Read both GBFS 2.x localized and older flat discovery layouts."""
+    """读取 GBFS 2.3 的本地化 feed 列表。"""
 
     data = discovery.get("data")
     if not isinstance(data, Mapping):
         raise ValueError("discovery feed has no object-valued data field")
 
-    if isinstance(data.get("feeds"), list):
-        entries = data["feeds"]
-    else:
-        localized = data.get(locale)
-        if not isinstance(localized, Mapping) or not isinstance(
-            localized.get("feeds"), list
-        ):
-            raise ValueError(f"discovery feed has no feeds for locale {locale!r}")
-        entries = localized["feeds"]
+    localized = data.get(locale)
+    if not isinstance(localized, Mapping) or not isinstance(
+        localized.get("feeds"), list
+    ):
+        raise ValueError(f"discovery feed has no feeds for locale {locale!r}")
+    entries = localized["feeds"]
 
     if not all(isinstance(entry, Mapping) for entry in entries):
         raise ValueError("discovery feed contains a malformed feed entry")
@@ -126,6 +123,8 @@ def _nullable_int(record: Mapping[str, Any], field: str) -> int | None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{field} must be an integer or null")
+    if value < 0:
+        raise ValueError(f"{field} must not be negative")
     return value
 
 
@@ -201,12 +200,10 @@ def validate_station_status_feed(feed: Mapping[str, Any]) -> list[str]:
     required = (
         "station_id",
         "num_bikes_available",
-        "num_bikes_disabled",
-        "num_docks_available",
-        "num_docks_disabled",
         "is_installed",
         "is_renting",
         "is_returning",
+        "last_reported",
         "vehicle_types_available",
     )
     for index, station in enumerate(stations):
@@ -237,7 +234,7 @@ def validate_station_status_feed(feed: Mapping[str, Any]) -> list[str]:
                     _gbfs_bool(station, field)
                 except ValueError as error:
                     errors.append(f"{prefix}: {error}")
-        if "last_reported" in station and station["last_reported"] is not None:
+        if "last_reported" in station:
             try:
                 posix_to_utc(station["last_reported"])
             except ValueError as error:
@@ -257,6 +254,8 @@ def validate_station_status_feed(feed: Mapping[str, Any]) -> list[str]:
                     vehicle.get("count"), int
                 ):
                     errors.append(f"{vehicle_prefix}.count must be an integer")
+                elif vehicle["count"] < 0:
+                    errors.append(f"{vehicle_prefix}.count must not be negative")
     return errors
 
 
@@ -293,6 +292,32 @@ def validate_target_feeds(feeds: Mapping[str, Mapping[str, Any]]) -> dict[str, l
         for name, validator in validators.items()
         if (errors := validator(feeds[name]))
     }
+
+
+def station_status_quality_warnings(feed: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """记录 provider 快照中可追踪但不阻断标准化的质量异常。"""
+
+    warnings: list[dict[str, Any]] = []
+    stations = _feed_rows(feed, "stations", "station_status")
+    for station in stations:
+        vehicle_types = station.get("vehicle_types_available")
+        if not isinstance(vehicle_types, list):
+            continue
+        vehicle_total = sum(
+            vehicle["count"]
+            for vehicle in vehicle_types
+            if isinstance(vehicle, Mapping) and isinstance(vehicle.get("count"), int)
+        )
+        bikes_available = station.get("num_bikes_available")
+        if isinstance(bikes_available, int) and vehicle_total != bikes_available:
+            warnings.append({
+                "type": "vehicle_count_mismatch",
+                "station_id": station.get("station_id"),
+                "num_bikes_available": bikes_available,
+                "vehicle_types_available_total": vehicle_total,
+                "resolution": "num_bikes_available 是 station_status_event_v1 的权威总数",
+            })
+    return warnings
 
 
 def normalize_station_status(
@@ -451,7 +476,7 @@ def collect_snapshot(
     if feed_errors:
         raise ValueError(f"GBFS feed validation failed: {feed_errors}")
     ingested_at = utc_now()
-    stamp = ingested_at.strftime("%Y%m%dT%H%M%SZ")
+    stamp = ingested_at.strftime("%Y%m%dT%H%M%S%fZ")
     snapshot_dir = output_dir / "snapshots" / stamp
     for name, payload in fetched.items():
         _write_json(snapshot_dir / f"{name}.json", payload)
@@ -484,6 +509,7 @@ def collect_snapshot(
             for event in sample_events
         ],
         "source_version": str(fetched["station_status"].get("version", "")),
+        "quality_warnings": station_status_quality_warnings(fetched["station_status"]),
     }
     return {"record": record, "discovery": discovery, "feed_urls": feed_urls}
 
