@@ -30,7 +30,7 @@ jobs:
 
       - name: Run Ruff Linter
         run: |
-          ruff check .
+          ruff check --select E,F,W --ignore E501 .
 
   test-and-validate:
     name: Contract & Unit Tests
