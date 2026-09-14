@@ -27,6 +27,7 @@ SOURCE_FIELDS = (
     "member_casual",
 )
 COORDINATE_FIELDS = ("start_lat", "start_lng", "end_lat", "end_lng")
+HEADER_FIELDS = tuple(field for field in SOURCE_FIELDS if field not in COORDINATE_FIELDS)
 STATION_ID_FIELDS = ("start_station_id", "end_station_id")
 REQUIRED_STRING_FIELDS = (
     "ride_id",
@@ -111,6 +112,15 @@ def _cast_source_columns(frame, functions):
     return frame.select(*expressions)
 
 
+def _drop_hive_header_rows(frame, functions):
+    """Drop CSV header records when Spark reads a Hive text table."""
+
+    header_row = functions.lit(True)
+    for field in HEADER_FIELDS:
+        header_row = header_row & (functions.col(field) == field)
+    return frame.where(~header_row)
+
+
 def _read_input(spark, input_path: str | None, hive_table: str | None, source_month: str | None):
     from pyspark.sql import functions as F
 
@@ -149,6 +159,7 @@ def _read_input(spark, input_path: str | None, hive_table: str | None, source_mo
     for field in STATION_ID_FIELDS:
         if source.schema[field].dataType.simpleString() != "string":
             raise IntegrationError(f"Hive column {field} must be STRING")
+    source = _drop_hive_header_rows(source, F)
     return _cast_source_columns(source, F), source.count(), "hive_table"
 
 

@@ -44,6 +44,65 @@ class SparkTripIntegrationContractTests(unittest.TestCase):
 
 @unittest.skipUnless(SparkSession is not None, "pyspark is not installed")
 class SparkTripIntegrationSmokeTests(unittest.TestCase):
+    def test_hive_read_drops_csv_header_row(self):
+        from read_trip_integration import run_integration
+
+        spark = (
+            SparkSession.builder.master("local[2]")
+            .appName("spark-trip-hive-header-test")
+            .config("spark.sql.session.timeZone", "America/New_York")
+            .getOrCreate()
+        )
+        try:
+            rows = [
+                {
+                    "ride_id": "ride_id",
+                    "rideable_type": "rideable_type",
+                    "started_at": "started_at",
+                    "ended_at": "ended_at",
+                    "start_station_name": "start_station_name",
+                    "start_station_id": "start_station_id",
+                    "end_station_name": "end_station_name",
+                    "end_station_id": "end_station_id",
+                    "start_lat": None,
+                    "start_lng": None,
+                    "end_lat": None,
+                    "end_lng": None,
+                    "member_casual": "member_casual",
+                    "year": 2025,
+                    "month": 1,
+                },
+                {
+                    "ride_id": "ride-1",
+                    "rideable_type": "classic_bike",
+                    "started_at": "2025-01-01 10:00:00.000",
+                    "ended_at": "2025-01-01 10:10:00.000",
+                    "start_station_name": "Start",
+                    "start_station_id": "5484.09",
+                    "end_station_name": "End",
+                    "end_station_id": "4199.12",
+                    "start_lat": 40.0,
+                    "start_lng": -74.0,
+                    "end_lat": 40.1,
+                    "end_lng": -74.1,
+                    "member_casual": "member",
+                    "year": 2025,
+                    "month": 1,
+                },
+            ]
+            spark.createDataFrame(rows).createOrReplaceTempView("hive_trip_header_fixture")
+            summary = run_integration(
+                spark,
+                hive_table="hive_trip_header_fixture",
+                source_month="2025-01",
+                expected_count=1,
+                display=False,
+            )
+        finally:
+            spark.stop()
+        self.assertEqual(summary["status"], "PASS")
+        self.assertEqual(summary["counts"]["counts"], {"source": 1, "hive": 1, "spark": 1})
+
     def test_synthetic_fixture_runs_the_contract_gate(self):
         from read_trip_integration import run_integration
 

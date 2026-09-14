@@ -60,8 +60,9 @@ HADOOP_USER_NAME=bigdata spark-submit --master 'local[2]' \
   两方可见时明确标为 `PARTIAL`。
 
 Track A 的 2025-01 source count 为 `2,124,475`，Track D handoff 已记录 Hive
-ODS count 为 `2,124,475`。实际 Hive 运行完成后，summary 的
-`counts.status` 应为 `PASS`，并将其结果回填 Day 1 #5 的 Integration Result。
+ODS count 为 `2,124,475`。具备 Hive Metastore 的环境应直接执行上面的
+`--hive-table` 命令，并将 `counts.status` 为 `PASS` 的结果回填 Day 1 #5 的
+Integration Result。
 
 ## 本地检查结果
 
@@ -73,7 +74,7 @@ python3 -m unittest tests/test_spark_trip_integration.py
 格式和 manifest count 校验；安装 Spark 后运行上面的 fixture 命令即可完成
 runtime gate。
 
-## 2026-09-14 真实源回放
+## 2026-09-14 macOS host 真实源回放
 
 官方 2025-01 ZIP 已按 Track A manifest 校验 SHA-256 和三个 CSV 文件大小，解压
 到 `/tmp/citibike-day1/202501/extracted` 后运行 local CSV replay：
@@ -92,10 +93,31 @@ coordinates: double / double / double / double
 count reconciliation: PARTIAL (Hive 未在当前 macOS 验证机安装)
 ```
 
-Track D 的既有 handoff 记录同一批数据的 Hive `partition_ride_count` 为
-`2,124,475`。因此 source/Hive/Spark 数值已完成离线证据对账；尚缺的是在具备
-Hive Metastore 的环境直接执行上面的 `--hive-table` 命令，将脚本 summary 从
-`PARTIAL` 变为 `PASS`。这不是数据差异，而是当前验证机没有 `hdfs`/`hive` 命令。
+这次 host 回放只验证 CSV 读取路径；最终三方门禁见下节。
+
+## 2026-09-14 OrbStack 真实集成门禁
+
+按 `bigdata-env-setup` 使用已配置的 OrbStack `bigdata`（Ubuntu 22.04、JDK 8、
+Hadoop 3.3.6、Hive 3.1.3、Spark 3.5.7）完成真实落盘和 Hive/Spark 回放：
+
+```text
+HDFS RAW/ODS files: 3 / 3
+HDFS RAW/ODS bytes: 414,212,882 / 414,212,882
+Hive partition_ride_count: 2,124,475
+source / hive / spark: 2,124,475 / 2,124,475 / 2,124,475
+counts.status: PASS
+station_id: string / string
+coordinates: double / double / double / double
+invalid started_at / ended_at: 0 / 0
+null start_station_id / end_station_id: 564 / 4,322
+duplicate ride_id groups: 0
+csv header rows: 0
+time zone: America/New_York
+contract deviations: none
+```
+
+Spark 读取 Hive 表时显式剔除 CSV header 记录；Hive CLI 的
+`skip.header.line.count` 不会可靠地传递给 Spark 的 Hive text reader。
 
 ## 边界
 

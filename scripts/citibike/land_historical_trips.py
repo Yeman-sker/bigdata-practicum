@@ -193,9 +193,9 @@ def remote_checksum(hdfs_bin: str, path: str, runner: Runner) -> str:
 
     output = run_hdfs(hdfs_bin, ["-checksum", path], runner)
     fields = output.split(maxsplit=2)
-    if len(fields) < 2:
+    if len(fields) < 3:
         raise LandingError(f"HDFS checksum output is malformed for {path}: {output!r}")
-    return f"{fields[0]} {fields[1]}"
+    return f"{fields[1]} {fields[2]}"
 
 
 def validate_hdfs_count(output: str, expected_files: int, expected_bytes: int, label: str) -> None:
