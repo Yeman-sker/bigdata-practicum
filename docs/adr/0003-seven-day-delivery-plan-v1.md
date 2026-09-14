@@ -13,7 +13,7 @@
 当前状态如下：
 
 - Day 1 已完成真实 Historical Trips、GBFS 2.3、Source Validator、HDFS/Hive 和 Spark 读取验证。
-- Day 2 已完成产品范围、地图首页、回放、风险、调度建议、最小 API 字段和 Vite + React 基线的讨论；ADR-0002 记录产品与接口边界。
+- Day 2 已完成产品范围、地图首页、回放、风险、调度建议、最小 API 字段和 Vite + React 基线的讨论；ADR-0002 记录产品与接口边界。全部跨模块接口契约仍由 #31 收口，尚未视为完成。
 - 项目仍按 Day 1 起算共 7 天；进入 Day 3 时，剩余 6 天。
 
 项目唯一交付目标是：
