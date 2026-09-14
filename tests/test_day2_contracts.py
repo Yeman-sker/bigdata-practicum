@@ -47,6 +47,8 @@ class Day2ContractTests(unittest.TestCase):
             name = response["content"]["application/json"]["schema"]["$ref"].split("/")[-1]
             with self.subTest(name=example["summary"]):
                 self.validator(name).validate(example["value"])
+                if example["x-path"] == "/api/v1/map" and example["x-status"] != 400:
+                    self.validator("MapQuery").validate(example["x-query"])
         for query in [{"mode": "live", "hour": 8}, {"mode": "replay"}, {"mode": "livee"}]:
             with self.assertRaises(ValidationError):
                 self.validator("MapQuery").validate(query)

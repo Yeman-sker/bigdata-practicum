@@ -1042,7 +1042,12 @@
     },
     "x-path": "/api/v1/map",
     "x-status": 404,
-    "x-query": {}
+    "x-query": {
+      "mode": "replay",
+      "service_date": "2025-01-09",
+      "hour": 8
+    },
+    "x-precondition": "已装载共享 seed.sql 的历史发布；2025-01-09 不在已发布可用日期中。"
   },
   "too_large": {
     "summary": "too_large",
@@ -1054,7 +1059,10 @@
     },
     "x-path": "/api/v1/map",
     "x-status": 422,
-    "x-query": {}
+    "x-query": {
+      "mode": "live"
+    },
+    "x-precondition": "已完整发布一批 5001 个站点的实时数据，超过 5000 站上限。"
   },
   "unavailable": {
     "summary": "unavailable",
@@ -1066,6 +1074,9 @@
     },
     "x-path": "/api/v1/map",
     "x-status": 503,
-    "x-query": {}
+    "x-query": {
+      "mode": "live"
+    },
+    "x-precondition": "MySQL 表已初始化，但 live_release 尚无发布记录。"
   }
 }
