@@ -16,19 +16,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-HISTORICAL_COLUMNS = [
-    "ride_id", "rideable_type", "started_at", "ended_at",
-    "start_station_name", "start_station_id", "end_station_name",
-    "end_station_id", "start_lat", "start_lng", "end_lat", "end_lng",
-    "member_casual",
-]
-RIDEABLE_TYPES = {"classic_bike", "electric_bike", "electric_scooter"}
-MEMBER_TYPES = {"member", "casual"}
-TIME_FORMATS = (
-    "%m/%d/%Y %H:%M:%S",
-    "%Y-%m-%d %H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S",
+from .contracts import (
+    GBFS_FEEDS,
+    GBFS_VERSION,
+    HISTORICAL_TIME_FORMATS,
+    MEMBER_TYPES,
+    RIDEABLE_TYPES,
+    SOURCE_FIELDS,
 )
+
 STATION_ID_RE = re.compile(r"^[^\s]+$")
 
 
@@ -57,7 +53,7 @@ class Report:
 
 
 def parse_time(value: str) -> bool:
-    return any(_try_datetime(value, fmt) for fmt in TIME_FORMATS)
+    return any(_try_datetime(value, fmt) for fmt in HISTORICAL_TIME_FORMATS)
 
 
 def _try_datetime(value: str, fmt: str) -> bool:
@@ -122,8 +118,8 @@ def validate_historical(path: Path) -> Report:
             reader = csv.DictReader(handle)
             header = reader.fieldnames or []
             duplicates = sorted({x for x in header if header.count(x) > 1})
-            missing = [x for x in HISTORICAL_COLUMNS if x not in header]
-            unknown = [x for x in header if x not in HISTORICAL_COLUMNS]
+            missing = [x for x in SOURCE_FIELDS if x not in header]
+            unknown = [x for x in header if x not in SOURCE_FIELDS]
             if duplicates:
                 report.error(f"duplicate columns: {duplicates}")
             if missing:
@@ -173,8 +169,8 @@ def validate_historical(path: Path) -> Report:
                 started = (row.get("started_at") or "").strip()
                 ended = (row.get("ended_at") or "").strip()
                 if started and ended and parse_time(started) and parse_time(ended):
-                    start_dt = next(datetime.strptime(started, fmt) for fmt in TIME_FORMATS if _try_datetime(started, fmt))
-                    end_dt = next(datetime.strptime(ended, fmt) for fmt in TIME_FORMATS if _try_datetime(ended, fmt))
+                    start_dt = next(datetime.strptime(started, fmt) for fmt in HISTORICAL_TIME_FORMATS if _try_datetime(started, fmt))
+                    end_dt = next(datetime.strptime(ended, fmt) for fmt in HISTORICAL_TIME_FORMATS if _try_datetime(ended, fmt))
                     if (end_dt - start_dt).total_seconds() <= 0:
                         nonpositive_duration_count += 1
                 for field in ("start_lat", "start_lng", "end_lat", "end_lng"):
@@ -241,7 +237,7 @@ def validate_discovery(path: Path) -> Report:
     version = data.get("version")
     feeds = extract_records(data)
     names = {item.get("name") for item in feeds if isinstance(item, dict)}
-    required = {"station_information", "station_status", "vehicle_types"}
+    required = set(GBFS_FEEDS)
     missing = sorted(required - names)
     if missing:
         report.error(f"missing required feeds: {missing}")
@@ -274,8 +270,8 @@ def validate_gbfs_envelope(data: dict[str, Any], report: Report, require_version
         report.error("top-level last_updated must be a non-negative POSIX integer")
     if "ttl" in data and (not is_json_integer(data["ttl"]) or data["ttl"] < 0):
         report.error("top-level ttl must be a non-negative integer")
-    if require_version and (not isinstance(data.get("version"), str) or data.get("version") != "2.3"):
-        report.error(f"expected GBFS version string '2.3', got {data.get('version')!r}")
+    if require_version and (not isinstance(data.get("version"), str) or data.get("version") != GBFS_VERSION):
+        report.error(f"expected GBFS version string {GBFS_VERSION!r}, got {data.get('version')!r}")
 
 
 def validate_gbfs(path: Path, kind: str) -> Report:
@@ -412,7 +408,7 @@ def validate(kind: str, path: Path) -> Report:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate Track C source contracts")
+    parser = argparse.ArgumentParser(description="Validate source contracts")
     parser.add_argument("kind", choices=["historical", "discovery", "station_information", "station_status", "vehicle_types"])
     parser.add_argument("path", type=Path)
     args = parser.parse_args()

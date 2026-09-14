@@ -40,4 +40,5 @@
 
 `station_information` 提供站点名称、经纬度、可选容量和区域；它进入 `dim_station_v1`，不直接作为实时事件。`vehicle_types` 只冻结 provider 的车辆类型 ID，供适配器记录。
 
-完整 normalized 示例见 [fixtures/station_status_event_v1.json](fixtures/station_status_event_v1.json)。
+完整 normalized 示例见
+[fixtures/contracts/station_status_event_v1.json](../../fixtures/contracts/station_status_event_v1.json)。

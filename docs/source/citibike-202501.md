@@ -19,7 +19,7 @@ curl -fL --retry 3 \
   -o "$STAGING/raw/202501-citibike-tripdata.zip" \
   'https://s3.amazonaws.com/tripdata/202501-citibike-tripdata.zip'
 
-python3 scripts/citibike/verify_source.py \
+python3 -m citibike.historical_source \
   --zip "$STAGING/raw/202501-citibike-tripdata.zip" \
   --extract-dir "$STAGING/extracted" \
   --manifest docs/source/citibike-202501-manifest.json \

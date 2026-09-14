@@ -45,6 +45,13 @@ Day 1 Historical Trip 的 HDFS RAW / Hive ODS 入口、DDL、验证 SQL 与真�
 Track E 的 Spark 受控读取、契约断言、count 对账和可复现命令见
 [Spark integration handoff](docs/spark/README.md)。
 
+Source schema validator、字段映射和契约 fixtures 见
+[Track C handoff](docs/contracts/README.md)。
+
+运行入口统一收纳在 `citibike/` 包；Spark 作业使用
+`spark-submit citibike/spark.py`，其他 CLI 使用 `python3 -m citibike.<module>`。
+共享数据契约只维护在 `citibike/contracts.py`，不再新增散落的独立脚本。
+
 ## 基础环境与技术栈
 
 本节锁定底层基础设施、大数据组件及服务端版本一致性，并提供面向 AI Agent 的自动化编排与环境验收 Skill。
@@ -94,15 +101,33 @@ source ~/use-jdk17.sh
 
 ```text
 bigdata-practicum/
-├── README.md               # 项目说明、技术栈规范与索引指南
-├── docs/                   # 教学资料与原始模板
+├── docs/                   # 契约、各 Track 交接、教学资料与模板
 │   ├── adr/                # 架构与数据契约决策记录
-│   │   └── 0001-product-data-contract-v1.md
-│   ├── handbook/           # 教师实战授课手册 (PDF)
-│   ├── notes/              # 课堂操作笔记与配置参考 (HTML + Assets)
-│   └── templates/          # 生产日志与实习报告官方 Word 模板
+│   ├── agents/             # 仓库协作规范
+│   ├── concepts/           # 产品概念预览
+│   ├── contracts/          # Source schema validator 与字段映射
+│   ├── gbfs/               # GBFS 采集交接
+│   ├── handbook/           # 教师实战授课手册
+│   ├── hdfs-hive/          # HDFS RAW / Hive ODS 交接
+│   ├── notes/              # 课堂操作笔记
+│   ├── source/             # Historical Trips source 交接
+│   ├── spark/              # Spark 集成交接
+│   └── templates/          # 实习日志与报告模板
+├── fixtures/               # 轻量、可提交的测试样例
+│   ├── citibike/
+│   ├── contracts/
+│   └── gbfs/
+├── hive/                   # ODS DDL 与验证 SQL
+├── citibike/               # 共享契约、领域模块与 CLI 入口
+│   ├── contracts.py        # 唯一的数据契约常量
+│   ├── contract_validator.py
+│   ├── historical_source.py
+│   ├── historical_landing.py
+│   ├── gbfs.py
+│   ├── gbfs_fixture.py
+│   └── spark.py
+├── tests/                  # 全部自动化测试
+├── README.md               # 项目说明、技术栈规范与索引指南
 └── .agents/                # Agent 原生工作规范区
     └── skills/             # 团队工程复现 Skill 库
-        └── bigdata-env-setup/  # 面向 Agent 的大数据全栈环境编排规范
-            └── SKILL.md        # 阶段路线、架构决策、避坑准则与 6 重质量验收闸门 (Quality Gates)
 ```

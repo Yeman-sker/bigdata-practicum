@@ -5,48 +5,38 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .contracts import (
+        COORDINATE_FIELDS,
+        LOCAL_TIME_ZONE,
+        MEMBER_TYPES,
+        REQUIRED_STRING_FIELDS,
+        RIDEABLE_TYPES,
+        SOURCE_COLUMN_TYPES,
+        SOURCE_FIELDS,
+        SOURCE_MONTH_PATTERN,
+        SPARK_TIME_PATTERNS,
+        STATION_ID_FIELDS,
+    )
+else:
+    from citibike.contracts import (
+        COORDINATE_FIELDS,
+        LOCAL_TIME_ZONE,
+        MEMBER_TYPES,
+        REQUIRED_STRING_FIELDS,
+        RIDEABLE_TYPES,
+        SOURCE_COLUMN_TYPES,
+        SOURCE_FIELDS,
+        SOURCE_MONTH_PATTERN,
+        SPARK_TIME_PATTERNS,
+        STATION_ID_FIELDS,
+    )
 
-SOURCE_FIELDS = (
-    "ride_id",
-    "rideable_type",
-    "started_at",
-    "ended_at",
-    "start_station_name",
-    "start_station_id",
-    "end_station_name",
-    "end_station_id",
-    "start_lat",
-    "start_lng",
-    "end_lat",
-    "end_lng",
-    "member_casual",
-)
-COORDINATE_FIELDS = ("start_lat", "start_lng", "end_lat", "end_lng")
 HEADER_FIELDS = tuple(field for field in SOURCE_FIELDS if field not in COORDINATE_FIELDS)
-STATION_ID_FIELDS = ("start_station_id", "end_station_id")
-REQUIRED_STRING_FIELDS = (
-    "ride_id",
-    "rideable_type",
-    "started_at",
-    "ended_at",
-    "member_casual",
-)
-TIME_PATTERNS = (
-    "yyyy-MM-dd HH:mm:ss.SSSSSS",
-    "yyyy-MM-dd HH:mm:ss.SSS",
-    "yyyy-MM-dd HH:mm:ss",
-    "MM/dd/yyyy HH:mm:ss.SSS",
-    "MM/dd/yyyy HH:mm:ss",
-)
-LOCAL_TIME_ZONE = "America/New_York"
-SOURCE_MONTH_PATTERN = re.compile(r"^(?P<year>\d{4})-(?P<month>0[1-9]|1[0-2])$")
-TARGET_TYPES = {field: "double" for field in COORDINATE_FIELDS}
-TARGET_TYPES.update({field: "string" for field in SOURCE_FIELDS if field not in TARGET_TYPES})
 
 
 class IntegrationError(RuntimeError):
@@ -105,7 +95,7 @@ def build_source_schema():
 def _cast_source_columns(frame, functions):
     expressions = []
     for field in SOURCE_FIELDS:
-        data_type = TARGET_TYPES[field]
+        data_type = SOURCE_COLUMN_TYPES[field]
         expressions.append(functions.col(field).cast(data_type).alias(field))
     for field in COORDINATE_FIELDS:
         expressions.append(functions.col(field).cast("string").alias(f"__raw_{field}"))
@@ -165,7 +155,7 @@ def _read_input(spark, input_path: str | None, hive_table: str | None, source_mo
 
 def _timestamp_expression(field: str, functions):
     return functions.coalesce(
-        *(functions.to_timestamp(functions.col(field), pattern) for pattern in TIME_PATTERNS)
+        *(functions.to_timestamp(functions.col(field), pattern) for pattern in SPARK_TIME_PATTERNS)
     )
 
 
@@ -321,13 +311,12 @@ def run_integration(
             _sum_when(
                 F,
                 (~_blank(F, "rideable_type"))
-                & ~F.col("rideable_type").isin("classic_bike", "electric_bike"),
+                & ~F.col("rideable_type").isin(*RIDEABLE_TYPES),
                 "unknown_rideable_type",
             ),
             _sum_when(
                 F,
-                (~_blank(F, "member_casual"))
-                & ~F.col("member_casual").isin("casual", "member"),
+                (~_blank(F, "member_casual")) & ~F.col("member_casual").isin(*MEMBER_TYPES),
                 "unknown_member_casual",
             ),
         ]
@@ -446,7 +435,7 @@ def run_integration(
         },
         "time_validation": {
             "timezone": LOCAL_TIME_ZONE,
-            "accepted_patterns": list(TIME_PATTERNS),
+            "accepted_patterns": list(SPARK_TIME_PATTERNS),
             "derived_fields": [
                 "started_at_local",
                 "ended_at_local",

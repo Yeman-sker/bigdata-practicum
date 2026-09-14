@@ -5,17 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import sys
-
-
-ROOT = Path(__file__).parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "citibike"))
-
-from land_historical_trips import (  # noqa: E402
-    LandingError,
-    SOURCE_FIELDS,
-    land_historical_trips,
-)
+from citibike.contracts import SOURCE_FIELDS
+from citibike.historical_landing import LandingError, land_historical_trips
 
 
 class FakeHdfs:

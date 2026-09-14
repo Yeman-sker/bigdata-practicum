@@ -254,7 +254,7 @@
   ],
   "csv_file_count": 3,
   "record_count": 2124475,
-  "count_method": "Python csv.DictReader streaming count; each physical CSV row is read and counted; run scripts/citibike/verify_source.py with the command in docs/source/citibike-202501.md.",
+  "count_method": "Python csv.DictReader streaming count; each physical CSV row is read and counted; run python3 -m citibike.historical_source with the command in docs/source/citibike-202501.md.",
   "schema_version_or_observed_format": "2025 Citi Bike Historical Trips 13-column CSV",
   "observed": {
     "header": [

@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from gbfs_collector import validate_event
+from .gbfs import validate_event
 
 
 def main() -> int:
