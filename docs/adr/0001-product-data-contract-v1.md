@@ -3,11 +3,11 @@
 - 状态：Accepted / Frozen
 - 日期：2026-09-11
 - 关联：[#3 确定项目主题](https://github.com/Yeman-sker/bigdata-practicum/issues/3)、[#4 Product & Data Contract v1](https://github.com/Yeman-sker/bigdata-practicum/issues/4)
-- 适用范围：10 天 Sprint 的 v1 产品、数据、分析和服务接口
+- 适用范围：7 天敏捷交付周期的 v1 产品、数据、分析和服务接口
 
 ## 背景
 
-项目由数据采集、HDFS/Hive、Spark、Kafka、Spring Boot 和 ECharts 等模块组成。若各模块自行解释数据源、标识符、时间或聚合粒度，Spark、Hive、后端和前端之间会产生接口不一致。
+项目由数据采集、HDFS/Hive、Spark、Kafka、Spring Boot 和前端应用等模块组成。若各模块自行解释数据源、标识符、时间或聚合粒度，Spark、Hive、后端和前端之间会产生接口不一致。
 
 Issue #4 已冻结产品范围和数据契约。本 ADR 将这些约定固化为仓库内可长期引用的决策记录；实现分支不得“顺手”改变契约。
 
@@ -274,7 +274,7 @@ HDFS/Hive 目录语义固定为：
 ```
 
 ```text
-离线：Citi Bike ZIP/CSV → HDFS → Hive → Spark → DWS/ADS → Sqoop → MySQL → Spring Boot → ECharts
+离线：Citi Bike ZIP/CSV → HDFS → Hive → Spark → DWS/ADS → Sqoop → MySQL → Spring Boot → Vite + React
 实时：GBFS → Collector → Normalization Adapter → Kafka → Risk Calculation → ADS/MySQL → Spring Boot → Station Map
 ```
 
@@ -317,7 +317,7 @@ Day 1 实现门禁：
 - 将 station_id 转成数值类型：会损失 identifier 语义并破坏 join。
 - 使用原始 timestamp 直接跨历史/实时 join：两条数据链的时间语义不同。
 - 让 Spring Boot 扫描原始 Trip/DWD 大表：服务层不应承担离线分析。
-- 在 MVP 引入 ML 或 VRP：增加不可解释性和实现成本，超出 10 天 Sprint 的 P0。
+- 在 MVP 引入 ML 或 VRP：增加不可解释性和实现成本，超出 7 天交付周期的 P0。
 
 ## 变更策略
 

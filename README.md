@@ -16,8 +16,8 @@
 ### 技术链路
 
 ```text
-历史骑行 ZIP/CSV → HDFS → Hive → Spark → DWS/ADS → Sqoop → MySQL → Spring Boot → ECharts
-实时 GBFS → 采集器/标准化适配器 → Kafka → 实时风险计算 → ADS/MySQL → Spring Boot → ECharts
+历史骑行 ZIP/CSV → HDFS → Hive → Spark → DWS/ADS → Sqoop → MySQL → Spring Boot → Vite + React
+实时 GBFS → 采集器/标准化适配器 → Kafka → 实时风险计算 → ADS/MySQL → Spring Boot → Vite + React
 ```
 
 ### v1 范围
@@ -33,7 +33,7 @@
 | Historical Trips | 一次骑行 | `station_id × service_date × hour` 流量与历史基线 |
 | GBFS 2.3 station status | 一个站点在一个时刻的库存快照 | 当前库存、风险与实时调度 |
 | DWS | 站点 × 日期 × 小时，或站点 × 星期 × 小时 | Spark 聚合分析 |
-| ADS | 当前站点风险、调度建议、运营总览薄表 | MySQL、Spring Boot、ECharts |
+| ADS | 当前站点风险、调度建议、运营总览薄表 | MySQL、Spring Boot、Vite + React |
 
 跨层统一使用字符串类型的 `station_id`；历史时间按 `America/New_York` 本地时间处理，实时 POSIX 时间同时保存 UTC 和本地派生值。GBFS 快照不是官方逐笔骑行事件流，内部 Kafka topic 为 `bike.station.status.v1`，key 为 `station_id`。
 
@@ -73,7 +73,7 @@ Source schema validator、字段映射和契约 fixtures 见
 | **数据交换** | Apache Sqoop | 1.4.7 | JDK 8 | RDBMS (MySQL) 与 Hadoop/Hive 批量数据迁移 |
 | **关系型数据库** | MySQL Community | 8.0.x | - | 业务数据存储与 Hive Metastore 元数据库 |
 | **服务层框架** | Spring Boot | 3.2.x+ | JDK 17 | 后端数据服务与 API 暴露 (提供 RESTful 接口) |
-| **前端可视化** | ECharts | 5.x | - | 数据可视化图表呈现 |
+| **前端应用** | Vite + React + TypeScript | v1 | - | 地图大屏、回放、风险与调度展示；图表库可替换 |
 
 ---
 
