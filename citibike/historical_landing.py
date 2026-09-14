@@ -14,32 +14,16 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import re
 import shlex
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
+from .contracts import SOURCE_FIELDS, SOURCE_MONTH_PATTERN
 
-SOURCE_FIELDS = (
-    "ride_id",
-    "rideable_type",
-    "started_at",
-    "ended_at",
-    "start_station_name",
-    "start_station_id",
-    "end_station_name",
-    "end_station_id",
-    "start_lat",
-    "start_lng",
-    "end_lat",
-    "end_lng",
-    "member_casual",
-)
 DEFAULT_RAW_ROOT = "/raw/citibike/trips"
 DEFAULT_ODS_ROOT = "/warehouse/ods/ods_trip_raw"
-SOURCE_MONTH_PATTERN = re.compile(r"^(?P<year>\d{4})-(?P<month>0[1-9]|1[0-2])$")
 
 
 class LandingError(RuntimeError):

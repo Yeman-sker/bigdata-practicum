@@ -18,11 +18,10 @@ from typing import Any, Callable, Mapping
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from .contracts import GBFS_FEEDS, GBFS_VERSION, LOCAL_TIME_ZONE
 
-DEFAULT_DISCOVERY_URL = "https://gbfs.citibikenyc.com/gbfs/2.3/gbfs.json"
-LOCAL_ZONE = ZoneInfo("America/New_York")
-FEED_NAMES = ("station_information", "station_status", "vehicle_types")
-EXPECTED_SOURCE_VERSION = "2.3"
+DEFAULT_DISCOVERY_URL = f"https://gbfs.citibikenyc.com/gbfs/{GBFS_VERSION}/gbfs.json"
+LOCAL_ZONE = ZoneInfo(LOCAL_TIME_ZONE)
 EVENT_FIELDS = (
     "station_id",
     "snapshot_at_utc",
@@ -111,10 +110,10 @@ def discover_feed_urls(
         name, url = entry.get("name"), entry.get("url")
         if isinstance(name, str) and isinstance(url, str):
             urls[name] = url
-    missing = [name for name in FEED_NAMES if name not in urls]
+    missing = [name for name in GBFS_FEEDS if name not in urls]
     if missing:
         raise ValueError(f"discovery feed is missing required feeds: {', '.join(missing)}")
-    return {name: urls[name] for name in FEED_NAMES}
+    return {name: urls[name] for name in GBFS_FEEDS}
 
 
 def _nullable_int(record: Mapping[str, Any], field: str) -> int | None:
@@ -159,8 +158,8 @@ def _feed_rows(feed: Mapping[str, Any], key: str, feed_name: str) -> list[Mappin
 
 
 def _validate_version(feed: Mapping[str, Any], feed_name: str) -> list[str]:
-    if feed.get("version") != EXPECTED_SOURCE_VERSION:
-        return [f"{feed_name}.version must be {EXPECTED_SOURCE_VERSION!r}"]
+    if feed.get("version") != GBFS_VERSION:
+        return [f"{feed_name}.version must be {GBFS_VERSION!r}"]
     return []
 
 
@@ -400,8 +399,8 @@ def validate_event(event: Mapping[str, Any]) -> list[str]:
     for field in ("is_installed", "is_renting", "is_returning"):
         if field in event and not isinstance(event[field], bool):
             errors.append(f"{field} must be boolean")
-    if event.get("source_version") != EXPECTED_SOURCE_VERSION:
-        errors.append(f"source_version must be {EXPECTED_SOURCE_VERSION!r}")
+    if event.get("source_version") != GBFS_VERSION:
+        errors.append(f"source_version must be {GBFS_VERSION!r}")
     parsed_times: dict[str, datetime] = {}
     for field in (
         "snapshot_at_utc",

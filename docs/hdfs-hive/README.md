@@ -25,7 +25,7 @@ Historical ZIP 内的 3 个 CSV 都落在同一个 `year=2025/month=01` 分区�
 官方 ZIP
    ↓ 解压（本地 staging，仅临时）
 extracted/*.csv
-   ↓ land_historical_trips.py：校验 header/manifest，不改内容
+   ↓ citibike.historical_landing：校验 header/manifest，不改内容
 /raw/citibike/trips/year=2025/month=01/
    ↓ HDFS cp（原样副本，不使用 mv 或 LOAD DATA）
 /warehouse/ods/ods_trip_raw/year=2025/month=01/
@@ -63,7 +63,7 @@ source 的下载、解压和验证方法见
 ```bash
 STAGING=/tmp/citibike-day1/202501
 
-python3 scripts/citibike/land_historical_trips.py \
+python3 -m citibike.historical_landing \
   --staging-dir "$STAGING/extracted" \
   --source-month 2025-01 \
   --manifest docs/source/citibike-202501-manifest.json
@@ -83,7 +83,7 @@ python3 scripts/citibike/land_historical_trips.py \
 相应 HDFS 权限的账号运行。当前验证机的 simple-auth 示例是：
 
 ```bash
-HADOOP_USER_NAME=bigdata python3 scripts/citibike/land_historical_trips.py \
+HADOOP_USER_NAME=bigdata python3 -m citibike.historical_landing \
   --staging-dir "$STAGING/extracted" \
   --source-month 2025-01 \
   --manifest docs/source/citibike-202501-manifest.json

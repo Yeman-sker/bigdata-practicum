@@ -20,38 +20,18 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-
-SOURCE_FIELDS = [
-    "ride_id",
-    "rideable_type",
-    "started_at",
-    "ended_at",
-    "start_station_name",
-    "start_station_id",
-    "end_station_name",
-    "end_station_id",
-    "start_lat",
-    "start_lng",
-    "end_lat",
-    "end_lng",
-    "member_casual",
-]
-TIME_FIELDS = ("started_at", "ended_at")
-STATION_ID_FIELDS = ("start_station_id", "end_station_id")
-COORDINATE_FIELDS = ("start_lat", "start_lng", "end_lat", "end_lng")
-LATITUDE_FIELDS = {"start_lat", "end_lat"}
-LONGITUDE_FIELDS = {"start_lng", "end_lng"}
-ALLOWED_ENUMS = {
-    "rideable_type": {"classic_bike", "electric_bike"},
-    "member_casual": {"casual", "member"},
-}
-DECIMAL_ID = re.compile(r"^[+-]?\d+\.\d+$")
-TIME_FORMATS = (
-    "%Y-%m-%d %H:%M:%S",
-    "%Y-%m-%d %H:%M:%S.%f",
-    "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S.%f",
+from .contracts import (
+    COORDINATE_FIELDS,
+    HISTORICAL_TIME_FORMATS,
+    LATITUDE_FIELDS,
+    LONGITUDE_FIELDS,
+    SOURCE_ENUMS,
+    SOURCE_FIELDS,
+    STATION_ID_FIELDS,
+    TIME_FIELDS,
 )
+
+DECIMAL_ID = re.compile(r"^[+-]?\d+\.\d+$")
 
 
 def parse_args() -> argparse.Namespace:
@@ -91,7 +71,7 @@ def safe_member_path(name: str) -> Path:
 
 def parse_timestamp(value: str) -> tuple[dt.datetime | None, str | None]:
     """Parse a source timestamp and retain the format that matched it."""
-    for fmt in TIME_FORMATS:
+    for fmt in HISTORICAL_TIME_FORMATS:
         try:
             return dt.datetime.strptime(value, fmt), fmt
         except ValueError:
@@ -111,7 +91,7 @@ def new_quality_state() -> dict[str, Any]:
             field: {"invalid_count": 0, "out_of_range_count": 0} for field in COORDINATE_FIELDS
         },
         "coordinate_anomaly_row_count": 0,
-        "unknown_enum_counts": {field: 0 for field in ALLOWED_ENUMS},
+        "unknown_enum_counts": {field: 0 for field in SOURCE_ENUMS},
     }
 
 
@@ -131,7 +111,7 @@ def read_csv_stats(
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         header = reader.fieldnames or []
-        if header != SOURCE_FIELDS:
+        if header != list(SOURCE_FIELDS):
             raise ValueError(f"{path.name}: unexpected header: {header!r}")
         for row in reader:
             record_count += 1
@@ -155,7 +135,7 @@ def read_csv_stats(
                 value = (row.get(field) or "").strip()
                 if value:
                     enum_values[field].add(value)
-                    if value not in ALLOWED_ENUMS[field]:
+                    if value not in SOURCE_ENUMS[field]:
                         quality_state["unknown_enum_counts"][field] += 1
 
             parsed_times: dict[str, dt.datetime | None] = {}
@@ -313,7 +293,7 @@ def main() -> int:
         "record_count": total_records,
         "count_method": (
             "Python csv.DictReader streaming count; each physical CSV row is read and counted; "
-            "run scripts/citibike/verify_source.py with the command in "
+            "run python3 -m citibike.historical_source with the command in "
             "docs/source/citibike-202501.md."
         ),
         "schema_version_or_observed_format": "2025 Citi Bike Historical Trips 13-column CSV",

@@ -24,7 +24,7 @@
 ## 执行三次快照采集
 
 ```bash
-python3 scripts/gbfs/collector.py \
+python3 -m citibike.gbfs \
   --output-dir data/gbfs/citibike/$(date -u +%F) \
   --snapshots 3 \
   --interval-seconds 60 \
@@ -66,7 +66,7 @@ python3 scripts/gbfs/collector.py \
 ## 校验 normalized fixture
 
 ```bash
-python3 scripts/gbfs/validate_fixture.py \
+python3 -m citibike.gbfs_fixture \
   fixtures/gbfs/station_status_event_v1.sample.json
 ```
 

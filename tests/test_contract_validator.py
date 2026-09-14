@@ -7,7 +7,6 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
-SCRIPT = ROOT / "scripts" / "contracts" / "validate_sources.py"
 FIXTURES = ROOT / "fixtures" / "contracts"
 
 
@@ -16,8 +15,11 @@ def run(kind, filename):
     if not path.is_absolute():
         path = FIXTURES / path
     completed = subprocess.run(
-        [sys.executable, str(SCRIPT), kind, str(path)],
-        text=True, capture_output=True, check=False,
+        [sys.executable, "-m", "citibike.contract_validator", kind, str(path)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
     )
     return completed.returncode, json.loads(completed.stdout)
 

@@ -1,6 +1,6 @@
 # Day 1 / Track E — Spark 读取 PoC
 
-`scripts/spark/read_trip_integration.py` 是 Day 1 的下游集成门禁。它只做
+`citibike.spark` 是 Day 1 的下游集成门禁。它只做
 Historical Trips 的受控读取和验证，不实现 DWD ETL。
 
 ## 可复现运行
@@ -9,8 +9,7 @@ Historical Trips 的受控读取和验证，不实现 DWD ETL。
 
 ```bash
 mkdir -p /tmp/citibike-day1
-spark-submit --master 'local[2]' \
-  scripts/spark/read_trip_integration.py \
+python3 -m citibike.spark \
   --input fixtures/citibike/202501_sample.csv \
   --source-month 2025-01 \
   --expected-count 20 \
@@ -21,8 +20,7 @@ spark-submit --master 'local[2]' \
 对 Track D 已提供的真实 Hive ODS，使用 Hive Metastore 入口完成三方对账：
 
 ```bash
-HADOOP_USER_NAME=bigdata spark-submit --master 'local[2]' \
-  scripts/spark/read_trip_integration.py \
+HADOOP_USER_NAME=bigdata python3 -m citibike.spark \
   --hive-table citibike_ods.ods_trip_raw \
   --source-month 2025-01 \
   --manifest docs/source/citibike-202501-manifest.json \
@@ -35,8 +33,7 @@ HADOOP_USER_NAME=bigdata spark-submit --master 'local[2]' \
 Hive Metastore count：
 
 ```bash
-HADOOP_USER_NAME=bigdata spark-submit --master 'local[2]' \
-  scripts/spark/read_trip_integration.py \
+HADOOP_USER_NAME=bigdata python3 -m citibike.spark \
   --input /warehouse/ods/ods_trip_raw/year=2025/month=01 \
   --source-month 2025-01 \
   --manifest docs/source/citibike-202501-manifest.json \
@@ -68,7 +65,7 @@ Integration Result。
 ## 本地检查结果
 
 ```bash
-python3 -m unittest tests/test_spark_trip_integration.py
+python3 -m unittest tests/test_spark.py
 ```
 
 没有 PySpark 的 CI 环境会跳过 runtime smoke test，但仍检查 13 列契约、月份

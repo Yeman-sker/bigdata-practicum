@@ -8,24 +8,10 @@ import zipfile
 from io import StringIO
 from pathlib import Path
 
+from citibike.contracts import SOURCE_FIELDS
 
 ROOT = Path(__file__).parents[1]
-VERIFIER = ROOT / "scripts" / "citibike" / "verify_source.py"
-SOURCE_FIELDS = [
-    "ride_id",
-    "rideable_type",
-    "started_at",
-    "ended_at",
-    "start_station_name",
-    "start_station_id",
-    "end_station_name",
-    "end_station_id",
-    "start_lat",
-    "start_lng",
-    "end_lat",
-    "end_lng",
-    "member_casual",
-]
+SOURCE_MODULE = "citibike.historical_source"
 
 
 def source_row(ride_id: str, **overrides: str) -> dict[str, str]:
@@ -87,7 +73,8 @@ class VerifySourceTest(unittest.TestCase):
             result = subprocess.run(
                 [
                     sys.executable,
-                    str(VERIFIER),
+                    "-m",
+                    SOURCE_MODULE,
                     "--zip",
                     str(archive_path),
                     "--extract-dir",

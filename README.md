@@ -48,6 +48,9 @@ Track E 的 Spark 受控读取、契约断言、count 对账和可复现命令�
 Source schema validator、字段映射和契约 fixtures 见
 [Track C handoff](docs/contracts/README.md)。
 
+运行入口统一为 `python3 -m citibike.<module>`；共享数据契约只维护在
+`citibike/contracts.py`，不再新增散落的独立脚本。
+
 ## 基础环境与技术栈
 
 本节锁定底层基础设施、大数据组件及服务端版本一致性，并提供面向 AI Agent 的自动化编排与环境验收 Skill。
@@ -114,11 +117,14 @@ bigdata-practicum/
 │   ├── contracts/
 │   └── gbfs/
 ├── hive/                   # ODS DDL 与验证 SQL
-├── scripts/                # 按数据域组织的可执行工具
-│   ├── citibike/
-│   ├── contracts/
-│   ├── gbfs/
-│   └── spark/
+├── citibike/               # 共享契约、领域模块与 CLI 入口
+│   ├── contracts.py        # 唯一的数据契约常量
+│   ├── historical_source.py
+│   ├── historical_landing.py
+│   ├── contract_validator.py
+│   ├── gbfs.py
+│   ├── gbfs_fixture.py
+│   └── spark.py
 ├── tests/                  # 全部自动化测试
 ├── README.md               # 项目说明、技术栈规范与索引指南
 └── .agents/                # Agent 原生工作规范区
