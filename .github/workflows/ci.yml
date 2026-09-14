@@ -55,6 +55,7 @@ jobs:
                   unittest.defaultTestLoader.discover(
                       start_dir=start_dir,
                       pattern="test_*.py",
+                      top_level_dir=start_dir,
                   )
               )
           if suite.countTestCases() == 0:
