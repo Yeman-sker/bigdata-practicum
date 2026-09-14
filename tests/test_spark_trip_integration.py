@@ -121,6 +121,12 @@ class SparkTripIntegrationSmokeTests(unittest.TestCase):
                 sample_rows=2,
                 display=False,
             )
+            incomplete = run_integration(
+                spark,
+                input_path=str(ROOT / "fixtures" / "citibike" / "202501_sample.csv"),
+                source_month="2025-01",
+                display=False,
+            )
         finally:
             spark.stop()
         self.assertEqual(summary["status"], "PASS")
@@ -132,6 +138,8 @@ class SparkTripIntegrationSmokeTests(unittest.TestCase):
         })
         self.assertEqual(summary["data_quality"]["invalid_started_at"], 0)
         self.assertEqual(summary["time_validation"]["timezone"], "America/New_York")
+        self.assertEqual(incomplete["counts"]["status"], "NOT_RUN")
+        self.assertEqual(incomplete["status"], "FAIL")
 
 
 if __name__ == "__main__":

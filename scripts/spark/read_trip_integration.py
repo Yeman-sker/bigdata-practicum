@@ -404,7 +404,11 @@ def run_integration(
     ):
         if metrics[key]:
             deviations.append({"field": field, "unknown_count": metrics[key]})
-    blocking_checks = {key: value for key, value in gate_checks.items() if value == "FAIL"}
+    blocking_checks = {
+        key: value
+        for key, value in gate_checks.items()
+        if value == "FAIL" or (key == "count_reconciliation" and value == "NOT_RUN")
+    }
     summary = {
         "status": "FAIL" if blocking_checks else "PASS",
         "input": {

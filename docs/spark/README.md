@@ -57,7 +57,8 @@ HADOOP_USER_NAME=bigdata spark-submit --master 'local[2]' \
 - `total_rows`、station id null、时间 parse failure、时间范围和枚举 distinct
   值；
 - `source` / `hive` / `spark` 三方 count。三者都提供且相等时为 `PASS`；只有
-  两方可见时明确标为 `PARTIAL`。
+  两方可见时明确标为 `PARTIAL`；完全没有 source count 证据时为 `NOT_RUN`，
+  整体 gate 返回 `FAIL`。
 
 Track A 的 2025-01 source count 为 `2,124,475`，Track D handoff 已记录 Hive
 ODS count 为 `2,124,475`。具备 Hive Metastore 的环境应直接执行上面的
