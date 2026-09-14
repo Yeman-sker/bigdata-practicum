@@ -1,0 +1,58 @@
+{
+  "source_name": "Synthetic contract fixture",
+  "source_page_url": "https://citibikenyc.com/system-data",
+  "source_url": "https://example.invalid/synthetic-202501.zip",
+  "source_month": "2025-01",
+  "downloaded_at": "2025-02-05T12:59:00Z",
+  "zip_filename": "synthetic-202501.zip",
+  "zip_size_bytes": 1598,
+  "zip_sha256": "a116a1bc8ef43a1e73de06fc090be3e68bf318ac75c71ac519a794b8896bc6a5",
+  "zip_members": [
+    "part-a.csv",
+    "part-b.csv"
+  ],
+  "csv_file_count": 2,
+  "record_count": 8,
+  "csv_files": [
+    {
+      "filename": "part-a.csv",
+      "size_bytes": 702,
+      "header": [
+        "ride_id",
+        "rideable_type",
+        "started_at",
+        "ended_at",
+        "start_station_name",
+        "start_station_id",
+        "end_station_name",
+        "end_station_id",
+        "start_lat",
+        "start_lng",
+        "end_lat",
+        "end_lng",
+        "member_casual"
+      ],
+      "record_count": 4
+    },
+    {
+      "filename": "part-b.csv",
+      "size_bytes": 682,
+      "header": [
+        "ride_id",
+        "rideable_type",
+        "started_at",
+        "ended_at",
+        "start_station_name",
+        "start_station_id",
+        "end_station_name",
+        "end_station_id",
+        "start_lat",
+        "start_lng",
+        "end_lat",
+        "end_lng",
+        "member_casual"
+      ],
+      "record_count": 4
+    }
+  ]
+}

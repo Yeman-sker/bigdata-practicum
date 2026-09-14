@@ -1,0 +1,3 @@
+# Documentation / contract validation only; not product runtime dependencies.
+openapi-spec-validator==0.7.2
+PyYAML==6.0.2
