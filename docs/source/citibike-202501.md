@@ -1,6 +1,6 @@
 # Citi Bike Historical Trips — 2025-01 source handoff
 
-This is the Day 1 source verification for Issue #6. It uses the official Citi
+This is the source verification handoff for Issues #6 and #4. It uses the official Citi
 Bike Historical Trips object for January 2025:
 
 Historical Trips page: `https://citibikenyc.com/system-data`
@@ -12,25 +12,31 @@ The small fixture is [`../../fixtures/citibike/202501_sample.csv`](../../fixture
 
 ## Reproduce
 
+The Day 3 command below downloads the archive, verifies its ZIP members and
+source headers, extracts the CSVs, and writes the machine-readable manifest in
+one run. The downloader uses a temporary `.part` file and refuses to overwrite
+an existing archive.
+
 ```bash
-STAGING=/tmp/citibike-day1/202501
-mkdir -p "$STAGING/raw" "$STAGING/extracted"
-curl -fL --retry 3 \
-  -o "$STAGING/raw/202501-citibike-tripdata.zip" \
-  'https://s3.amazonaws.com/tripdata/202501-citibike-tripdata.zip'
+STAGING=/tmp/citibike-day3/202501
 
 python3 -m citibike.historical_source \
-  --zip "$STAGING/raw/202501-citibike-tripdata.zip" \
+  --download-dir "$STAGING/raw" \
   --extract-dir "$STAGING/extracted" \
-  --manifest docs/source/citibike-202501-manifest.json \
+  --manifest "$STAGING/manifest.json" \
   --sample-output "$STAGING/verified_sample.csv" \
   --sample-rows 20 \
   --source-page-url 'https://citibikenyc.com/system-data' \
   --source-url 'https://s3.amazonaws.com/tripdata/202501-citibike-tripdata.zip' \
   --source-month 2025-01 \
-  --source-name 'Citi Bike Historical Trips' \
-  --downloaded-at '2026-09-11T07:34:34Z'
+  --source-name 'Citi Bike Historical Trips'
 ```
+
+To rerun verification against an archive already downloaded, replace
+`--download-dir "$STAGING/raw"` with
+`--zip "$STAGING/raw/202501-citibike-tripdata.zip"`. The checked-in
+[`citibike-202501-manifest.json`](citibike-202501-manifest.json) remains the
+reviewed 2025-01 evidence; do not overwrite it during a local rerun.
 
 The verifier uses a streaming `csv.DictReader` count, enumerates every ZIP
 member, validates every header against the 13-field source contract, and

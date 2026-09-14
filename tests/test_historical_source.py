@@ -1,4 +1,5 @@
 import csv
+import io
 import json
 import subprocess
 import sys
@@ -7,8 +8,10 @@ import unittest
 import zipfile
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 from citibike.contracts import SOURCE_FIELDS
+from citibike.historical_source import download_archive
 
 ROOT = Path(__file__).parents[1]
 SOURCE_MODULE = "citibike.historical_source"
@@ -35,6 +38,33 @@ def source_row(ride_id: str, **overrides: str) -> dict[str, str]:
 
 
 class VerifySourceTest(unittest.TestCase):
+    def test_download_archive_writes_atomically_and_does_not_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            with patch(
+                "citibike.historical_source.urlopen",
+                return_value=io.BytesIO(b"synthetic-zip"),
+            ):
+                archive_path = download_archive(
+                    "https://example.invalid/202501.zip",
+                    output_dir,
+                    "2025-01",
+                )
+
+            self.assertEqual(
+                archive_path,
+                output_dir / "202501-citibike-tripdata.zip",
+            )
+            self.assertEqual(archive_path.read_bytes(), b"synthetic-zip")
+            self.assertFalse((output_dir / ".202501-citibike-tripdata.zip.part").exists())
+
+            with self.assertRaises(FileExistsError):
+                download_archive(
+                    "https://example.invalid/202501.zip",
+                    output_dir,
+                    "2025-01",
+                )
+
     def test_quality_metrics_and_mapping_are_written_across_csv_members(self):
         rows = [
             source_row("test-1"),

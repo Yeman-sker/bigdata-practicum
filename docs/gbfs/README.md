@@ -45,6 +45,13 @@ python3 -m citibike.gbfs \
 
 `data/gbfs/` 已加入 `.gitignore`，完整 raw 数据不会被提交。
 
+Day 3 的 GBFS 交付边界是：先把完整 JSON 响应和采集元数据保存在本地
+staging，供后续 HDFS RAW 任务使用；当前不新增独立的 JSON ODS 表。因为
+GBFS 的行粒度、快照保留策略和 Hive 查询契约尚未冻结，暂不把 JSON 强行
+转换成一个会反复返工的 ODS schema。Historical Trips 的 CSV RAW/ODS
+落地则由 `citibike.historical_landing` 完成，见
+[`docs/hdfs-hive/README.md`](../hdfs-hive/README.md)。
+
 每条 collection log 会记录 provider 的 `last_updated`、本地
 `ingested_at_utc`、站点数量、sample station 状态和 provider 质量 warning。
 

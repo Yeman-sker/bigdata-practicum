@@ -19,6 +19,7 @@ import sys
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.request import Request, urlopen
 
 from .contracts import (
     COORDINATE_FIELDS,
@@ -27,16 +28,24 @@ from .contracts import (
     LONGITUDE_FIELDS,
     SOURCE_ENUMS,
     SOURCE_FIELDS,
+    SOURCE_MONTH_PATTERN,
     STATION_ID_FIELDS,
     TIME_FIELDS,
 )
 
 DECIMAL_ID = re.compile(r"^[+-]?\d+\.\d+$")
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--zip", dest="zip_path", required=True, type=Path)
+    archive = parser.add_mutually_exclusive_group(required=True)
+    archive.add_argument("--zip", dest="zip_path", type=Path)
+    archive.add_argument(
+        "--download-dir",
+        type=Path,
+        help="download the source ZIP into this directory before verification",
+    )
     parser.add_argument("--extract-dir", required=True, type=Path)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--source-url", required=True)
@@ -44,6 +53,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-month", required=True, help="YYYY-MM")
     parser.add_argument("--source-name", default="Citi Bike Historical Trips")
     parser.add_argument("--downloaded-at", help="UTC ISO-8601 timestamp")
+    parser.add_argument("--download-timeout", type=float, default=60.0)
     parser.add_argument("--sample-output", type=Path)
     parser.add_argument("--sample-rows", type=int, default=20)
     return parser.parse_args()
@@ -59,6 +69,47 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def download_archive(
+    source_url: str,
+    output_dir: Path,
+    source_month: str,
+    timeout: float = 60.0,
+) -> Path:
+    """Download one monthly archive without leaving a partial target file."""
+
+    if SOURCE_MONTH_PATTERN.fullmatch(source_month) is None:
+        raise ValueError(f"source month must use YYYY-MM, got {source_month!r}")
+    if timeout <= 0:
+        raise ValueError("download timeout must be positive")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{source_month.replace('-', '')}-citibike-tripdata.zip"
+    target = output_dir / filename
+    if target.exists():
+        raise FileExistsError(f"refusing to overwrite existing archive: {target}")
+    partial = output_dir / f".{filename}.part"
+    request = Request(
+        source_url,
+        headers={
+            "Accept": "application/zip, application/octet-stream",
+            "User-Agent": "bigdata-practicum-historical-downloader/1.0",
+        },
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response, partial.open("wb") as handle:
+            total_bytes = 0
+            while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
+                handle.write(chunk)
+                total_bytes += len(chunk)
+        if total_bytes == 0:
+            raise ValueError("source archive response is empty")
+        partial.replace(target)
+    except Exception:
+        partial.unlink(missing_ok=True)
+        raise
+    return target
 
 
 def safe_member_path(name: str) -> Path:
@@ -211,6 +262,15 @@ def ratio(count: int, total: int) -> float:
 
 def main() -> int:
     args = parse_args()
+    if args.zip_path is None:
+        args.zip_path = download_archive(
+            args.source_url,
+            args.download_dir,
+            args.source_month,
+            timeout=args.download_timeout,
+        )
+        if args.downloaded_at is None:
+            args.downloaded_at = utc_now()
     if not args.zip_path.is_file():
         raise FileNotFoundError(args.zip_path)
     args.extract_dir.mkdir(parents=True, exist_ok=True)
