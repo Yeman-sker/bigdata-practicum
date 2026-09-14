@@ -188,33 +188,11 @@ ads_rebalance_suggestion 保持以下字段：
 - 点击方向线查看建议详情，完整结果放在侧边列表。
 - 暂不加入路径动画、车辆容量、司机任务、自动执行或 VRP/全局最优求解。
 
-## 7 天实施计划
+## 7 天实施计划（索引）
 
-项目从 Day 1 起共 7 天，采用敏捷切片。Day 2 完成范围冻结后，不再新增 P0 功能，只处理阻断问题。
+本 ADR 只冻结 Day 2 的产品与接口边界。完整的 7 天任务拆分、依赖、负责人、每日验收和时间不足时的降级顺序，以 [ADR-0003：7 天敏捷交付计划与任务分工 v1](0003-seven-day-delivery-plan-v1.md) 为准。
 
-| 天数 | 目标 | 交付与门禁 |
-| :--- | :--- | :--- |
-| Day 1 | 数据事实与基础契约 | 已完成真实 Trip/GBFS 验证、字段契约和技术边界 |
-| Day 2 | 产品、API、前端基线 | 已确认 ADR、白板树、stations/flows 契约和 Vite + React 基线 |
-| Day 3 | 采集与原始落地 | Historical downloader、GBFS collector、validator、HDFS RAW/ODS |
-| Day 4 | 离线数仓与分析 | DWD、dim_station、小时 flow/profile、非零 OD 聚合 |
-| Day 5 | 实时风险与调度 | GBFS → Kafka → 风险计算 → ADS/MySQL → 调度建议 |
-| Day 6 | 服务与前端联调 | Spring Boot API、实时地图、历史回放、详情抽屉、双 Tab |
-| Day 7 | 集成验收与交付 | 端到端演示、异常场景、数据质量、文档、PR 和 CI |
-
-五条工作流可以并行推进，但每天必须合并至少一个可验证切片：
-
-1. Historical 数据与 manifest。
-2. GBFS、Kafka 与实时快照。
-3. HDFS/Hive、DWD 与维度表。
-4. Spark、DWS、风险和调度。
-5. Spring Boot、Vite + React 与联调。
-
-范围分级固定为：
-
-- P0：实时地图、历史回放、站点历史分析、风险识别、调度建议。
-- P1：运营总览 KPI。
-- P2：ML、天气、AI、VRP、逐车 GPS、登录和复杂组件/动画系统。
+Day 2 完成范围冻结后，不再新增 P0 用户故事，只处理阻断问题和契约内的实现细节。
 
 ## 验收边界
 
