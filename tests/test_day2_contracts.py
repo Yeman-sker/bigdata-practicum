@@ -137,7 +137,14 @@ class Day2ContractTests(unittest.TestCase):
                 self.assertIsNone(row["projected_bikes_1h"])
         self.assertEqual(examples["no_baseline"]["value"]["stations"][0]["current_status"], rows[0]["current_status"])
         cases = read_json("cases.json")
-        self.assertEqual((len(cases["risk"]), len(cases["rebalance"]), len(cases["batches"])), (22, 9, 10))
+        self.assertEqual((len(cases["risk"]), len(cases["rebalance"]), len(cases["batches"])), (22, 9, 12))
+        batches = {c["name"]: c for c in cases["batches"]}
+        self.assertEqual(batches["partial"]["published_as_of_utc"], batches["partial"]["expected_as_of_utc"])
+        self.assertEqual({r["headers"]["data_origin"] for r in batches["mixed-origin"]["records"]}, {"FIXTURE", "GBFS_REPLAY"})
+        self.assertEqual(batches["live-rejects-replay"]["backend_profile"], "live")
+        for name in ("mixed-origin", "live-rejects-replay"):
+            self.assertIsNone(batches[name]["station_count"])
+            self.assertEqual(batches[name]["expected"], "REJECT_KEEP_PREVIOUS")
         double = next(c for c in cases["rebalance"] if c["name"] == "one-source-two-targets")
         self.assertEqual([r["move"] for r in double["expected"]], [8, 4])
         self.assertEqual(sum(r["move"] for r in double["expected"]), 12)

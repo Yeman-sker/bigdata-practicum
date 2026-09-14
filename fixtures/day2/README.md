@@ -12,7 +12,7 @@
 | [expected.json](expected.json) | #28/#29：完整小型 DWD、DIM、DWS、ADS 与发布行，tables 对象按实际表名索引 |
 | [seed.sql](seed.sql) | #27：在空样例 MySQL 库中，先执行 sql/serving.sql，再装载；包含实际薄表与发布行 |
 | [http-examples.json](http-examples.json) | #26/#27：OpenAPI Example Objects，取 `<名称>.value` 即完整响应；x-path/x-query/x-status 指明请求与 HTTP 状态 |
-| [cases.json](cases.json) | #29：22 个风险、9 个匹配、10 个批次与 4 个身份映射输入/期望；不得用这里的期望结果替代生产规则 |
+| [cases.json](cases.json) | #29：22 个风险、9 个匹配、12 个批次与 4 个身份映射输入/期望；不得用这里的期望结果替代生产规则 |
 
 ## 可手算链路
 
@@ -24,7 +24,7 @@
 
 snapshot_id、metadata_version、dataset_id 按正式契约派生；HTTP/ADS/事件使用相同输入。边界 examples 是独立场景替换：no_baseline 保留当前状态，stale 推进时钟并清除预测/建议，empty_live 是另一份空快照。
 
-cases.risk 的 flags 表示三个服务标志同时取该值，age_seconds 是 as_of 距最早观测的秒数；其他未列出的时间/metadata 均有效。cases.rebalance 默认新鲜、可运营、基线可用，docks 显式给出，predicted 值以 projected 字段输入。cases.batches 的 published_* 表示上个已发布状态，advance_wall_seconds 用于不完整批超时。
+cases.risk 的 flags 表示三个服务标志同时取该值，age_seconds 是 as_of 距最早观测的秒数；其他未列出的时间/metadata 均有效。cases.rebalance 默认新鲜、可运营、基线可用，docks 显式给出，predicted 值以 projected 字段输入。cases.batches 的 published_* 表示上个已发布状态，advance_wall_seconds 用于不完整批超时；backend_profile 未指定时按 recorded 规则测 FIXTURE。mixed-origin / live-rejects-replay 必须拒绝；partial 的 expected_as_of_utc 验证坏批不推进已发布时钟。
 
 ## 验证
 

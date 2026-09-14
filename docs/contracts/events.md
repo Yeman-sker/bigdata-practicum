@@ -6,6 +6,8 @@
 
 一个集成实例、一个 producer、一个分区、一个顺序 consumer。普通记录仍是“一站一快照”；快照结束记录是显式控制记录，不当作站点。副本数在单机为 1，不声称高可用。
 
+consumer 关闭 enable.auto.commit；live 使用固定 group.id 和新组 earliest，正常重启续用已提交 offset。recorded 使用独立库/组，发送前用 Kafka CLI 设置本次起点，步骤见 [runbook](../runbook.md)。live 只接纳 GBFS_LIVE；recorded 只接纳 GBFS_REPLAY/FIXTURE；fixture profile 不消费 Kafka。错误来源使所属批次失败；记录原因并提交已判定失败部分的 offset，不发布业务结果，也不提交下一未判定批次的位置。
+
 Kafka headers（UTF-8 string）每条必须包含：
 
 | Header | 值 |
@@ -26,7 +28,7 @@ snapshot_end 的 key 固定 `__snapshot_end__`，value 必含：
 | snapshot_at_utc | UTC timestamp / 否 | station_status.last_updated |
 | ingested_at_utc | UTC timestamp / 否 | 本次采集时间 |
 
-header 中的 snapshot_id 与 metadata_version 对整批相同。metadata_version 为 canonical metadata JSON 文件原始字节的 SHA-256；snapshot_id 为 `SHA256(raw station_status bytes + LF + metadata_version ASCII)`。快照依赖文件先原子写完，才能开始发送。
+header 中的 snapshot_id、metadata_version、data_origin 对整批相同，混合来源整批拒绝。metadata_version 为 canonical metadata JSON 文件原始字节的 SHA-256；snapshot_id 为 `SHA256(raw station_status bytes + LF + metadata_version ASCII)`。快照依赖文件先原子写完，才能开始发送。
 
 producer 顺序发送全部 station 并确认成功，再发送 snapshot_end。相同 provider last_updated 与相同原始内容无需重复发布；同源时间内容不同记冲突，不覆盖上个成功结果，等待更新时刻。metadata 变化在下一次更新的状态快照生效。不要跨批并发发送。
 
@@ -61,7 +63,7 @@ API 在每次请求时判定到期，返回过期状态、null 预测值和过�
 
 - `mode=replay` 是产品的历史 OD 回放：选日期/小时读聚合表，库存与风险均 NOT_APPLICABLE。
 - `data_origin=GBFS_REPLAY` 是录制库存事件重放：产品仍为 mode=live，界面必须显示“录制快照”。使用与 Kafka 完全相同的 NDJSON 封装（key、headers、value），按原顺序发送，原 snapshot/last_reported 不改写。
-- 业务时钟 `clock_mode=recorded` 只在开发/演示启动配置启用：处理 snapshot_end 时使用记录的 ingested_at_utc，读 API 时保持该时钟直到下一条结束记录。前端不以墙钟推进其有效期。测试可显式推进时钟验证过期。线上 `clock_mode=wall` 使用真实 UTC，不能通过 HTTP 请求切换。
+- 业务时钟 `clock_mode=recorded` 只在开发/演示启动配置启用：完整批校验与计算使用该批 ingested_at_utc；仅在成功发布时，将其与 ADS 一起写入 live_release.as_of_utc。失败/拒绝/重复批不推进已发布时钟，API 始终读取发布行；进程重启从该行恢复，无发布行仍为 503。前端不以墙钟推进其有效期。测试可显式推进时钟验证过期；120 秒不完整批超时始终用实际经过时间。线上 `clock_mode=wall` 使用真实 UTC，不能通过 HTTP 请求切换。
 - `served_at_utc` 始终为实际 HTTP 响应时间，`as_of_utc` 为上述业务时钟；两者与 data_origin 一起解释结果。FIXTURE 也使用 recorded 时钟。
 - file replay 证明封装/规则；Kafka replay 另证明 broker 消费；均不证明刚采到了实时数据。
 

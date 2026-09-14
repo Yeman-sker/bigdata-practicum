@@ -27,6 +27,8 @@ Day 1 manifest 保持历史证据原样；重跑将新 manifest 写 DATA_DIR，i
 
 `citibike_dw.dwd_trip_v1` 为 Parquet external table，分区 source_year/source_month，根 /warehouse/dwd/dwd_trip_v1。每行一条通过 source gate 的物理 CSV 记录；定位键 `(ingest_batch_id, source_file, source_row_number)`，source_row_number 从首条数据记录 1 起，不是文件物理行号。
 
+Day 1 的 ODS 只有 13 列和月份分区，`citibike.spark` 的读取结果没有稳定文件记录序号，不能直接充当 DWD 来源定位。#28 从 manifest 对应 RAW CSV 的读取边界保留文件名与原记录顺序，再做转换/去重；ODS 继续用于 schema、分区与行数核对，不修改旧表或重新下载。本地 fixture 输入显式使用 file:/// 绝对 URI，HDFS 输入使用对应 /raw 路径，避免默认文件系统误解本地路径。单行 CSV 可按每个文件的输入字节偏移排序后编号，header 不计数；跨行 CSV 必须先用 CSV 解析器逐记录编号，不能按换行数编号。禁止在 shuffle 后用任意 row_number/monotonically_increasing_id 伪造源序号。分区数变化后的定位键与去重胜者必须相同；[Spark zipWithIndex](https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.RDD.zipWithIndex.html) 只继承输入分区/记录顺序，不自动恢复文件顺序。
+
 | 列 | 类型 / nullable | 规则 |
 | --- | --- | --- |
 | ride_id、rideable_type、member_casual | STRING / 否 | 原值；未知枚举保留 |
@@ -87,6 +89,8 @@ MySQL 数据库 `citibike` 与 Hive metastore 数据库分开。所有服务表 
 2. 清空本次专用 `<table>_load` staging 表，通过 Sqoop `export --export-dir ... --table <table>_load --input-fields-terminated-by '\t' --input-null-string '\\N' --input-null-non-string '\\N' --num-mappers 1` 写入；schema、列顺序与正式表一致，明确 --columns。失败不碰正式表。
 3. 校验每张 staging 行数、dataset_id、主键唯一性、流量守恒、profile 日期数和 OD 非零。单个 export 成功不代表多表整体发布成功。
 4. 单个 MySQL 事务中 DELETE 四张正式表、INSERT SELECT 对应 load 表、更新 historical_release，COMMIT；失败 ROLLBACK。禁止在事务中 TRUNCATE/DDL，禁止 API 读 load 表。
+
+Day 3 先用 expected.json 的四张服务表做最小 TSV→Sqoop→staging→事务发布试跑，提前验证驱动、权限、null 与列顺序；随后换成实际 Spark 输出。该试跑只证明导出通道，不能作为 ETL 通过证据。同一库一次只运行一个 export；重试先清空本次 staging，保留正式发布。
 
 Sqoop export 可能提交部分数据，使用专用 staging 将失败隔离。[Sqoop 1.4.7 官方说明](https://sqoop.apache.org/docs/1.4.7/SqoopUserGuide.html#_exports_and_transactions)。这里只做单月/小型薄表整体替换；扩数导致发布事务过大时，再由实测提出后继方案。
 

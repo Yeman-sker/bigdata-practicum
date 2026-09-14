@@ -873,7 +873,10 @@
         }
       ],
       "expected": "REJECT_KEEP_PREVIOUS",
-      "station_count": null
+      "station_count": null,
+      "backend_profile": "recorded",
+      "published_as_of_utc": "2025-02-05T12:58:00Z",
+      "expected_as_of_utc": "2025-02-05T12:58:00Z"
     },
     {
       "name": "conflict",
@@ -1341,6 +1344,152 @@
       ],
       "expected": "REJECT_KEEP_PREVIOUS",
       "station_count": null
+    },
+    {
+      "name": "live-rejects-replay",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "GBFS_REPLAY"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "GBFS_REPLAY"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "GBFS_REPLAY"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "REJECT_KEEP_PREVIOUS",
+      "station_count": null,
+      "backend_profile": "live"
+    },
+    {
+      "name": "mixed-origin",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "GBFS_REPLAY"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "REJECT_KEEP_PREVIOUS",
+      "station_count": null,
+      "backend_profile": "recorded"
     }
   ],
   "mapping": [

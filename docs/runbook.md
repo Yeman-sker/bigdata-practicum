@@ -25,6 +25,7 @@ git diff --check
 | --- | --- |
 | DATA_DIR | 必填绝对目录，例如 /tmp/citibike-v11；raw、metadata、日志、证据，不放 Git |
 | KAFKA_BOOTSTRAP_SERVERS | localhost:9092；topic bike.station.status.v1，单分区 |
+| SPRING_KAFKA_CONSUMER_GROUP_ID | live 固定 citibike-live-v1；recorded 每次独立演练使用新组名，重启同一次演练沿用原组 |
 | SPRING_DATASOURCE_URL | jdbc:mysql://localhost:3306/citibike；Hive metastore 使用不同数据库 |
 | SPRING_DATASOURCE_USERNAME / SPRING_DATASOURCE_PASSWORD | 本机服务账号环境变量，不写进 fixture/日志/仓库 |
 | MYSQL_PASSWORD_FILE | Sqoop 用的外部凭据文件；由本机配置，命令只传文件路径 |
@@ -45,7 +46,19 @@ mysql -u root -p citibike < sql/serving.sql
 
 库账号由环境负责人配置。只在独立的样例库装载 `fixtures/day2/seed.sql`，例如创建 citibike_fixture 后执行同一 DDL/seed，再令 backend 数据源指向它。seed 使用 INSERT，重复装载会因主键冲突明确失败，不覆盖已有真实业务数据。
 
-启动顺序：HDFS/YARN → MySQL/Hive metastore → Kafka → 离线作业及 Sqoop 发布 → backend → collector → frontend。fixture 联调只需 MySQL 样例库、backend 和 frontend。Flume 在日志目录存在后启动，其失败不伪装成业务数据失败。停止按相反业务顺序：frontend → collector → backend → Flume → Kafka/Hive/Hadoop；只停止本次任务启动的进程。
+首次真实启动顺序：HDFS/YARN、MySQL/Hive metastore 和业务 DDL → Kafka/topic → backend live → collector → 取得 metadata 文件 → 离线作业及 Sqoop 发布 → 下一完整快照 → frontend。collector 必须先生成离线所需 metadata；backend 在没有 historical_release 时仍能处理当前库存，预测为 NO_BASELINE。不能等历史发布才启动 collector，也不能把缺发布行当作 backend 启动失败。
+
+API 在尚无实时/历史发布时分别返回 503；第一批实时数据后 live 可用，历史接口仍可为 503；历史发布后，下一完整快照才补上预测。frontend 可在任一阶段启动，展示对应加载/缺数据状态。启动已有环境时不重做格式化或装载 seed。
+
+fixture 联调只需 MySQL 样例库、backend 和 frontend。三种 backend 启动方式如下；profile 必须显式选择，禁止同一业务库同时运行两个 writer：
+
+| profile | Kafka / 数据源 | 业务时钟 |
+| --- | --- | --- |
+| fixture | 禁用 consumer；读取已装载 seed 的独立库 | 从 live_release.as_of_utc 恢复并冻结 |
+| live | 固定消费组；只接纳 GBFS_LIVE；新组 earliest，关闭自动提交 | 当前 UTC |
+| recorded | 演练专用库/消费组；只接纳 GBFS_REPLAY 或 FIXTURE；按下文设起点 | 从 live_release 恢复，成功发布下一完整批时才推进 |
+
+Flume 在日志目录存在后启动，其失败不伪装成业务数据失败。停止顺序为 frontend → collector → backend → Flume → Kafka/Hive/Hadoop；只停止本次任务启动的进程。
 
 已有 source、landing、Spark PoC 的准确命令直接沿用各 handoff，输出 manifest/summary 改到 DATA_DIR。它们只覆盖 Day 1 边界，不能代替下面的 offline/实时实现。
 
@@ -55,11 +68,12 @@ mysql -u root -p citibike < sql/serving.sql
 
 | 负责人 | 目标入口 | 必须观察到 |
 | --- | --- | --- |
-| #28 | `PYTHONPATH=. spark-submit --master 'local[2]' citibike/offline.py --hive-table citibike_ods.ods_trip_raw --source-month 2025-01 --manifest "$DATA_DIR/historical/manifest.json" --metadata "$METADATA_FILE" --output-root /warehouse --evidence "$DATA_DIR/offline.json"` | DWD/DIM/DWS Parquet、Hive 分区、dataset_id、对账与失败状态 |
+| #28 | `PYTHONPATH=. spark-submit --master 'local[2]' citibike/offline.py --hive-table citibike_ods.ods_trip_raw --raw-root /raw/citibike/trips --source-month 2025-01 --manifest "$DATA_DIR/historical/manifest.json" --metadata "$METADATA_FILE" --output-root /warehouse --evidence "$DATA_DIR/offline.json"` | 从 RAW 保留记录位置、与 ODS 核对；DWD/DIM/DWS Parquet、Hive 分区、dataset_id、对账与失败状态 |
 | #28 | `python3 -m citibike.serving_export --dataset-id "$DATASET_ID" --hdfs-root /warehouse --password-file "$MYSQL_PASSWORD_FILE" --evidence "$DATA_DIR/export.json"` | 读取 SPRING_DATASOURCE_URL/USERNAME；Sqoop staging 校验、事务发布和相同 dataset_id |
 | #27 | `python3 -m citibike.gbfs_stream --output-dir "$DATA_DIR/gbfs" --bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS" --interval-seconds 60` | 复用 gbfs.py；metadata 版本文件、raw、station/end Kafka 记录、批次日志 |
 | #27/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=fixture` | 读取样例 MySQL；禁用 Kafka consumer；按已存 recorded 时钟查询 |
 | #27/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=live` | 同 JVM 启用 consumer/规则与三个 HTTP API，墙钟判新鲜度 |
+| #27/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=recorded` | 独立演练库/组的录制库存；消费、原子发布和录制时钟，不伪装成实时 |
 | #26 | `npm --prefix frontend ci`；`npm --prefix frontend run dev` | 地图、风险/调度、日期/小时、抽屉及 /api 代理 |
 | #26 | `npm --prefix frontend run build` | TypeScript 与静态构建成功 |
 | #27/#29 | `mvn -f backend/pom.xml test` | HTTP 契约、规则算例、批次/事务边界测试通过 |
@@ -75,7 +89,22 @@ kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --top
 kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic bike.station.status.v1
 ```
 
-#27 还必须交付 `python3 -m citibike.gbfs_stream --replay PATH --bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS"`：读取与 events.ndjson 相同的 key/headers/value 封装，保留源时间，把 data_origin 标为 GBFS_REPLAY。使用专用演示库并停止实时 producer；backend 使用 recorded profile，在 snapshot_end 推进录制业务时钟。不要向同一单 producer 约定的流混入并发重放。
+#27 还必须交付 `python3 -m citibike.gbfs_stream --replay PATH --bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS"`：读取与 events.ndjson 相同的 key/headers/value 封装，保留源时间，把 data_origin 标为 GBFS_REPLAY。每次独立重放按以下顺序执行：
+
+1. 停止该实例的实时 producer 和 backend；使用独立演练库。可装载 seed 提供历史基线，但发送事件前只在该演练库用一次事务清空两张 ADS 与 live_release，避免相同 snapshot_id 被判为已经发布；metadata 文件按其 hash 名放到该库实例的 DATA_DIR。
+2. 选择从未使用的新消费组，例如 `citibike-replay-20260915-a`，设置 SPRING_KAFKA_CONSUMER_GROUP_ID；保留 live 组和业务库。**在发送任何录制记录之前**，用 Kafka 原生命令为这个无活动消费者的新组设置起点：
+
+```bash
+kafka-consumer-groups.sh --bootstrap-server "$KAFKA_BOOTSTRAP_SERVERS" \
+  --group "$SPRING_KAFKA_CONSUMER_GROUP_ID" --topic bike.station.status.v1 \
+  --reset-offsets --to-latest --execute
+```
+
+3. 启动 recorded backend，再发送录制文件。起点已经提交，即使 producer 比 consumer 完成分配更早发送也不会漏掉本次记录；记录开始 offset、snapshot_id 和结果。
+4. 同一次演练崩溃重启时沿用库和组，**不清库、不重置 offset**；从 live_release 恢复录制时钟。成功发布才提交 offset，重复重送按 snapshot_id 去重。再次从头演练则另选库/组，重复上述初始化。
+5. 停止录制 producer/backend 后恢复原 live 库、组和 profile，再启动 live collector。live consumer 拒绝录制来源，不能把演练数据发布为当前事实。
+
+这里复用现有单分区 topic 与 Kafka offset 管理，不增加重放服务或自建 checkpoint。消费组起点规则见 [Kafka 3.9 配置](https://kafka.apache.org/39/configuration/consumer-configs/)。
 
 当前 `citibike.gbfs` 已有三快照采集命令继续用于真实 source 证据。完整 feed 和 Kafka dump 保存在 DATA_DIR，只提交小型统计与已脱敏的关键输出。
 
@@ -104,6 +133,7 @@ curl --fail-with-body 'http://localhost:8080/api/v1/stations/5484.09/history?day
 - 无历史发布、无成功实时批次、MySQL 断连：503；已发布空集合为 200，二者有不同页面状态。
 - NO_BASELINE、负库存、零 S、缺 C、停服、过期：使用 cases.json 与 http-examples.json；不出现伪造健康或可执行建议。
 - 重复、部分、冲突、旧批、空批、消费重启：按 events 的发布/保留/去重结果；MySQL 写入失败回滚风险与建议，成功后才提交 offset。
+- 冷启动无基线、错误运行来源、拒绝的结束记录、录制进程重启：当前库存可独立发布；坏批不推进录制时钟，重启读回已发布时钟；重复演练不得复用旧发布行冒充本次消费成功。
 - offline 导出中途失败：正式四张表与 historical_release 不变；重跑相同数据不累加。
 - 接口刷新失败、前端后台恢复、切换模式后旧请求晚到：页面保留正确选择，标出失败/过期，过期建议消失。
 - 无坐标/无历史映射：数据仍可检查，地图说明不可定位/未绘制数量；记录 metadata 命中分母和分子。

@@ -50,6 +50,8 @@ flowchart LR
 
 GBFS metadata 以不可变文件 `$DATA_DIR/gbfs/metadata/<metadata_version>.json` 交接：完整写临时文件后改名，同机 backend/offline 只读。内容为 canonical metadata 数组，原始响应另存。历史 DIM 在离线发布时合并 metadata；实时 ADS 直接使用事件绑定的 metadata 版本，新站点无需等离线重跑才能上图。
 
+首次运行先启动 backend/collector 生成 metadata 与无基线的当前状态，再跑历史发布；下一批完整快照补预测。成员本机开发各用独立库/fixture；#30 在 Day 3 明确唯一真实集成主机、DATA_DIR 和服务连接。跨机交接必须先复制对应 hash 的 metadata 文件，不能只发本机路径。DWD 的文件记录位置从 RAW 读取边界保留，ODS 用于核对，见 warehouse。
+
 ## 目录与冲突边界
 
 | 目录/文件 | 主维护人 | 规则 |
@@ -62,7 +64,7 @@ GBFS metadata 以不可变文件 `$DATA_DIR/gbfs/metadata/<metadata_version>.jso
 | citibike/contracts.py、fixtures/day2/、契约测试、CI | 领域负责人提出，Yeman-sker 协调 | 同一共享文件同一时间由一个 PR 修改 |
 | docs/product、contracts/openapi | S1lco、OGATA-LINA 分别主维护 | 交叉评审，不增加重复 view-model 规格 |
 
-Day 3 上午 API 入口和规则分别按契约开发；规则负责人提交纯计算文件与测试，合入共享 backend，不复制整套工程。依赖版本在首个实现 PR 锁定，不因样式或抽象更换技术栈。
+Day 3 开始一小时内，#27 先提交只含可编译 Maven 入口、包名、无外部服务单测和 Java CI 的最小 PR，再做查询；组长优先评审。#29 同时用 JDK 17 编译纯规则并运行 assert 算例（`java -ea`），入口合并后接入同一 Maven 工程；不得因为缺数据库或 Kafka 而让规则单测启动失败。共同 pom/resources 由 #27 修改，#29 在 Issue 给出必要依赖/配置清单。#26 的首个工程 PR 同时加入 npm ci/build 的 CI；两项 CI 修改按最小后端→前端顺序合并，后者同步主干，不等业务联调。依赖版本在各自首个实现 PR 锁定，不增加当前尚无工程的占位 CI。
 
 ## 发布与读取
 
