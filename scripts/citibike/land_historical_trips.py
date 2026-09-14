@@ -188,6 +188,16 @@ def remote_size(hdfs_bin: str, path: str, runner: Runner) -> int:
         raise LandingError(f"HDFS stat returned a non-integer size for {path}: {output!r}") from error
 
 
+def remote_checksum(hdfs_bin: str, path: str, runner: Runner) -> str:
+    """Read the HDFS checksum algorithm and digest for one file."""
+
+    output = run_hdfs(hdfs_bin, ["-checksum", path], runner)
+    fields = output.split(maxsplit=2)
+    if len(fields) < 2:
+        raise LandingError(f"HDFS checksum output is malformed for {path}: {output!r}")
+    return f"{fields[0]} {fields[1]}"
+
+
 def validate_hdfs_count(output: str, expected_files: int, expected_bytes: int, label: str) -> None:
     """Reject stale or missing files reported by ``hdfs dfs -count``."""
 
@@ -230,6 +240,8 @@ def build_summary(
                 "local_size_bytes": path.stat().st_size,
                 "raw_size_bytes": None,
                 "ods_size_bytes": None,
+                "raw_checksum": None,
+                "ods_checksum": None,
             }
             for path in files
         ],
@@ -282,6 +294,7 @@ def land_historical_trips(
                 f"{path.name}: HDFS RAW size {raw_size} != local size {path.stat().st_size}"
             )
         summary["files"][index]["raw_size_bytes"] = raw_size
+        summary["files"][index]["raw_checksum"] = remote_checksum(hdfs_bin, raw_path, runner)
 
     summary["raw_hdfs_count"] = run_hdfs(hdfs_bin, ["-count", raw_partition], runner)
     validate_hdfs_count(summary["raw_hdfs_count"], len(files), expected_bytes, "RAW")
@@ -298,6 +311,13 @@ def land_historical_trips(
                     f"{path.name}: HDFS ODS size {ods_size} != local size {path.stat().st_size}"
                 )
             summary["files"][index]["ods_size_bytes"] = ods_size
+            ods_checksum = remote_checksum(hdfs_bin, ods_path, runner)
+            summary["files"][index]["ods_checksum"] = ods_checksum
+            if ods_checksum != summary["files"][index]["raw_checksum"]:
+                raise LandingError(
+                    f"{path.name}: HDFS RAW/ODS checksum mismatch: "
+                    f"{summary['files'][index]['raw_checksum']} != {ods_checksum}"
+                )
         summary["ods_hdfs_count"] = run_hdfs(hdfs_bin, ["-count", ods_partition], runner)
         validate_hdfs_count(summary["ods_hdfs_count"], len(files), expected_bytes, "ODS")
 

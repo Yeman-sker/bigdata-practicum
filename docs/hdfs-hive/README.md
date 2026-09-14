@@ -74,8 +74,9 @@ python3 scripts/citibike/land_historical_trips.py \
 1. 递归发现所有 `.csv` 文件并拒绝重名 basename；
 2. 对每个文件检查精确的 13 列 Historical Trips header；
 3. 对照 manifest 的月份、文件清单和字节数；
-4. 使用 `hdfs dfs -put -f` 写入 RAW，并用 `hdfs dfs -stat %b` 核对字节数；
-5. 使用 `hdfs dfs -cp -f` 从 RAW 复制到 ODS，再次核对每个文件的字节数；
+4. 使用 `hdfs dfs -put -f` 写入 RAW，并用 `hdfs dfs -stat %b` 与
+   `hdfs dfs -checksum` 核对每个文件的大小和完整性；
+5. 使用 `hdfs dfs -cp -f` 从 RAW 复制到 ODS，再次核对每个文件的大小和 checksum；
 6. 输出 RAW/ODS 的 `hdfs dfs -count` 结果和机器可读 JSON。
 
 如果单节点 HDFS 的 `/raw`、`/warehouse` 由 `bigdata` 服务用户拥有，应使用具备

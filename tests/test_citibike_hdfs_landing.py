@@ -19,8 +19,9 @@ from land_historical_trips import (  # noqa: E402
 
 
 class FakeHdfs:
-    def __init__(self, sizes: dict[str, int]):
+    def __init__(self, sizes: dict[str, int], mismatch_ods_checksum: bool = False):
         self.sizes = sizes
+        self.mismatch_ods_checksum = mismatch_ods_checksum
         self.calls: list[list[str]] = []
 
     def __call__(self, command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
@@ -28,6 +29,17 @@ class FakeHdfs:
         if "-stat" in command:
             path = command[-1]
             return subprocess.CompletedProcess(command, 0, f"{self.sizes[path]}\n", "")
+        if "-checksum" in command:
+            path = command[-1]
+            checksum = f"checksum-{Path(path).name}"
+            if self.mismatch_ods_checksum and "/warehouse/" in path:
+                checksum += "-mismatch"
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                f"MD5-of-0MD5-of-512CRC32C {checksum} {path}\n",
+                "",
+            )
         if "-count" in command:
             prefix = "/warehouse" if "/warehouse" in command[-1] else "/raw"
             matching_sizes = [size for path, size in self.sizes.items() if prefix in path]
@@ -121,9 +133,32 @@ class HistoricalTripsLandingTest(unittest.TestCase):
                 sum("-cp" in command for command in fake_hdfs.calls),
                 2,
             )
+            self.assertEqual(
+                sum("-checksum" in command for command in fake_hdfs.calls),
+                4,
+            )
             for item, path in zip(summary["files"], files):
                 self.assertEqual(item["raw_size_bytes"], path.stat().st_size)
                 self.assertEqual(item["ods_size_bytes"], path.stat().st_size)
+                self.assertEqual(item["raw_checksum"], item["ods_checksum"])
+
+    def test_checksum_mismatch_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            staging = Path(directory)
+            path = staging / "part.csv"
+            write_csv(path, [source_row("ride-1")])
+            raw = "/raw/citibike/trips/year=2025/month=01"
+            ods = "/warehouse/ods/ods_trip_raw/year=2025/month=01"
+            fake_hdfs = FakeHdfs(
+                {
+                    f"{raw}/{path.name}": path.stat().st_size,
+                    f"{ods}/{path.name}": path.stat().st_size,
+                },
+                mismatch_ods_checksum=True,
+            )
+
+            with self.assertRaisesRegex(LandingError, "checksum mismatch"):
+                land_historical_trips(staging, "2025-01", runner=fake_hdfs)
 
     def test_bad_header_fails_before_any_hdfs_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
