@@ -1,0 +1,104 @@
+# Day 1 / Track E — Spark 读取 PoC
+
+`scripts/spark/read_trip_integration.py` 是 Day 1 的下游集成门禁。它只做
+Historical Trips 的受控读取和验证，不实现 DWD ETL。
+
+## 可复现运行
+
+先用仓库内 synthetic fixture 验证脚本和 Spark runtime：
+
+```bash
+mkdir -p /tmp/citibike-day1
+spark-submit --master 'local[2]' \
+  scripts/spark/read_trip_integration.py \
+  --input fixtures/citibike/202501_sample.csv \
+  --source-month 2025-01 \
+  --expected-count 20 \
+  --sample-rows 3 \
+  --output-json /tmp/citibike-day1/spark-fixture-summary.json
+```
+
+对 Track D 已提供的真实 Hive ODS，使用 Hive Metastore 入口完成三方对账：
+
+```bash
+HADOOP_USER_NAME=bigdata spark-submit --master 'local[2]' \
+  scripts/spark/read_trip_integration.py \
+  --hive-table citibike_ods.ods_trip_raw \
+  --source-month 2025-01 \
+  --manifest docs/source/citibike-202501-manifest.json \
+  --sample-rows 10 \
+  --output-json /tmp/citibike-day1/spark-hive-summary.json
+```
+
+如果当天只能直接读 HDFS ODS 文件，使用同一脚本并在验收记录中标明这是
+`csv` fallback；该模式仍能验证多 CSV、schema、count 和样例，但不会伪造
+Hive Metastore count：
+
+```bash
+HADOOP_USER_NAME=bigdata spark-submit --master 'local[2]' \
+  scripts/spark/read_trip_integration.py \
+  --input /warehouse/ods/ods_trip_raw/year=2025/month=01 \
+  --source-month 2025-01 \
+  --manifest docs/source/citibike-202501-manifest.json \
+  --sample-rows 10
+```
+
+## Gate 输出
+
+脚本会输出 `printSchema`、source sample、派生时间 sample，以及 JSON summary，
+其中包含：
+
+- 13 个 source columns；`start_station_id` / `end_station_id` 必须为 `string`；
+- 坐标显式映射为 `double`，并记录 null、非法数值和越界数量；
+- `started_at` / `ended_at` 按实际格式解析，session timezone 固定为
+  `America/New_York`，临时派生 `started_at_local`、`ended_at_local`、
+  `service_date`、`start_hour`、`day_of_week`、`is_weekend`；其中
+  `day_of_week` 使用 ISO 约定（周一为 1，周日为 7）；
+- `total_rows`、station id null、时间 parse failure、时间范围和枚举 distinct
+  值；
+- `source` / `hive` / `spark` 三方 count。三者都提供且相等时为 `PASS`；只有
+  两方可见时明确标为 `PARTIAL`。
+
+Track A 的 2025-01 source count 为 `2,124,475`，Track D handoff 已记录 Hive
+ODS count 为 `2,124,475`。实际 Hive 运行完成后，summary 的
+`counts.status` 应为 `PASS`，并将其结果回填 Day 1 #5 的 Integration Result。
+
+## 本地检查结果
+
+```bash
+python3 -m unittest tests/test_spark_trip_integration.py
+```
+
+没有 PySpark 的 CI 环境会跳过 runtime smoke test，但仍检查 13 列契约、月份
+格式和 manifest count 校验；安装 Spark 后运行上面的 fixture 命令即可完成
+runtime gate。
+
+## 2026-09-14 真实源回放
+
+官方 2025-01 ZIP 已按 Track A manifest 校验 SHA-256 和三个 CSV 文件大小，解压
+到 `/tmp/citibike-day1/202501/extracted` 后运行 local CSV replay：
+
+```text
+source count: 2,124,475
+Spark count: 2,124,475
+null start_station_id: 564
+null end_station_id: 4,322
+invalid started_at / ended_at: 0 / 0
+started_at range: 2024-12-30 23:41:25.635 → 2025-01-31 23:58:14.634
+rideable_type: classic_bike, electric_bike
+member_casual: casual, member
+station_id: string / string
+coordinates: double / double / double / double
+count reconciliation: PARTIAL (Hive 未在当前 macOS 验证机安装)
+```
+
+Track D 的既有 handoff 记录同一批数据的 Hive `partition_ride_count` 为
+`2,124,475`。因此 source/Hive/Spark 数值已完成离线证据对账；尚缺的是在具备
+Hive Metastore 的环境直接执行上面的 `--hive-table` 命令，将脚本 summary 从
+`PARTIAL` 变为 `PASS`。这不是数据差异，而是当前验证机没有 `hdfs`/`hive` 命令。
+
+## 边界
+
+本 Track 不做 `dwd_trip_v1`、小时流量、风险估计、调度、Kafka、Spring Boot
+或前端。真实 ZIP/CSV、Spark warehouse 和运行 summary 默认都放在 `/tmp` 或
+HDFS，不进入 Git。
