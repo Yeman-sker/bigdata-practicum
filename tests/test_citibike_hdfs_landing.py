@@ -37,7 +37,7 @@ class FakeHdfs:
             return subprocess.CompletedProcess(
                 command,
                 0,
-                f"MD5-of-0MD5-of-512CRC32C {checksum} {path}\n",
+                f"{path} MD5-of-0MD5-of-512CRC32C {checksum}\n",
                 "",
             )
         if "-count" in command:

@@ -42,6 +42,9 @@
 Day 1 Historical Trip 的 HDFS RAW / Hive ODS 入口、DDL、验证 SQL 与真实数据对账
 方法见 [Track D handoff](docs/hdfs-hive/README.md)。
 
+Track E 的 Spark 受控读取、契约断言、count 对账和可复现命令见
+[Spark integration handoff](docs/spark/README.md)。
+
 ## 基础环境与技术栈
 
 本节锁定底层基础设施、大数据组件及服务端版本一致性，并提供面向 AI Agent 的自动化编排与环境验收 Skill。
