@@ -2,13 +2,13 @@
 
 - 状态：Proposed / 待团队确认
 - 日期：2026-09-14
-- 关联：[Issue #4：Product & Data Contract v1](https://github.com/Yeman-sker/bigdata-practicum/issues/4)
+- 关联：[Issue #4：Product & Data Contract v1](https://github.com/Yeman-sker/bigdata-practicum/issues/4)、[Issue #31：全部接口契约矩阵与冻结门禁](https://github.com/Yeman-sker/bigdata-practicum/issues/31)、[#26–#30 工作流任务](https://github.com/Yeman-sker/bigdata-practicum/issues/26)
 - 上位决策：[ADR-0001](0001-product-data-contract-v1.md)、[ADR-0002](0002-day2-dashboard-and-operations-v1.md)
 - 适用范围：从 Day 1 起共 7 天的项目开发周期；本文只规定交付顺序、任务边界、负责人和验收，不改变已冻结的数据语义
 
 ## 背景
 
-此前计划只有按天的概要，没有明确每天要交付什么、依赖谁、怎样验收以及时间不足时删什么。本 ADR 将 7 天计划改成可执行的敏捷切片。
+此前计划只有按天的概要，没有明确每天要交付什么、依赖谁、怎样验收以及时间不足时删什么，也没有把跨模块接口设计和实现分开。本 ADR 将 7 天计划改成“契约先行、实现并行、最后集成”的可执行敏捷切片。
 
 当前状态如下：
 
@@ -33,15 +33,33 @@
 
 Day 2 之后不再新增 P0 用户故事。新想法进入 P2 或单独的变更 Issue，不在当前 7 天内插入。
 
-### 2. 范围优先级
+### 2. 全部接口契约先行
+
+Day 2 的第一优先级不是写业务代码，而是完成 #31 的契约矩阵。所有成员共同设计和评审；每个接口由一名负责人维护，但任何负责人不能单方面改变跨模块语义。
+
+契约门禁关闭前，允许用最小 fixture 讨论字段和验证样例，不进入共享业务实现。门禁关闭后，#26–#30 同时启动，各工作流使用同一版契约并行开发。
+
+| 契约 | 维护负责人 | 生产者 → 消费者 | 必须冻结的内容 |
+| :--- | :--- | :--- | :--- |
+| Historical source / manifest v1 | S1lco | 官方 ZIP → #26、#28 | URL、月份、ZIP/CSV 命名、全量 CSV、count、size、checksum、质量指标、幂等和失败处理 |
+| GBFS station status event v1 | OGATA-LINA | GBFS adapter → #27、#29 | provider 映射、字段类型/nullable、UTC/local 时间、version、Kafka topic/key、replay 语义 |
+| HDFS RAW/ODS 与数仓 v1 | Hu-tong123 | #26/#27 → #28、#29 | HDFS 路径、分区、DDL、表名、粒度、source-faithful 边界、批次/快照标识 |
+| DWD/DIM/DWS/ADS v1 | 1giaowoligiaogiao | #28 → #29、#30 | 表字段、主键/粒度、非零 OD、风险枚举、阈值、调度公式、无基线和离线状态 |
+| Spring Boot API v1 | Yeman-sker | #28/#29 → #30 | 用例、请求参数、统一响应、空数据/错误状态、freshness、日期/小时语义 |
+| Vite + React view model v1 | Yeman-sker + 全员评审 | API → 前端页面 | live/replay、筛选、单日时间轴、倍速、stations/flows、Tab、抽屉、loading/error 状态 |
+| 运行与验收证据 v1 | Hu-tong123 + Yeman-sker | 全部工作流 → 负责人 | 版本、命令、fixture、真实数据边界、输出格式、环境缺口和验收记录 |
+
+每项契约必须有唯一版本、生产者、消费者、负责人、字段类型/nullable/单位/时区、最小样例、异常样例和验收命令。#31 的验收完成后，才允许把 #26–#30 视为可启动的实现任务。
+
+### 3. 范围优先级
 
 - P0：实时地图、单日历史回放、站点历史分析、一小时风险识别、调度建议。
 - P1：地图顶部运营总览 KPI；只有 P0 稳定后才实现，时间不足时整体删除。
 - P2：ML、天气、AI/LLM、VRP、逐车 GPS、登录、复杂组件库和复杂动画系统，本周期不做。
 
-### 3. 工作流与负责人
+### 4. 工作流与负责人
 
-负责人是该工作流的主交付人，不代表其他成员不参与评审。每个工作流都必须向下游提供字段、样例、运行命令和验收证据。
+负责人是该工作流的主交付人，不代表其他成员不参与评审。Day 2 契约阶段由全员共同参与，@1giaowoligiaogiao 负责 #31 的矩阵汇总和门禁追踪；Day 3 起每个负责人拿同一版契约并行实现。每个工作流都必须向下游提供字段、样例、运行命令和验收证据。
 
 | 工作流 | 负责人 | GitHub 任务 | 主要交付 | 主要日期 |
 | :--- | :--- | :--- | :--- | :--- |
@@ -51,38 +69,39 @@ Day 2 之后不再新增 P0 用户故事。新想法进入 P2 或单独的变更
 | 风险与调度规则 | [@1giaowoligiaogiao](https://github.com/1giaowoligiaogiao) | [#29](https://github.com/Yeman-sker/bigdata-practicum/issues/29) | 风险计算、`ads_station_current_risk`、调车建议 | Day 4–5 |
 | 服务、前端与集成 | [@Yeman-sker](https://github.com/Yeman-sker) | [#30](https://github.com/Yeman-sker/bigdata-practicum/issues/30) | Spring Boot、Vite + React、端到端演示与交付 | Day 2、6–7 |
 
-任务分配依据已有仓库贡献方向；如果团队成员确认后需要更换负责人，只更新本 ADR 和对应 Issue，不在代码分支中隐式变更。
+任务分配依据已有仓库贡献方向；如果团队成员确认后需要更换负责人，只更新本 ADR 和对应 Issue，不在代码分支中隐式变更。#26–#30 没有互相阻塞的“启动依赖”；它们只有在合并真实数据时才存在数据输入依赖，等待期间必须使用 #31 中的 fixture 并行开发。
 
-### 4. 七天执行计划
+### 5. 七天执行计划
 
 | 天数 | 当日目标 | 必做任务 | 当日输出 | 验收门禁 | 负责人 / 依赖 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | Day 1 | 事实与契约基线 | 验证真实 Historical、GBFS 2.3、字段 nullable、`station_id` STRING、时间语义、Spark 读取 | Source manifest、GBFS 三快照、validator、HDFS/Hive 和 Spark PoC、ADR-0001 | 能说明四种粒度：ride、station snapshot、station × hour flow/profile、station risk/rebalance；真实数据不进 Git | 全员；已完成 |
-| Day 2 | 产品与接口基线 | 冻结地图首页、实时/回放、单日时间轴、四档倍速、stations/flows、风险卡片、调度边界、Vite + React | ADR-0002、白板树、最小字段契约、P0/P1/P2 范围 | 前后端都能依据同一份字段解释需求；不再新增 P0 | 全员；Day 1 |
-| Day 3 | 采集与 RAW/ODS 落地 | Historical 先跑 2025-01；GBFS 采集至少 3 个快照；运行 validator；Historical CSV 落 HDFS RAW + source-faithful ODS；GBFS 完整 payload 保留在 RAW/staging | 可重跑的采集命令、manifest、HDFS 路径、count/size/checksum 证据、normalized event 样例 | 多 CSV 全处理；RAW/ODS 字节与清单一致；快照状态可比较；异常可统计；没有 HDFS 时先用 fixture/fake-runner，不另造架构 | S1lco、OGATA-LINA、Hu-tong123；Day 1/2 |
-| Day 4 | 离线数仓与历史规律 | 生成 `dwd_trip_v1`、`dim_station_v1`；聚合 `dws_station_hourly_flow_v1`、`dws_station_hour_profile_v1`、非零 `dws_station_od_hourly_v1`；同时用 fixture 对齐风险输入 | Spark 作业、表/分区、样例 SQL、记录数对账、profile 和 OD 样例 | `net_flow = inbound - outbound`；OD 只保留 `ride_count > 0`；历史无效记录不静默删除；站点维度覆盖历史站点与当前 GBFS | S1lco、Hu-tong123；Day 3 |
-| Day 5 | 风险与调度闭环 | GBFS normalized event 接 Kafka；Kafka 不可用时使用同契约 replay；计算一小时 projected inventory、风险等级和 `ads_rebalance_suggestion` | 风险计算、调度生成器、ADS/薄表、边界 fixture、规则测试 | 离线/无基线可区分；只有 SHORTAGE/OVERFLOW 触发调度；30%/70% 目标、Haversine、greedy 和快照失效规则正确 | OGATA-LINA、1giaowoligiaogiao；Day 3/4 |
-| Day 6 | 服务与前端联调 | Spring Boot 读取 DWS/ADS 薄表；Vite + React 实现地图主视图、实时/回放、单日时间轴、0.5x/1x/2x/5x、风险/调度 Tab、站点详情抽屉 | 可启动 API、可启动前端、统一 map 响应、联调记录 | 实时粒子明确是站点锚定的视觉表达；回放使用数据库实际可用日期/小时；API 不返回逐粒子/GPS/动画路径；P0 页面可走通 | Yeman-sker；Day 2、Day 4/5 |
+| Day 2 | 全部接口契约基线 | 冻结地图首页、实时/回放、单日时间轴、四档倍速、数据层、Kafka、ADS、API、前端 view model、错误状态和运行证据 | ADR-0002、ADR-0003、白板树、#31 契约矩阵、最小 JSON/CSV/SQL fixture | 每个契约都有负责人、生产者、消费者、字段和异常样例；全员评审通过；不再新增 P0 | 全员；Day 1 |
+| Day 3 | 采集与 RAW/ODS 薄切片 | #26/#27/#28 同时开发：Historical 先跑 2025-01；GBFS 至少 3 个快照；validator；Historical CSV 落 HDFS RAW + source-faithful ODS；GBFS payload 保留在 RAW/staging | 可重跑命令、manifest、HDFS 路径、count/size/checksum 证据、normalized event 样例 | 多 CSV 全处理；RAW/ODS 与清单一致；快照可比较；异常可统计；没有 HDFS 时先用 fixture/fake-runner，不另造架构 | #26/#27/#28；#31 |
+| Day 4 | 离线数仓与历史规律薄切片 | #26/#28 并行产出 `dwd_trip_v1`、`dim_station_v1`、`dws_station_hourly_flow_v1`、`dws_station_hour_profile_v1`、非零 `dws_station_od_hourly_v1`；#29 同步用 fixture 对齐输入 | Spark 作业、表/分区、样例 SQL、记录数对账、profile/OD/risk 输入样例 | `net_flow = inbound - outbound`；OD 只保留 `ride_count > 0`；无效记录不静默删除；风险输入字段与 #31 一致 | #26/#28/#29；#31 |
+| Day 5 | 风险与调度闭环薄切片 | #27/#29 并行：GBFS normalized event 接 Kafka，或同契约 replay；计算 projected inventory、风险等级和 `ads_rebalance_suggestion` | 风险计算、调度生成器、ADS/薄表、边界 fixture、规则测试 | 离线/无基线可区分；只有 SHORTAGE/OVERFLOW 触发调度；30%/70%、Haversine、greedy 和快照失效规则正确 | #27/#29；使用 #31 fixture，可接 #28 结果 |
+| Day 6 | 服务与前端联调薄切片 | #30 实现 Spring Boot + Vite/React；先用契约 fixture 并行接入 DWS/ADS，再替换真实结果；完成地图主视图、实时/回放、单日时间轴、四档倍速、双 Tab、站点抽屉 | 可启动 API、可启动前端、统一 map 响应、联调记录 | 实时粒子是站点锚定视觉表达；回放使用实际可用日期/小时；API 不返回逐粒子/GPS/动画路径；P0 页面可走通 | #30；消费 #28/#29，不阻塞其启动 |
 | Day 7 | 集成验收与交付 | 用真实 2025-01 + GBFS replay 跑端到端；补异常状态、空数据、服务不可用、无基线；完成 P1 判断、文档、截图/演示、PR/CI | 端到端验收记录、质量对账、启动说明、最终文档和合并候选 PR | P0 五项闭环可演示；历史 count/OD/risk/rebalance 前后可追溯；CI 全绿；无未记录的契约偏差 | 全员；Day 6 |
 
-### 5. 依赖与并行关系
+### 6. 依赖与并行关系
 
 ```text
 Day 1 数据事实/契约
         ↓
-Day 2 产品/API/UI 契约
-        ↓
-Day 3 采集与 RAW/ODS ─────────────┐
-        ↓                         │
-Day 4 DWD/DIM/DWS/profile/OD      │
-        └──────────────┬──────────┘
-                       ↓
-              Day 5 风险/调度 ADS
-                       ↓
-              Day 6 API + Vite/React
-                       ↓
+Day 2 全部接口契约 / #31
+        ↓ CONTRACT GATE
+   ┌────┼────┬────┬────┐
+   #26  #27  #28  #29  #30
+ Historical GBFS Lake Risk API/UI
+   └────┴────┴────┴────┘
+        ↓ 真实数据接入与集成
               Day 7 端到端验收
 ```
+
+这里区分两类依赖：
+
+- **启动依赖**：#26–#30 只依赖 #31 CONTRACT GATE，门禁通过后同时启动。
+- **运行时数据依赖**：#28 最终消费 #26/#27 的落地结果，#29 最终消费 #27/#28 的结果，#30 最终消费 #28/#29 的结果；在真实结果交付前统一使用契约 fixture，不得停工等待。
 
 允许并行的工作：
 
@@ -92,14 +111,14 @@ Day 4 DWD/DIM/DWS/profile/OD      │
 
 禁止并行造成契约分叉：字段、粒度、时区、风险区间和调度公式必须以 ADR-0001/0002 为准。
 
-### 6. 数据落地边界
+### 7. 数据落地边界
 
 - Historical：Day 3 必须完成 `/raw/citibike/trips/year=YYYY/month=MM/` 和 `ods_trip_raw` 的可查询落地。
 - GBFS：Day 3 必须保留完整 source payload、采集元数据和 normalized event；JSON ODS 的行粒度和快照保留策略尚未冻结，因此本周期不强行新增独立 JSON ODS 表。
 - 如果团队决定必须增加 GBFS JSON ODS，先创建 Contract Change Issue，明确一行的含义、主键、分区和查询场景，再重新评估 Day 4–7 范围。
 - 真实大文件只进入本地 staging/HDFS，不进入 Git；仓库只保留 manifest、schema、代码和小型 fixture。
 
-### 7. 时间不足时的降级顺序
+### 8. 时间不足时的降级顺序
 
 按以下顺序削减，不改变 P0 数据语义：
 
@@ -111,7 +130,7 @@ Day 4 DWD/DIM/DWS/profile/OD      │
 
 基础设施不可用时使用 fixture/replay 继续验证业务契约，同时记录真实 HDFS/Kafka/MySQL 集成缺口；不临时引入第二套消息队列、数据库或自制替代架构。
 
-### 8. 总体 Definition of Done
+### 9. 总体 Definition of Done
 
 7 天结束时必须同时满足：
 
