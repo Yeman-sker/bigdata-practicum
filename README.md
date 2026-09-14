@@ -48,8 +48,9 @@ Track E 的 Spark 受控读取、契约断言、count 对账和可复现命令�
 Source schema validator、字段映射和契约 fixtures 见
 [Track C handoff](docs/contracts/README.md)。
 
-运行入口统一为 `python3 -m citibike.<module>`；共享数据契约只维护在
-`citibike/contracts.py`，不再新增散落的独立脚本。
+运行入口统一收纳在 `citibike/` 包；Spark 作业使用
+`spark-submit citibike/spark.py`，其他 CLI 使用 `python3 -m citibike.<module>`。
+共享数据契约只维护在 `citibike/contracts.py`，不再新增散落的独立脚本。
 
 ## 基础环境与技术栈
 
@@ -119,9 +120,9 @@ bigdata-practicum/
 ├── hive/                   # ODS DDL 与验证 SQL
 ├── citibike/               # 共享契约、领域模块与 CLI 入口
 │   ├── contracts.py        # 唯一的数据契约常量
+│   ├── contract_validator.py
 │   ├── historical_source.py
 │   ├── historical_landing.py
-│   ├── contract_validator.py
 │   ├── gbfs.py
 │   ├── gbfs_fixture.py
 │   └── spark.py

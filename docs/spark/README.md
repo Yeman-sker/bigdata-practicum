@@ -9,7 +9,8 @@ Historical Trips 的受控读取和验证，不实现 DWD ETL。
 
 ```bash
 mkdir -p /tmp/citibike-day1
-python3 -m citibike.spark \
+PYTHONPATH=. spark-submit --master 'local[2]' \
+  citibike/spark.py \
   --input fixtures/citibike/202501_sample.csv \
   --source-month 2025-01 \
   --expected-count 20 \
@@ -20,7 +21,8 @@ python3 -m citibike.spark \
 对 Track D 已提供的真实 Hive ODS，使用 Hive Metastore 入口完成三方对账：
 
 ```bash
-HADOOP_USER_NAME=bigdata python3 -m citibike.spark \
+HADOOP_USER_NAME=bigdata PYTHONPATH=. spark-submit --master 'local[2]' \
+  citibike/spark.py \
   --hive-table citibike_ods.ods_trip_raw \
   --source-month 2025-01 \
   --manifest docs/source/citibike-202501-manifest.json \
@@ -33,7 +35,8 @@ HADOOP_USER_NAME=bigdata python3 -m citibike.spark \
 Hive Metastore count：
 
 ```bash
-HADOOP_USER_NAME=bigdata python3 -m citibike.spark \
+HADOOP_USER_NAME=bigdata PYTHONPATH=. spark-submit --master 'local[2]' \
+  citibike/spark.py \
   --input /warehouse/ods/ods_trip_raw/year=2025/month=01 \
   --source-month 2025-01 \
   --manifest docs/source/citibike-202501-manifest.json \

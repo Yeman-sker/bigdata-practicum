@@ -9,18 +9,32 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .contracts import (
-    COORDINATE_FIELDS,
-    LOCAL_TIME_ZONE,
-    MEMBER_TYPES,
-    REQUIRED_STRING_FIELDS,
-    RIDEABLE_TYPES,
-    SOURCE_COLUMN_TYPES,
-    SOURCE_FIELDS,
-    SOURCE_MONTH_PATTERN,
-    SPARK_TIME_PATTERNS,
-    STATION_ID_FIELDS,
-)
+if __package__:
+    from .contracts import (
+        COORDINATE_FIELDS,
+        LOCAL_TIME_ZONE,
+        MEMBER_TYPES,
+        REQUIRED_STRING_FIELDS,
+        RIDEABLE_TYPES,
+        SOURCE_COLUMN_TYPES,
+        SOURCE_FIELDS,
+        SOURCE_MONTH_PATTERN,
+        SPARK_TIME_PATTERNS,
+        STATION_ID_FIELDS,
+    )
+else:
+    from citibike.contracts import (
+        COORDINATE_FIELDS,
+        LOCAL_TIME_ZONE,
+        MEMBER_TYPES,
+        REQUIRED_STRING_FIELDS,
+        RIDEABLE_TYPES,
+        SOURCE_COLUMN_TYPES,
+        SOURCE_FIELDS,
+        SOURCE_MONTH_PATTERN,
+        SPARK_TIME_PATTERNS,
+        STATION_ID_FIELDS,
+    )
 
 HEADER_FIELDS = tuple(field for field in SOURCE_FIELDS if field not in COORDINATE_FIELDS)
 
