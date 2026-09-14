@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).parent
-SCRIPT = ROOT / "validate_sources.py"
-FIXTURES = ROOT / "fixtures"
+ROOT = Path(__file__).parents[1]
+SCRIPT = ROOT / "scripts" / "contracts" / "validate_sources.py"
+FIXTURES = ROOT / "fixtures" / "contracts"
 
 
 def run(kind, filename):
@@ -22,7 +22,7 @@ def run(kind, filename):
     return completed.returncode, json.loads(completed.stdout)
 
 
-class TrackCContractTests(unittest.TestCase):
+class SourceContractTests(unittest.TestCase):
     def test_valid_fixtures_pass(self):
         for kind, filename in (
             ("historical", "historical_trip_sample.csv"),
@@ -49,7 +49,7 @@ class TrackCContractTests(unittest.TestCase):
     def test_empty_historical_timestamp_fails(self):
         source = (FIXTURES / "historical_trip_sample.csv").read_text(encoding="utf-8")
         source = source.replace("01/15/2025 08:10:00", ",", 1)
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "invalid_timestamp.csv"
             temporary.write_text(source, encoding="utf-8")
             code, result = run("historical", temporary)
@@ -59,7 +59,7 @@ class TrackCContractTests(unittest.TestCase):
     def test_historical_not_null_fields_fail(self):
         source = (FIXTURES / "historical_trip_sample.csv").read_text(encoding="utf-8")
         source = source.replace("sample-001,electric_bike", ",electric_bike", 1)
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "invalid_required.csv"
             temporary.write_text(source, encoding="utf-8")
             code, result = run("historical", temporary)
@@ -69,7 +69,7 @@ class TrackCContractTests(unittest.TestCase):
     def test_historical_offset_timestamp_fails(self):
         source = (FIXTURES / "historical_trip_sample.csv").read_text(encoding="utf-8")
         source = source.replace("01/15/2025 08:10:00", "2025-01-15T08:10:00-05:00", 1)
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "invalid_offset.csv"
             temporary.write_text(source, encoding="utf-8")
             code, result = run("historical", temporary)
@@ -84,7 +84,7 @@ class TrackCContractTests(unittest.TestCase):
     def test_missing_station_last_reported_fails(self):
         source = json.loads((FIXTURES / "station_status.json").read_text(encoding="utf-8"))
         del source["data"]["stations"][0]["last_reported"]
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "invalid_station_status.json"
             temporary.write_text(json.dumps(source), encoding="utf-8")
             code, result = run("station_status", temporary)
@@ -95,7 +95,7 @@ class TrackCContractTests(unittest.TestCase):
         source = json.loads((FIXTURES / "station_status.json").read_text(encoding="utf-8"))
         source["data"]["stations"][0]["last_reported"] = None
         source["data"]["stations"][0]["num_bikes_available"] = None
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "invalid_nulls.json"
             temporary.write_text(json.dumps(source), encoding="utf-8")
             code, result = run("station_status", temporary)
@@ -108,7 +108,7 @@ class TrackCContractTests(unittest.TestCase):
         discovery = json.loads((FIXTURES / "gbfs.json").read_text(encoding="utf-8"))
         discovery["last_updated"] = "1736930000"
         discovery["version"] = 2.3
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "invalid_types.json"
             temporary.write_text(json.dumps(discovery), encoding="utf-8")
             code, result = run("discovery", temporary)
@@ -119,7 +119,7 @@ class TrackCContractTests(unittest.TestCase):
     def test_missing_feed_url_fails(self):
         discovery = json.loads((FIXTURES / "gbfs.json").read_text(encoding="utf-8"))
         del discovery["data"]["en"]["feeds"][0]["url"]
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "invalid_url.json"
             temporary.write_text(json.dumps(discovery), encoding="utf-8")
             code, result = run("discovery", temporary)
@@ -129,7 +129,7 @@ class TrackCContractTests(unittest.TestCase):
     def test_url_without_host_fails(self):
         discovery = json.loads((FIXTURES / "gbfs.json").read_text(encoding="utf-8"))
         discovery["data"]["en"]["feeds"][0]["url"] = "https://"
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "invalid_url_host.json"
             temporary.write_text(json.dumps(discovery), encoding="utf-8")
             code, result = run("discovery", temporary)
@@ -139,7 +139,7 @@ class TrackCContractTests(unittest.TestCase):
     def test_malformed_discovery_entry_fails_structurally(self):
         discovery = json.loads((FIXTURES / "gbfs.json").read_text(encoding="utf-8"))
         discovery["data"]["en"]["feeds"].append([])
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "invalid_entry.json"
             temporary.write_text(json.dumps(discovery), encoding="utf-8")
             code, result = run("discovery", temporary)
@@ -149,7 +149,7 @@ class TrackCContractTests(unittest.TestCase):
     def test_invalid_inventory_type_fails_but_negative_is_observed(self):
         source = json.loads((FIXTURES / "station_status.json").read_text(encoding="utf-8"))
         source["data"]["stations"][0]["num_bikes_available"] = 2.5
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "invalid_inventory_type.json"
             temporary.write_text(json.dumps(source), encoding="utf-8")
             code, result = run("station_status", temporary)
@@ -157,7 +157,7 @@ class TrackCContractTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["invalid_availability_types"], 1)
 
         source["data"]["stations"][0]["num_bikes_available"] = -1
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "negative_inventory.json"
             temporary.write_text(json.dumps(source), encoding="utf-8")
             code, result = run("station_status", temporary)
@@ -167,7 +167,7 @@ class TrackCContractTests(unittest.TestCase):
     def test_gbfs_coordinate_range_is_observed(self):
         source = json.loads((FIXTURES / "station_information.json").read_text(encoding="utf-8"))
         source["data"]["stations"][0]["lat"] = 91
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "out_of_range.json"
             temporary.write_text(json.dumps(source), encoding="utf-8")
             code, result = run("station_information", temporary)
@@ -178,7 +178,7 @@ class TrackCContractTests(unittest.TestCase):
     def test_nonpositive_duration_is_counted(self):
         source = (FIXTURES / "historical_trip_sample.csv").read_text(encoding="utf-8")
         source = source.replace("01/15/2025 08:24:00", "01/15/2025 08:10:00", 1)
-        with tempfile.TemporaryDirectory(prefix="track-c-test-") as directory:
+        with tempfile.TemporaryDirectory(prefix="source-contract-test-") as directory:
             temporary = Path(directory) / "nonpositive_duration.csv"
             temporary.write_text(source, encoding="utf-8")
             code, result = run("historical", temporary)

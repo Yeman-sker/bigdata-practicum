@@ -3,9 +3,9 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
+sys.path.insert(0, str(Path(__file__).parents[1] / "scripts" / "gbfs"))
 
-from gbfs_collector import (  # noqa: E402
+from collector import (  # noqa: E402
     discover_feed_urls,
     normalize_station_status,
     parse_args,

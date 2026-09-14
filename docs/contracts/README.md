@@ -2,7 +2,8 @@
 
 本目录实现 GitHub Issue #8。目标是把 #4 的数据契约变成可复现的轻量校验边界，供 Track D（HDFS/Hive）和 Track E（Spark）复用。
 
-字段级映射见 [field_mapping.md](field_mapping.md)。校验规则的可执行实现见 [validate_sources.py](validate_sources.py)。
+字段级映射见 [field_mapping.md](field_mapping.md)。校验规则的可执行实现见
+[validate_sources.py](../../scripts/contracts/validate_sources.py)。
 
 ## 已冻结的输入契约
 
@@ -33,12 +34,12 @@ Historical 校验还输出 `nonpositive_duration_count`：时长由已成功解�
 ## 运行
 
 ```bash
-python3 track-c/validate_sources.py historical track-c/fixtures/historical_trip_sample.csv
-python3 track-c/validate_sources.py discovery track-c/fixtures/gbfs.json
-python3 track-c/validate_sources.py station_information track-c/fixtures/station_information.json
-python3 track-c/validate_sources.py station_status track-c/fixtures/station_status.json
-python3 track-c/validate_sources.py vehicle_types track-c/fixtures/vehicle_types.json
-python3 -m unittest track-c/test_validator.py
+python3 scripts/contracts/validate_sources.py historical fixtures/contracts/historical_trip_sample.csv
+python3 scripts/contracts/validate_sources.py discovery fixtures/contracts/gbfs.json
+python3 scripts/contracts/validate_sources.py station_information fixtures/contracts/station_information.json
+python3 scripts/contracts/validate_sources.py station_status fixtures/contracts/station_status.json
+python3 scripts/contracts/validate_sources.py vehicle_types fixtures/contracts/vehicle_types.json
+python3 -m unittest tests/test_source_contracts.py
 ```
 
 退出码 `0` 表示 PASS，退出码 `1` 表示存在契约错误；标准输出为带有 `status`、`errors`、`warnings` 和质量指标的 JSON，可直接保存为 CI 或 Day 1 验收证据。

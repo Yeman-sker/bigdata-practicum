@@ -412,7 +412,7 @@ def validate(kind: str, path: Path) -> Report:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate Track C source contracts")
+    parser = argparse.ArgumentParser(description="Validate source contracts")
     parser.add_argument("kind", choices=["historical", "discovery", "station_information", "station_status", "vehicle_types"])
     parser.add_argument("path", type=Path)
     args = parser.parse_args()
