@@ -134,8 +134,10 @@ bigdata-practicum/
 │           ├── api/                  # 占位：#26 API 测试
 │           └── operations/           # 占位：#29 规则与消费测试
 ├── frontend/                         # #30 Yeman-sker：UI 设计与完整前端
-│   ├── src/                          # 占位：React / TypeScript 页面、交互与样式
-│   └── public/                       # 占位：直接提供给浏览器的静态资源
+│   ├── src/                          # React / TypeScript 页面、交互、样式与模型自检
+│   ├── index.html                    # Vite 页面入口
+│   ├── package.json                  # 前端命令与锁定依赖
+│   └── vite.config.ts                # /api 代理与开发服务器配置
 ├── hive/                             # Hive 表定义与数据校验
 │   ├── ods/                          # 既有 RAW → ODS 表定义
 │   ├── queries/                      # 校验 SQL
@@ -177,6 +179,6 @@ bigdata-practicum/
 ```
 
 - #26 首个实现 PR 创建 `backend/pom.xml` 和 `citibike` 根包下的应用入口；`api` 与 `operations` 共用这个工程和进程，测试目录按包镜像组织。
-- #30 首个实现 PR 创建 `frontend/package.json`、锁文件和 Vite 配置；页面组件、样式和内部目录随实际 UI 切片补充。Java / 前端构建 CI 分别随两个工程首次实现进入。
+- #30 前端使用 `npm --prefix frontend ci` 安装锁定依赖，以 `?fixture=live` 显式加载共享 HTTP 样例；不带 fixture 参数时通过 Vite 的 `/api` 代理连接 backend。
 - `citibike/` 继续承接 [runbook](docs/runbook.md) 中待实现的 Python 入口；真实数据、运行日志和证据放仓库外的 `$DATA_DIR`，共享样例统一放 `fixtures/`。
 - 首个真实文件进入占位目录时，删除该目录的 `.gitkeep`。构建输出 `backend/target/`、`frontend/node_modules/` 和 `frontend/dist/` 已加入忽略规则。
