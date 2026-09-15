@@ -54,17 +54,19 @@ GBFS metadata 以不可变文件 `$DATA_DIR/gbfs/metadata/<metadata_version>.jso
 
 ## 目录与冲突边界
 
+落盘目录树以 [README](../README.md#3-项目目录与-agent-skill-索引) 为入口。后端统一使用 Java 根包 `citibike`，应用入口放在该包下，`api` 与 `operations` 为其子包；测试在 `backend/src/test/java/citibike/` 下按同名子包组织。当前只用 `.gitkeep` 预留目录，工程依赖和业务代码仍由首个实现 PR 交付。
+
 | 目录/文件 | 主维护人 | 规则 |
 | --- | --- | --- |
 | frontend/、UI 原型 | Yeman-sker | UI 设计与完整前端；其他成员提供字段、样例及集成证据 |
-| citibike/historical*、citibike/offline.py、hive/、sql/ | Hu-tong123 | 唯一 DWD 产出者，数仓及 MySQL DDL、离线导出 |
+| citibike/historical*、citibike/offline.py、citibike/serving_export.py、hive/、sql/ | Hu-tong123 | 唯一 DWD 产出者，数仓及 MySQL DDL、离线导出 |
 | citibike/gbfs*、collector 配置 | OGATA-LINA | 复用采集器，source 契约变化同步共享测试 |
-| backend/ 的 pom.xml、应用入口、resources、api/ | S1lco | Maven 工程与完整 API，Day 3 尽早合并最小入口 |
-| backend/ 的 operations/ | 1giaowoligiaogiao | 纯规则、Kafka 消费、实时 ADS writer，与 API 同 JVM |
+| backend/pom.xml、src/main/java/citibike/ 下的应用入口及 api/、src/main/resources/ | S1lco | 唯一 Maven 工程、公共配置、完整 API 及对应测试；Day 3 尽早合并最小入口，所有相对路径均在 backend/ 下 |
+| backend/src/main/java/citibike/operations/ 及对应测试 | 1giaowoligiaogiao | 纯规则、Kafka 消费、实时 ADS writer，与 API 同 JVM |
 | citibike/contracts.py、fixtures/day2/、契约测试、CI | 领域负责人提出，Yeman-sker 协调 | 同一共享文件同一时间由一个 PR 修改 |
 | docs/product、contracts/openapi | Yeman-sker、S1lco 分别主维护 | 交叉评审，不增加重复 view-model 规格 |
 
-Day 3 开始一小时内，#26 先提交只含可编译 Maven 入口、包名、无外部服务单测和 Java CI 的最小 PR，再做查询；组长优先评审。#29 同时用 JDK 17 编译纯规则并运行 assert 算例（`java -ea`），入口合并后接入同一 Maven 工程；不得因为缺数据库或 Kafka 而让规则单测启动失败。共同 pom/resources 由 #26 修改，#29 在 Issue 给出必要依赖/配置清单。#30 的首个前端工程 PR 同时加入 npm ci/build 的 CI；两项 CI 修改按最小后端→前端顺序合并，后者同步主干，不等业务联调。依赖版本在各自首个实现 PR 锁定，不增加当前尚无工程的占位 CI。
+Day 3 开始一小时内，#26 先提交只含可编译 Maven 入口、`citibike` 根包下的应用入口、无外部服务单测和 Java CI 的最小 PR，再做查询；组长优先评审。#29 同时用 JDK 17 编译纯规则并运行 assert 算例（`java -ea`），入口合并后接入同一 Maven 工程；不得因为缺数据库或 Kafka 而让规则单测启动失败。共同 pom/resources 由 #26 修改，#29 在 Issue 给出必要依赖/配置清单。#30 的首个前端工程 PR 同时加入 npm ci/build 的 CI；两项 CI 修改按最小后端→前端顺序合并，后者同步主干，不等业务联调。依赖版本在各自首个实现 PR 锁定，不增加当前尚无工程的占位 CI。
 
 ## 发布与读取
 

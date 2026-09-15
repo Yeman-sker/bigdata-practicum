@@ -9,7 +9,7 @@
 | [#26](https://github.com/Yeman-sker/bigdata-practicum/issues/26) HTTP API 与后端入口 | S1lco | 三个只读 API、OpenAPI、共享 Maven 工程/配置、Java CI、查询与失效处理 | 原前端交给组长；已有 source/manifest 交给 #28，疑问集中 20 分钟，不再维护第二个 DWD |
 | [#27](https://github.com/Yeman-sker/bigdata-practicum/issues/27) GBFS/Kafka | OGATA-LINA | canonical 适配、raw/metadata、完整批次发送、录制事件发送与真实采集证据 | 复用 collector/validator；原 API 和 Maven 入口移交 #26，不再跨两条开发流 |
 | [#28](https://github.com/Yeman-sker/bigdata-practicum/issues/28) 离线数据与服务表 | Hu-tong123 | source/RAW/ODS/DWD/DIM、flow/profile/OD、Sqoop/MySQL 发布、DDL 与对账 | 复用已验证 source、landing、Spark 读取 PoC |
-| [#29](https://github.com/Yeman-sker/bigdata-practicum/issues/29) 规则与实时发布 | 1giaowoligiaogiao | backend.operations：当前/预测、整数调度、Kafka 消费、事务发布与到期判定 | 与 #26 共用一个 Java 工程/进程 |
+| [#29](https://github.com/Yeman-sker/bigdata-practicum/issues/29) 规则与实时发布 | 1giaowoligiaogiao | `citibike.operations` 包：当前/预测、整数调度、Kafka 消费、事务发布与到期判定 | 与 #26 共用一个 Java 工程/进程 |
 | [#30](https://github.com/Yeman-sker/bigdata-practicum/issues/30) UI / 前端与集成 | Yeman-sker | UI 设计、Vite/React、地图/回放/抽屉/风险/调度、前端 CI 与浏览器验收；协调合并和最终集成 | 在同一前端原型迭代 UI；各组提供自己的证据，组长汇总；协调 Flume 日志证据 |
 | [#31](https://github.com/Yeman-sker/bigdata-practicum/issues/31) 文档基线 | Yeman-sker | 组织文档评审与基线记录；各领域负责人维护自己的契约 | 文档签收不等于实现完成 |
 

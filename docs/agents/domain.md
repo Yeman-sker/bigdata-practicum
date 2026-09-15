@@ -12,15 +12,15 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 
 ## File structure
 
-This is a single-context repo:
+This is a single-context repo with separate runtime directories. The actual layout and placeholders are listed in the [root README](../../README.md#3-项目目录与-agent-skill-索引); directory ownership is in [architecture](../architecture.md#目录与冲突边界).
 
 ```
 /
 ├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-product-data-contract-v1.md
-│   └── ...
-└── src/
+├── docs/adr/       # Decisions for the shared business context
+├── citibike/       # Python data modules and CLI entry points
+├── backend/src/    # One Java backend: API and operations
+└── frontend/src/   # React UI
 ```
 
 ## Use the glossary's vocabulary
