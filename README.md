@@ -111,7 +111,7 @@ source ~/use-jdk17.sh
 
 ## 3. 项目目录与 Agent Skill 索引
 
-下列目录均已落盘；标注“占位”的目录目前只含 `.gitkeep`，用于明确并行开发边界，尚不能构建或启动应用。目录责任见 [架构与模块边界](docs/architecture.md#目录与冲突边界)。
+下列目录均已落盘；仍标注“占位”的目录目前只含 `.gitkeep`，用于明确并行开发边界，尚不能构建或启动对应应用。backend 的 API 工程已由 #26 提供，operations 与 frontend 仍按各自 Issue 交付。目录责任见 [架构与模块边界](docs/architecture.md#目录与冲突边界)。
 
 ```text
 bigdata-practicum/
@@ -123,15 +123,16 @@ bigdata-practicum/
 │   ├── gbfs.py
 │   ├── gbfs_fixture.py
 │   └── spark.py
-├── backend/                          # 一个 Spring Boot / Maven 工程，待初始化
+├── backend/                          # 一个 Spring Boot / Maven 工程，#26 API 已实现
+│   ├── pom.xml
 │   └── src/
 │       ├── main/
 │       │   ├── java/citibike/         # 共享 Java 根包，应用入口由 #26 交付
-│       │   │   ├── api/               # 占位：#26 HTTP 查询
+│       │   │   ├── api/               # #26 只读 HTTP 查询
 │       │   │   └── operations/        # 占位：#29 规则、消费与实时发布
-│       │   └── resources/            # 占位：#26 公共应用配置
+│       │   └── resources/            # #26 公共应用配置
 │       └── test/java/citibike/
-│           ├── api/                  # 占位：#26 API 测试
+│           ├── api/                  # #26 API 测试
 │           └── operations/           # 占位：#29 规则与消费测试
 ├── frontend/                         # #30 Yeman-sker：UI 设计与完整前端
 │   ├── src/                          # 占位：React / TypeScript 页面、交互与样式
@@ -173,7 +174,7 @@ bigdata-practicum/
 └── README.md
 ```
 
-- #26 首个实现 PR 创建 `backend/pom.xml` 和 `citibike` 根包下的应用入口；`api` 与 `operations` 共用这个工程和进程，测试目录按包镜像组织。
+- #26 创建 `backend/pom.xml`、`citibike` 根包下的应用入口、只读 API、公共配置和 API 测试；`api` 与 `operations` 共用这个工程和进程，测试目录按包镜像组织。
 - #30 首个实现 PR 创建 `frontend/package.json`、锁文件和 Vite 配置；页面组件、样式和内部目录随实际 UI 切片补充。Java / 前端构建 CI 分别随两个工程首次实现进入。
 - `citibike/` 继续承接 [runbook](docs/runbook.md) 中待实现的 Python 入口；真实数据、运行日志和证据放仓库外的 `$DATA_DIR`，共享样例统一放 `fixtures/`。
 - 首个真实文件进入占位目录时，删除该目录的 `.gitkeep`。构建输出 `backend/target/`、`frontend/node_modules/` 和 `frontend/dist/` 已加入忽略规则。

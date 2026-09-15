@@ -1,0 +1,4 @@
+citibike:
+  api:
+    historical-data-origin: HISTORICAL
+    replay-clock-mode: wall

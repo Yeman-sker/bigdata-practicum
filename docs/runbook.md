@@ -64,7 +64,7 @@ Flume 在日志目录存在后启动，其失败不伪装成业务数据失败�
 
 ## 实现任务必须提供的入口
 
-以下命令是交付约定，当前文档 PR 不实现这些程序。各主负责人完成时将实际运行环境、输出与 PR 链接记入自己的 Issue；若确需改入口，更新本表与对应 Issue，不能保留失效命令。
+以下命令是各实现任务的交付约定；#26 已提供 Maven 工程、三个只读 API 和单测入口，其他程序由对应负责人完成时补齐。各主负责人完成时将实际运行环境、输出与 PR 链接记入自己的 Issue；若确需改入口，更新本表与对应 Issue，不能保留失效命令。
 
 | 负责人 | 目标入口 | 必须观察到 |
 | --- | --- | --- |
@@ -77,6 +77,19 @@ Flume 在日志目录存在后启动，其失败不伪装成业务数据失败�
 | #30 | `npm --prefix frontend ci`；`npm --prefix frontend run dev` | 地图、风险/调度、日期/小时、抽屉及 /api 代理 |
 | #30 | `npm --prefix frontend run build` | TypeScript 与静态构建成功 |
 | #26/#29 | `mvn -f backend/pom.xml test` | HTTP 契约、规则算例、批次/事务边界测试通过 |
+
+后端的真实 JDBC 验收使用独立的 MySQL 样例库，不得指向现有业务库。先执行上面的 `serving.sql` 和 `fixtures/day2/seed.sql`，再设置以下变量运行；测试会让 availability、live map、replay map 和 station history 全部经过 Spring/JDBC repository，并在事务内删除 `live_release` 验证 503，事务结束后自动回滚：
+
+```bash
+export CITIBIKE_MYSQL_IT=true
+export CITIBIKE_MYSQL_IT_URL='jdbc:mysql://127.0.0.1:3306/citibike_fixture_it?serverTimezone=UTC'
+export CITIBIKE_MYSQL_IT_USERNAME=root
+export CITIBIKE_MYSQL_IT_PASSWORD=''
+JAVA_HOME=/opt/jdk17 PATH=/opt/jdk17/bin:$PATH \
+  mvn -f backend/pom.xml --batch-mode test
+```
+
+GitHub Java CI 使用 MySQL 8 服务并自动装载相同 DDL/seed；未显式设置 `CITIBIKE_MYSQL_IT=true` 时，该集成类跳过，普通单测不依赖外部服务。
 
 无 MySQL 时前端直接加载 http-examples.json；API 可先用 MockMvc 和同一输入做控制器测试，不新增替代数据库。完整服务演示仍须使用 MySQL。
 
