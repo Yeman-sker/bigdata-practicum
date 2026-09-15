@@ -1330,7 +1330,7 @@ export default function App() {
           );
         })}
 
-        <nav className="global-controls" aria-label="地图工具" onClick={(event) => event.stopPropagation()}>
+        {!(fatalError && !map) && <nav className="global-controls" aria-label="地图工具" onClick={(event) => event.stopPropagation()}>
           <IconButton
             buttonRef={searchButtonRef}
             label="搜索站点 · N/Shift+N 巡览"
@@ -1355,9 +1355,9 @@ export default function App() {
             expanded={panel === "view"}
             onClick={() => panel === "view" ? closePanel() : openPanel("view", viewButtonRef.current)}
           />
-        </nav>
+        </nav>}
 
-        <div
+        {!(fatalError && !map) && <div
           className="status-area"
           onClick={(event) => event.stopPropagation()}
           onMouseEnter={() => setStatusHeld(true)}
@@ -1394,7 +1394,7 @@ export default function App() {
               {map && !refreshError && !expired && !fatalError && !transientMessage && mode === "live" && <button type="button" className="quiet-button" disabled={refreshing} onClick={retry}>{refreshing ? "刷新中…" : "立即刷新"}</button>}
             </section>
           )}
-        </div>
+        </div>}
 
         <div className="sr-live" aria-live="polite">{status.text}</div>
 
