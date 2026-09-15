@@ -1,8 +1,20 @@
 # 共享单车智能运营与调度大数据平台
 
+![城市骑行流动与供需调度的概念示意图](docs/concepts/city-bikes-concept.png)
+
+*项目概念图：用于表达车辆分布、流动与调度思路，不是 UI 设计稿或实际运行截图。*
+
 东华理工大学 2023 级数据科学与大数据技术专业生产实习项目。平台面向共享单车运营与调度人员，结合历史骑行记录和实时站点库存，识别站点供需规律、缺车/满桩风险，并给出可解释的调度建议。
 
-项目主题见 [Issue #3](https://github.com/Yeman-sker/bigdata-practicum/issues/3)，产品范围与数据契约以 [Issue #4](https://github.com/Yeman-sker/bigdata-practicum/issues/4) 和 [ADR-0001](docs/adr/0001-product-data-contract-v1.md) 为准。
+项目主题见 [Issue #3](https://github.com/Yeman-sker/bigdata-practicum/issues/3)。Day 2 v1.1 文档基线由 [ADR-0004](docs/adr/0004-parallel-development-baseline.md) 承接既有决策，任务与评审记录见 [Issue #4](https://github.com/Yeman-sker/bigdata-practicum/issues/4) 和 [#31](https://github.com/Yeman-sker/bigdata-practicum/issues/31)。
+
+## 组员从这里开始
+
+1. 阅读 [产品与交互](docs/product.md)，了解五条 P0 使用路径。
+2. 阅读 [架构与模块边界](docs/architecture.md)，找到自己生产/消费的数据。
+3. 按 [契约索引](docs/contracts/README.md) 查看字段、表、事件、规则和 [OpenAPI](docs/contracts/openapi.yaml)。
+4. 从 [交付计划](docs/plans/delivery.md) 进入自己的 Issue，用 [共享样例](fixtures/day2/README.md) 独立开工。
+5. 按 [运行与验收手册](docs/runbook.md) 提交实际证据。文档和样例通过不代表业务程序已实现。
 
 ## 项目开发内容
 
@@ -22,7 +34,7 @@
 
 ### v1 范围
 
-- **P0**：历史数据下载与清洗、站点小时供需分析、GBFS 站点库存采集、Kafka 标准化事件、当前风险、调度建议、API 和实时站点展示。
+- **P0**：实时地图、单日历史 OD 回放、站点历史分析、未来一小时风险、调度建议；历史清洗、Kafka、数仓和 API 为这些用户路径提供数据。
 - **P1**：运营总览及核心 KPI。
 - **暂不做**：登录注册、AI/LLM、天气融合、复杂机器学习预测、VRP 路径优化、逐车追踪、逐笔实时骑行事件和旧版 Citi Bike schema 全兼容。
 
@@ -37,7 +49,7 @@
 
 跨层统一使用字符串类型的 `station_id`；历史时间按 `America/New_York` 本地时间处理，实时 POSIX 时间同时保存 UTC 和本地派生值。GBFS 快照不是官方逐笔骑行事件流，内部 Kafka topic 为 `bike.station.status.v1`，key 为 `station_id`。
 
-字段、阈值、分层和变更规则见 [ADR-0001](docs/adr/0001-product-data-contract-v1.md)。
+现行字段、阈值、分层和变更规则见 [契约索引](docs/contracts/README.md)；[ADR-0001](docs/adr/0001-product-data-contract-v1.md) 保留初始决策及后继指针。
 
 Day 1 Historical Trip 的 HDFS RAW / Hive ODS 入口、DDL、验证 SQL 与真实数据对账
 方法见 [Track D handoff](docs/hdfs-hive/README.md)。
@@ -48,9 +60,9 @@ Track E 的 Spark 受控读取、契约断言、count 对账和可复现命令�
 Source schema validator、字段映射和契约 fixtures 见
 [Track C handoff](docs/contracts/README.md)。
 
-运行入口统一收纳在 `citibike/` 包；Spark 作业使用
+现有 Python 运行入口统一收纳在 `citibike/` 包；Spark 读取 PoC 使用
 `spark-submit citibike/spark.py`，其他 CLI 使用 `python3 -m citibike.<module>`。
-共享数据契约只维护在 `citibike/contracts.py`，不再新增散落的独立脚本。
+现有 Python source 常量继续维护在 `citibike/contracts.py`；跨模块表、事件、HTTP 与业务规则以契约索引所指文件为准，避免多套定义。
 
 ## 基础环境与技术栈
 
@@ -99,35 +111,69 @@ source ~/use-jdk17.sh
 
 ## 3. 项目目录与 Agent Skill 索引
 
+下列目录均已落盘；标注“占位”的目录目前只含 `.gitkeep`，用于明确并行开发边界，尚不能构建或启动应用。目录责任见 [架构与模块边界](docs/architecture.md#目录与冲突边界)。
+
 ```text
 bigdata-practicum/
-├── docs/                   # 契约、各 Track 交接、教学资料与模板
-│   ├── adr/                # 架构与数据契约决策记录
-│   ├── agents/             # 仓库协作规范
-│   ├── concepts/           # 产品概念预览
-│   ├── contracts/          # Source schema validator 与字段映射
-│   ├── gbfs/               # GBFS 采集交接
-│   ├── handbook/           # 教师实战授课手册
-│   ├── hdfs-hive/          # HDFS RAW / Hive ODS 交接
-│   ├── notes/              # 课堂操作笔记
-│   ├── source/             # Historical Trips source 交接
-│   ├── spark/              # Spark 集成交接
-│   └── templates/          # 实习日志与报告模板
-├── fixtures/               # 轻量、可提交的测试样例
-│   ├── citibike/
-│   ├── contracts/
-│   └── gbfs/
-├── hive/                   # ODS DDL 与验证 SQL
-├── citibike/               # 共享契约、领域模块与 CLI 入口
-│   ├── contracts.py        # 唯一的数据契约常量
+├── citibike/                         # Python 源数据、采集、离线作业与 CLI
+│   ├── contracts.py                  # 既有 Source 字段常量
 │   ├── contract_validator.py
 │   ├── historical_source.py
 │   ├── historical_landing.py
 │   ├── gbfs.py
 │   ├── gbfs_fixture.py
 │   └── spark.py
-├── tests/                  # 全部自动化测试
-├── README.md               # 项目说明、技术栈规范与索引指南
-└── .agents/                # Agent 原生工作规范区
-    └── skills/             # 团队工程复现 Skill 库
+├── backend/                          # 一个 Spring Boot / Maven 工程，待初始化
+│   └── src/
+│       ├── main/
+│       │   ├── java/citibike/         # 共享 Java 根包，应用入口由 #26 交付
+│       │   │   ├── api/               # 占位：#26 HTTP 查询
+│       │   │   └── operations/        # 占位：#29 规则、消费与实时发布
+│       │   └── resources/            # 占位：#26 公共应用配置
+│       └── test/java/citibike/
+│           ├── api/                  # 占位：#26 API 测试
+│           └── operations/           # 占位：#29 规则与消费测试
+├── frontend/                         # #30 Yeman-sker：UI 设计与完整前端
+│   ├── src/                          # 占位：React / TypeScript 页面、交互与样式
+│   └── public/                       # 占位：直接提供给浏览器的静态资源
+├── hive/                             # Hive 表定义与数据校验
+│   ├── ods/                          # 既有 RAW → ODS 表定义
+│   ├── queries/                      # 校验 SQL
+│   └── warehouse_v1.sql              # DWD / DIM / DWS 表定义
+├── sql/
+│   └── serving.sql                   # MySQL 服务表、staging 与发布状态
+├── tests/                            # Python 单元测试与跨模块契约检查
+├── fixtures/                         # 可提交的小型共享输入及期望结果
+│   ├── day2/                         # 同源 CSV、metadata、Kafka、HTTP、seed 与算例
+│   ├── citibike/                     # Day 1 历史读取样例
+│   ├── contracts/                    # Source schema 校验样例
+│   └── gbfs/                         # Day 1 GBFS 交接样例
+├── docs/
+│   ├── product.md                    # 产品与 UI 行为
+│   ├── architecture.md               # 进程、目录责任与交接
+│   ├── runbook.md                    # 现有/待实现入口与运行验收
+│   ├── contracts/                    # 字段、数仓、Kafka、规则和 OpenAPI
+│   ├── plans/                        # 交付计划与文档规划
+│   ├── adr/                          # 决策及后继关系
+│   ├── agents/                       # 仓库协作规范
+│   ├── source/                       # Day 1 历史数据证据
+│   ├── gbfs/                         # Day 1 采集交接
+│   ├── hdfs-hive/                    # Day 1 RAW / ODS 交接
+│   ├── spark/                        # Day 1 Spark 读取交接
+│   ├── concepts/                     # 项目概念图与既有预览
+│   │   └── city-bikes-concept.png     # README 首屏概念图
+│   ├── handbook/                     # 教师手册
+│   ├── notes/                        # 课堂笔记
+│   └── templates/                    # 实习日志与报告模板
+├── .github/                          # Issue / PR 模板与 CI
+├── .agents/skills/                   # 团队开发与环境复现 Skill
+├── AGENTS.md                         # Agent 仓库规则入口
+├── CONTEXT.md                        # 单一业务上下文与术语
+├── requirements-contracts.txt        # 契约检查依赖
+└── README.md
 ```
+
+- #26 首个实现 PR 创建 `backend/pom.xml` 和 `citibike` 根包下的应用入口；`api` 与 `operations` 共用这个工程和进程，测试目录按包镜像组织。
+- #30 首个实现 PR 创建 `frontend/package.json`、锁文件和 Vite 配置；页面组件、样式和内部目录随实际 UI 切片补充。Java / 前端构建 CI 分别随两个工程首次实现进入。
+- `citibike/` 继续承接 [runbook](docs/runbook.md) 中待实现的 Python 入口；真实数据、运行日志和证据放仓库外的 `$DATA_DIR`，共享样例统一放 `fixtures/`。
+- 首个真实文件进入占位目录时，删除该目录的 `.gitkeep`。构建输出 `backend/target/`、`frontend/node_modules/` 和 `frontend/dist/` 已加入忽略规则。

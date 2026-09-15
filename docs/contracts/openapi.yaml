@@ -1,0 +1,1086 @@
+openapi: 3.1.0
+info:
+  title: 共享单车运营 P0 API
+  version: 1.1.0
+  description: Day 2 实施契约。字段定义集中于此；规则、时间与来源见 operations.md / events.md。所有查询只读；未知参数或枚举返回400；null保持显式，不能转0。没有登录/写操作。
+servers:
+- url: http://localhost:8080
+  description: 本地集成；前端开发服务器使用 /api 代理。
+paths:
+  /api/v1/map:
+    get:
+      operationId: getMap
+      summary: 取得一个完整实时批次或选定历史小时
+      description: mode 必填。live 禁止 service_date/hour；replay 同时要求二者。live 站点按 station_id 升序，suggestions 按 priority
+        升序且已过滤到期项；flows=[]。replay 返回当日活跃站点与所选 OD 两端站点的并集，库存/服务/计算字段 null，状态 NOT_APPLICABLE，suggestions=[]；OD 按 from/to
+        字符串升序。全部数据与发布行来自一个一致性读事务。上限 5000 站/50000 OD/10000 建议，超限 422，不分页或静默截断。
+      parameters:
+      - name: mode
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - live
+          - replay
+        description: ''
+      - name: service_date
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+        description: ''
+      - name: hour
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 23
+        description: ''
+      responses:
+        '200':
+          description: 完整响应；空数组与异常站点仍为 200。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapResponse'
+              examples:
+                live:
+                  $ref: ../../fixtures/day2/http-examples.json#/live
+                replay:
+                  $ref: ../../fixtures/day2/http-examples.json#/replay
+                no_baseline:
+                  $ref: ../../fixtures/day2/http-examples.json#/no_baseline
+                stale:
+                  $ref: ../../fixtures/day2/http-examples.json#/stale
+                empty_live:
+                  $ref: ../../fixtures/day2/http-examples.json#/empty_live
+        '400': &id001
+          description: 参数或参数组合非法。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                bad_query:
+                  $ref: ../../fixtures/day2/http-examples.json#/bad_query
+        '404': &id002
+          description: 站点或已发布历史日期不存在。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                not_found:
+                  $ref: ../../fixtures/day2/http-examples.json#/not_found
+        '422': &id003
+          description: 完整结果超过上限，不返回部分成功。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                too_large:
+                  $ref: ../../fixtures/day2/http-examples.json#/too_large
+        '503': &id004
+          description: MySQL 不可用或尚无相应发布；区别于已发布空结果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unavailable:
+                  $ref: ../../fixtures/day2/http-examples.json#/unavailable
+        '500': &id005
+          description: 内部错误，message 不包含堆栈或凭据。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples: {}
+  /api/v1/history/availability:
+    get:
+      operationId: getHistoricalAvailability
+      summary: 列出已发布数据中的日期和小时
+      description: 来自 dws_station_hourly_flow_v1 distinct date/hour，日期、小时升序。只有 metadata 而无 flow 时 dates=[]；尚未发布历史版本为
+        503。只返回当前接纳月份的数据覆盖，不硬编码 2025-01。
+      responses:
+        '200':
+          description: 当前发布版本及可用日期。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityResponse'
+              examples:
+                availability:
+                  $ref: ../../fixtures/day2/http-examples.json#/availability
+                empty_availability:
+                  $ref: ../../fixtures/day2/http-examples.json#/empty_availability
+        '400': *id001
+        '404': *id002
+        '422': *id003
+        '503': *id004
+        '500': *id005
+  /api/v1/stations/{station_id}/history:
+    get:
+      operationId: getStationHistory
+      summary: 站点典型星期曲线及可选日期实际流量
+      description: station_id 在当前历史 DIM 或当前 ADS 中即可识别；两者均无才404。名称优先历史DIM，缺失时用当前ADS；只有当前站点但没有profile时返回空profile，不称未知站点。day_of_week
+        必填，ISO 周一=1。service_date 可选，有值则必须是已发布可用日期且与 day_of_week 一致。不传日期 actual=[]；站点在该日不活跃 actual=[]，有活动则含24小时零值。profile
+        无基线为[]，有基线则24行。两个数组均按 hour 升序。profile_start/end 为当前历史发布数据整体覆盖范围，sample_days 才是本站该星期样本数。
+      parameters:
+      - name: station_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description: ''
+      - name: day_of_week
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 7
+        description: ''
+      - name: service_date
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+        description: ''
+      responses:
+        '200':
+          description: 本站 profile 和实际流量，同一历史发布版本。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryResponse'
+              examples:
+                history:
+                  $ref: ../../fixtures/day2/http-examples.json#/history
+                empty_history:
+                  $ref: ../../fixtures/day2/http-examples.json#/empty_history
+        '400': *id001
+        '404': *id002
+        '422': *id003
+        '503': *id004
+        '500': *id005
+components:
+  schemas:
+    RiskStatus:
+      type: string
+      enum:
+      - SHORTAGE_RISK
+      - LOW_INVENTORY
+      - HEALTHY
+      - HIGH_INVENTORY
+      - OVERFLOW_RISK
+      - SERVICE_UNAVAILABLE
+      - STALE_DATA
+      - INVALID_DATA
+      - INSUFFICIENT_DATA
+      - NOT_APPLICABLE
+    Reason:
+      type:
+      - string
+      - 'null'
+      enum:
+      - null
+      - INVALID_TIME
+      - STALE_OBSERVATION
+      - SERVICE_FLAGS
+      - NEGATIVE_INVENTORY
+      - MISSING_INVENTORY
+      - ZERO_SERVICEABLE_CAPACITY
+      - NO_BASELINE
+    Station:
+      type: object
+      additionalProperties: false
+      required:
+      - station_id
+      - station_name
+      - lat
+      - lon
+      - capacity
+      - num_bikes_available
+      - num_docks_available
+      - is_installed
+      - is_renting
+      - is_returning
+      - current_status
+      - forecast_status
+      - current_reason
+      - forecast_reason
+      - fill_ratio
+      - expected_inbound_1h
+      - expected_outbound_1h
+      - expected_net_flow_1h
+      - projected_bikes_1h
+      - sample_days
+      - snapshot_at_utc
+      - last_reported_at_utc
+      - expires_at_utc
+      - forecast_for_utc
+      properties:
+        station_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        station_name:
+          type:
+          - string
+          - 'null'
+          maxLength: 512
+        lat:
+          type:
+          - number
+          - 'null'
+          minimum: -90
+          maximum: 90
+        lon:
+          type:
+          - number
+          - 'null'
+          minimum: -180
+          maximum: 180
+        capacity:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+        num_bikes_available:
+          type:
+          - integer
+          - 'null'
+          description: 最新观测原值，负数须配 INVALID_DATA；历史模式 null。
+        num_docks_available:
+          type:
+          - integer
+          - 'null'
+        is_installed:
+          type:
+          - boolean
+          - 'null'
+        is_renting:
+          type:
+          - boolean
+          - 'null'
+        is_returning:
+          type:
+          - boolean
+          - 'null'
+        current_status:
+          $ref: '#/components/schemas/RiskStatus'
+        forecast_status:
+          $ref: '#/components/schemas/RiskStatus'
+        current_reason:
+          $ref: '#/components/schemas/Reason'
+        forecast_reason:
+          $ref: '#/components/schemas/Reason'
+        fill_ratio:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 1
+        expected_inbound_1h:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+        expected_outbound_1h:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+        expected_net_flow_1h:
+          type:
+          - number
+          - 'null'
+        projected_bikes_1h:
+          type:
+          - number
+          - 'null'
+          description: 未截断原值，可能为负数或超过容量。
+        sample_days:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+        snapshot_at_utc:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          pattern: Z$
+        last_reported_at_utc:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          pattern: Z$
+        expires_at_utc:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          pattern: Z$
+        forecast_for_utc:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          pattern: Z$
+    Flow:
+      type: object
+      additionalProperties: false
+      required:
+      - from_station_id
+      - to_station_id
+      - ride_count
+      properties:
+        from_station_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        to_station_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        ride_count:
+          type: integer
+          minimum: 1
+    Suggestion:
+      type: object
+      additionalProperties: false
+      required:
+      - suggestion_id
+      - from_station_id
+      - to_station_id
+      - move_bikes
+      - from_surplus
+      - to_deficit
+      - distance_meters
+      - priority
+      - generated_at_utc
+      - expires_at_utc
+      properties:
+        suggestion_id:
+          type: string
+          minLength: 66
+          maxLength: 80
+        from_station_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        to_station_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        move_bikes:
+          type: integer
+          minimum: 1
+        from_surplus:
+          type: integer
+          minimum: 1
+        to_deficit:
+          type: integer
+          minimum: 1
+        distance_meters:
+          type: integer
+          minimum: 0
+        priority:
+          type: integer
+          minimum: 1
+        generated_at_utc:
+          type: string
+          format: date-time
+          pattern: Z$
+        expires_at_utc:
+          type: string
+          format: date-time
+          pattern: Z$
+    MapResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - contract_version
+      - mode
+      - data_origin
+      - clock_mode
+      - dataset_id
+      - baseline_dataset_id
+      - snapshot_id
+      - metadata_version
+      - service_date
+      - hour
+      - observed_at_utc
+      - as_of_utc
+      - served_at_utc
+      - expires_at_utc
+      - stations
+      - flows
+      - suggestions
+      properties:
+        contract_version:
+          type: string
+          const: '1.1'
+        mode:
+          type: string
+          enum:
+          - live
+          - replay
+        data_origin:
+          type: string
+          enum:
+          - GBFS_LIVE
+          - GBFS_REPLAY
+          - HISTORICAL
+          - FIXTURE
+        clock_mode:
+          type: string
+          enum:
+          - wall
+          - recorded
+        dataset_id:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-f0-9]{64}$
+        baseline_dataset_id:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-f0-9]{64}$
+        snapshot_id:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-f0-9]{64}$
+        metadata_version:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-f0-9]{64}$
+        service_date:
+          type: string
+          format: date
+        hour:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          maximum: 23
+        observed_at_utc:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          pattern: Z$
+        as_of_utc:
+          type: string
+          format: date-time
+          pattern: Z$
+        served_at_utc:
+          type: string
+          format: date-time
+          pattern: Z$
+        expires_at_utc:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          pattern: Z$
+        stations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Station'
+          maxItems: 5000
+        flows:
+          type: array
+          items:
+            $ref: '#/components/schemas/Flow'
+          maxItems: 50000
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Suggestion'
+          maxItems: 10000
+      allOf:
+      - if:
+          properties:
+            mode:
+              const: live
+        then:
+          properties:
+            dataset_id: &id006
+              type: 'null'
+            hour: *id006
+            snapshot_id:
+              type: string
+            metadata_version:
+              type: string
+            observed_at_utc:
+              type: string
+            expires_at_utc:
+              type: string
+            data_origin:
+              enum:
+              - GBFS_LIVE
+              - GBFS_REPLAY
+              - FIXTURE
+            flows:
+              maxItems: 0
+            stations:
+              items:
+                properties:
+                  current_status:
+                    not:
+                      const: NOT_APPLICABLE
+                  forecast_status:
+                    not:
+                      const: NOT_APPLICABLE
+                  snapshot_at_utc:
+                    type: string
+                  expires_at_utc:
+                    type: string
+        else:
+          properties:
+            baseline_dataset_id: *id006
+            snapshot_id: *id006
+            metadata_version: *id006
+            observed_at_utc: *id006
+            expires_at_utc: *id006
+            dataset_id:
+              type: string
+            hour:
+              type: integer
+            data_origin:
+              enum:
+              - HISTORICAL
+              - FIXTURE
+            suggestions:
+              maxItems: 0
+            stations:
+              items:
+                properties:
+                  num_bikes_available: *id006
+                  num_docks_available: *id006
+                  is_installed: *id006
+                  is_renting: *id006
+                  is_returning: *id006
+                  current_reason: *id006
+                  forecast_reason: *id006
+                  fill_ratio: *id006
+                  expected_inbound_1h: *id006
+                  expected_outbound_1h: *id006
+                  expected_net_flow_1h: *id006
+                  projected_bikes_1h: *id006
+                  sample_days: *id006
+                  snapshot_at_utc: *id006
+                  last_reported_at_utc: *id006
+                  expires_at_utc: *id006
+                  forecast_for_utc: *id006
+                  current_status:
+                    const: NOT_APPLICABLE
+                  forecast_status:
+                    const: NOT_APPLICABLE
+    AvailableDate:
+      type: object
+      additionalProperties: false
+      required:
+      - service_date
+      - hours
+      properties:
+        service_date:
+          type: string
+          format: date
+        hours:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 23
+          uniqueItems: true
+          maxItems: 24
+    AvailabilityResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - contract_version
+      - dataset_id
+      - source_months
+      - dates
+      properties:
+        contract_version:
+          type: string
+          const: '1.1'
+        dataset_id:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        source_months:
+          type: array
+          items:
+            type: string
+            pattern: ^[0-9]{4}-(0[1-9]|1[0-2])$
+          uniqueItems: true
+        dates:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailableDate'
+    ProfileHour:
+      type: object
+      additionalProperties: false
+      required:
+      - hour
+      - avg_inbound
+      - avg_outbound
+      - avg_net_flow
+      - median_net_flow
+      - sample_days
+      properties:
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        avg_inbound:
+          type: number
+          minimum: 0
+        avg_outbound:
+          type: number
+          minimum: 0
+        avg_net_flow:
+          type: number
+        median_net_flow:
+          type: number
+        sample_days:
+          type: integer
+          minimum: 1
+    ActualHour:
+      type: object
+      additionalProperties: false
+      required:
+      - hour
+      - inbound_rides
+      - outbound_rides
+      - net_flow
+      - total_activity
+      - electric_outbound
+      - classic_outbound
+      - member_outbound
+      - casual_outbound
+      properties:
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        inbound_rides:
+          type: integer
+          minimum: 0
+        outbound_rides:
+          type: integer
+          minimum: 0
+        net_flow:
+          type: integer
+        total_activity:
+          type: integer
+          minimum: 0
+        electric_outbound:
+          type: integer
+          minimum: 0
+        classic_outbound:
+          type: integer
+          minimum: 0
+        member_outbound:
+          type: integer
+          minimum: 0
+        casual_outbound:
+          type: integer
+          minimum: 0
+    HistoryResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - contract_version
+      - dataset_id
+      - station_id
+      - station_name
+      - day_of_week
+      - service_date
+      - source_months
+      - profile_start_date
+      - profile_end_date
+      - profile
+      - actual
+      properties:
+        contract_version:
+          type: string
+          const: '1.1'
+        dataset_id:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        station_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        station_name:
+          type:
+          - string
+          - 'null'
+          maxLength: 512
+        day_of_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+        service_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        source_months:
+          type: array
+          items:
+            type: string
+            pattern: ^[0-9]{4}-(0[1-9]|1[0-2])$
+        profile_start_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        profile_end_date:
+          type:
+          - string
+          - 'null'
+          format: date
+        profile:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileHour'
+          maxItems: 24
+          anyOf:
+          - maxItems: 0
+          - minItems: 24
+        actual:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActualHour'
+          maxItems: 24
+          anyOf:
+          - maxItems: 0
+          - minItems: 24
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+          - code
+          - message
+          properties:
+            code:
+              type: string
+              enum:
+              - INVALID_PARAMETER
+              - NOT_FOUND
+              - RESULT_TOO_LARGE
+              - DATA_UNAVAILABLE
+              - INTERNAL_ERROR
+            message:
+              type: string
+              minLength: 1
+    StationEvent:
+      type: object
+      additionalProperties: false
+      required:
+      - station_id
+      - snapshot_at_utc
+      - snapshot_at_local
+      - last_reported_at_utc
+      - ingested_at_utc
+      - num_bikes_available
+      - num_docks_available
+      - num_bikes_disabled
+      - num_docks_disabled
+      - is_installed
+      - is_renting
+      - is_returning
+      - source_version
+      properties:
+        station_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        snapshot_at_utc:
+          type: string
+          format: date-time
+          pattern: Z$
+        snapshot_at_local:
+          type: string
+          format: date-time
+        last_reported_at_utc:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          pattern: Z$
+        ingested_at_utc:
+          type: string
+          format: date-time
+          pattern: Z$
+        num_bikes_available:
+          type: integer
+        num_docks_available:
+          type:
+          - integer
+          - 'null'
+        num_bikes_disabled:
+          type:
+          - integer
+          - 'null'
+        num_docks_disabled:
+          type:
+          - integer
+          - 'null'
+        is_installed:
+          type: boolean
+        is_renting:
+          type: boolean
+        is_returning:
+          type: boolean
+        source_version:
+          type: string
+          const: '2.3'
+    stationHeaders:
+      type: object
+      additionalProperties: false
+      required:
+      - contract_version
+      - record_type
+      - snapshot_id
+      - metadata_version
+      - data_origin
+      properties:
+        contract_version:
+          type: string
+          const: '1.1'
+        record_type:
+          type: string
+          const: station
+        snapshot_id:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        metadata_version:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        data_origin:
+          type: string
+          enum:
+          - GBFS_LIVE
+          - GBFS_REPLAY
+          - FIXTURE
+    snapshot_endHeaders:
+      type: object
+      additionalProperties: false
+      required:
+      - contract_version
+      - record_type
+      - snapshot_id
+      - metadata_version
+      - data_origin
+      properties:
+        contract_version:
+          type: string
+          const: '1.1'
+        record_type:
+          type: string
+          const: snapshot_end
+        snapshot_id:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        metadata_version:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        data_origin:
+          type: string
+          enum:
+          - GBFS_LIVE
+          - GBFS_REPLAY
+          - FIXTURE
+    SnapshotEnd:
+      type: object
+      additionalProperties: false
+      required:
+      - station_count
+      - snapshot_at_utc
+      - ingested_at_utc
+      properties:
+        station_count:
+          type: integer
+          minimum: 0
+          maximum: 5000
+        snapshot_at_utc:
+          type: string
+          format: date-time
+          pattern: Z$
+        ingested_at_utc:
+          type: string
+          format: date-time
+          pattern: Z$
+    KafkaStationRecord:
+      type: object
+      additionalProperties: false
+      required:
+      - key
+      - headers
+      - value
+      properties:
+        key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        headers:
+          $ref: '#/components/schemas/stationHeaders'
+        value:
+          $ref: '#/components/schemas/StationEvent'
+    KafkaEndRecord:
+      type: object
+      additionalProperties: false
+      required:
+      - key
+      - headers
+      - value
+      properties:
+        key:
+          type: string
+          const: __snapshot_end__
+        headers:
+          $ref: '#/components/schemas/snapshot_endHeaders'
+        value:
+          $ref: '#/components/schemas/SnapshotEnd'
+    KafkaRecord:
+      oneOf:
+      - $ref: '#/components/schemas/KafkaStationRecord'
+      - $ref: '#/components/schemas/KafkaEndRecord'
+    Metadata:
+      type: object
+      additionalProperties: false
+      required:
+      - provider_station_id
+      - station_id
+      - mapping_status
+      - mapping_reason
+      - station_name
+      - lat
+      - lon
+      - capacity
+      - region_id
+      - is_current
+      - metadata_source
+      - metadata_updated_at
+      properties:
+        provider_station_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        station_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        mapping_status:
+          type: string
+          enum:
+          - SHORT_NAME
+          - ISOLATED
+        mapping_reason:
+          type:
+          - string
+          - 'null'
+          enum:
+          - null
+          - MISSING_SHORT_NAME
+          - DUPLICATE_SHORT_NAME
+          - MISSING_METADATA
+        station_name:
+          type:
+          - string
+          - 'null'
+          maxLength: 512
+        lat:
+          type:
+          - number
+          - 'null'
+          minimum: -90
+          maximum: 90
+        lon:
+          type:
+          - number
+          - 'null'
+          minimum: -180
+          maximum: 180
+        capacity:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+        region_id:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 128
+        is_current:
+          type: boolean
+        metadata_source:
+          type: string
+          const: GBFS
+        metadata_updated_at:
+          type: string
+          format: date-time
+          pattern: Z$
+    MapQuery:
+      type: object
+      additionalProperties: false
+      required:
+      - mode
+      properties:
+        mode:
+          type: string
+          enum:
+          - live
+          - replay
+        service_date:
+          type: string
+          format: date
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+      allOf:
+      - if:
+          properties:
+            mode:
+              const: replay
+        then:
+          required:
+          - service_date
+          - hour
+        else:
+          not:
+            anyOf:
+            - required:
+              - service_date
+            - required:
+              - hour
+x-query-schema:
+  $ref: '#/components/schemas/MapQuery'
+x-contract-index: README.md

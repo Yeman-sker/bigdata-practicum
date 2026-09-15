@@ -1,11 +1,13 @@
 # ADR-0001：冻结共享单车平台 Product & Data Contract v1
 
-- 状态：Accepted / Frozen
+- 状态：Accepted（历史基线，部分由 [ADR-0004](0004-parallel-development-baseline.md) 的明确取代关系修订）
 - 日期：2026-09-11
 - 关联：[#3 确定项目主题](https://github.com/Yeman-sker/bigdata-practicum/issues/3)、[#4 Product & Data Contract v1](https://github.com/Yeman-sker/bigdata-practicum/issues/4)
 - 适用范围：7 天敏捷交付周期的 v1 产品、数据、分析和服务接口
 
 ## 背景
+
+现行实施规格入口为 [契约索引](../contracts/README.md)。本文保留初始决策记录；站点映射、完整数仓规则、当前/预测状态、事件批次、服务字段及精简后的分层按 ADR-0004 指向的后继文件实施，不能同时沿用冲突的旧定义。
 
 项目由数据采集、HDFS/Hive、Spark、Kafka、Spring Boot 和前端应用等模块组成。若各模块自行解释数据源、标识符、时间或聚合粒度，Spark、Hive、后端和前端之间会产生接口不一致。
 

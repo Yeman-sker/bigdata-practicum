@@ -1,5 +1,7 @@
 # GBFS 2.3 实时站点数据 PoC
 
+本文保留 Day 1 实测与源适配行为。Day 2 v1.1 的 canonical ID 映射、Kafka 封装与批次发布见 [字段映射](../contracts/field_mapping.md) 和 [事件契约](../contracts/events.md)；本文 UUID event 样例只作旧 PoC 验证，不能直接当作新的跨历史关联输入。
+
 本文档说明 Issue #7 交付的 Citi Bike GBFS 采集器。GBFS 提供的是站点
 库存快照，不是逐笔骑行事件流。
 

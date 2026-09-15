@@ -25,3 +25,10 @@ docs/生产实习日志_*.docx
 
 # GBFS collector output (raw full snapshots stay local)
 data/gbfs/
+
+# Backend / frontend build output
+/backend/target/
+/frontend/node_modules/
+/frontend/dist/
+/frontend/*.tsbuildinfo
+*.class

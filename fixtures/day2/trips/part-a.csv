@@ -1,0 +1,5 @@
+ride_id,rideable_type,started_at,ended_at,start_station_name,start_station_id,end_station_name,end_station_id,start_lat,start_lng,end_lat,end_lng,member_casual
+sample-1,classic_bike,2025-01-08 08:05:00,2025-01-08 08:15:00,样例甲站,5484.09,样例乙站,4199.12,40.7,-74.0,40.7,-74.001,member
+sample-2,electric_bike,2025-01-08 08:25:00,2025-01-08 08:35:00,样例甲站,5484.09,样例乙站,4199.12,40.7,-74.0,40.7,-74.001,casual
+sample-3,classic_bike,2025-01-15 08:05:00,2025-01-15 08:15:00,样例甲站,5484.09,样例乙站,4199.12,40.7,-74.0,40.7,-74.001,member
+sample-4,electric_bike,2025-01-15 08:25:00,2025-01-15 08:35:00,样例甲站,5484.09,样例乙站,4199.12,40.7,-74.0,40.7,-74.001,casual

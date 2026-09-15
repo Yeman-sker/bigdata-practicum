@@ -8,6 +8,8 @@ Closes #
 - [ ] Day 1 / Track C — Source Schema Validator 与 Fixtures
 - [ ] Day 1 / Track D — HDFS RAW 与 Hive ODS
 - [ ] Day 1 / Track E — Spark 读取 PoC 与端到端门禁
+- [ ] Day 2 — 文档、契约与共享样例
+- [ ] Day 3–7 — 前端 / API 与 GBFS / 离线 / 规则 / 集成切片
 - [ ] 其他维护 / 基建 / 文档
 
 ## 改动概述
@@ -15,10 +17,10 @@ Closes #
 - 
 
 ## 数据契约与 Schema 兼容性检查
-<!-- 对照 ADR-0001: docs/adr/0001-product-data-contract-v1.md -->
+<!-- 对照 docs/contracts/README.md 与 ADR-0004 后继关系 -->
 - [ ] `station_id` 强制保持 STRING 类型（未隐式转换为 INT/FLOAT）
 - [ ] 时间语义与时区规范对齐（本地墙上时间 vs UTC POSIX）
-- [ ] 新增或修改的数据结构与 ADR-0001 契约保持严格一致
+- [ ] 新增或修改的数据结构与现行契约一致；修订已同步文档、样例和受影响消费者
 - [ ] 仅提交轻量 sample fixtures，未将大文件数据直接写入仓库
 
 ## 本地验证证据 (必填)

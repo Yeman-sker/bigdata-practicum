@@ -1,80 +1,50 @@
-# Track C：Source Schema Validator 与 Data Contract Fixture
+# 契约入口：Day 2 v1.1
 
-本目录实现 GitHub Issue #8。目标是把 #4 的数据契约变成可复现的轻量校验边界，供 Track D（HDFS/Hive）和 Track E（Spark）复用。
+本文是开发交接索引。产品见 [product](../product.md)，进程见 [architecture](../architecture.md)，分工见 [delivery](../plans/delivery.md)，运行见 [runbook](../runbook.md)。本版本按 [ADR-0004](../adr/0004-parallel-development-baseline.md) 承接原 ADR；发布/评审证据由 [#31](https://github.com/Yeman-sker/bigdata-practicum/issues/31) 与文档 PR 记录。版本随整套文档提交，不把单份文件存在当作业务实现已完成。
 
-字段级映射见 [field_mapping.md](field_mapping.md)。校验规则的可执行实现见
-[contract_validator.py](../../citibike/contract_validator.py)。
+## 交接矩阵
 
-## 已冻结的输入契约
+| 契约 / 粒度 | 主维护人（生产者） | 消费者 | 唯一字段/行为位置 | 可独立读取的样例 |
+| --- | --- | --- | --- | --- |
+| Historical source/manifest；文件与物理行 | Hu-tong123 / #28 | offline | [映射](field_mapping.md)、[数仓](warehouse.md)、现有 source manifest | day2/trips、manifest.json；旧 source validator |
+| RAW/ODS/DWD；物理 Trip | Hu-tong123 / #28 | offline 聚合 | warehouse、[Hive DDL](../../hive/warehouse_v1.sql) | expected.json.tables.dwd_trip_v1 |
+| canonical metadata；一站一行 | OGATA-LINA / #27 | #28、#29 | field_mapping、events | metadata.json、station_information.json |
+| Kafka station/end；站点/快照 | OGATA-LINA / #27 | #29 | [events](events.md)、OpenAPI 的 KafkaRecord schema | events.ndjson、cases.json.batches |
+| DIM/flow/profile/OD；站点、站点日小时、站点星期小时、OD 小时 | Hu-tong123 / #28 | #26 API、#29 | warehouse、Hive/MySQL DDL | expected.json.tables、seed.sql |
+| 风险/调度；站点快照、建议 | 1giaowoligiaogiao / #29 | #26 API、#30 前端 | [operations](operations.md)、[MySQL DDL](../../sql/serving.sql) | cases.json、expected.json 两张 ADS |
+| HTTP；三类 GET 响应 | S1lco / #26 | Yeman-sker / #30 | [OpenAPI](openapi.yaml) | http-examples.json |
+| UI / 页面；五条 P0 路径 | Yeman-sker / #30 | 用户；S1lco 核对 API 集成 | product | 相同 HTTP examples，不另建字段模型 |
+| 运行证据；每个切片一次记录 | 各主负责人，组长汇总 | 下游、组长 | runbook | 命令、预期、真实证据边界 |
 
-### Historical Trip
+所有 day2 样例均位于 [fixtures/day2](../../fixtures/day2/README.md)。同一输出仅有一位写入人，相关生产者和消费者评审；负责人实际签收在 Issue/PR 记录，不以自动检查冒充人工评审。
 
-现代 Citi Bike 月度 CSV 必须包含 13 列：
+## 公共语义
 
-```text
-ride_id, rideable_type, started_at, ended_at,
-start_station_name, start_station_id, end_station_name, end_station_id,
-start_lat, start_lng, end_lat, end_lng, member_casual
-```
+- station_id 是 canonical STRING，provider UUID 映射见 field_mapping，禁止数字化或直接把两种 ID join。
+- 历史时刻为 America/New_York wall-clock；实时 UTC 与纽约 offset 明确区分。ISO 星期周一 1，小时 0..23；日期由已发布数据生成。
+- 所有 nullable 字段显式 null，不能用 0、空串或默认容量冒充；数组为空表示对应业务空结果。无相应成功发布是 503。
+- 版本/快照/数据集 ID 的内容、更新和新鲜度分别以 events、warehouse 为准。一次 HTTP 响应不能混合不同发布批次。
+- 状态、风险阈值及数量计算只在 operations 定义；OpenAPI 是其传输编码，产品文档定义用户可见含义。
 
-`station_id` 按字符串处理，即使值看起来像 `5484.09`。时间按 `America/New_York` 本地 wall-clock 解释；原始数据不在本层强行改写时区。
+## 现有 Source Validator：继续复用
 
-### GBFS 2.3
+13 列 Historical 字段与解析格式在 [contracts.py](../../citibike/contracts.py)，校验实现为 [contract_validator.py](../../citibike/contract_validator.py)。字段/结构缺失、必填 null、坏关键时间、非字符串 ID、非整数 POSIX、错误版本或 feed URL 为 FAIL；可空站点、可选字段缺失、未知枚举、异常坐标和负库存为 Warn/Observe，原值不静默删除。负库存通过源观察门禁不代表业务有效。
 
-Discovery 必须声明 `version=2.3`，并提供 `station_information`、`station_status`、`vehicle_types` 三个入口。站点编号必须是 JSON 字符串；数量字段不得为负；`last_reported` 按 POSIX 秒验证。`capacity` 等可选字段允许缺失或 null。
-
-## Fail Fast 与 Warn/Observe
-
-以下情况失败：必需列/结构缺失、必填字段为 null、关键时间无法解析、station_id 不是字符串、POSIX 时间不是 JSON 整数、GBFS 版本或必需 Feed/URL 不匹配。
-
-以下情况只记录质量指标并返回 PASS：Historical 中允许为空的 station ID/名称、GBFS 可选字段缺失、未知枚举值、异常坐标或负库存值。库存负值当前明确采用 Warn/Observe 策略，必须交给上游处理，校验器不会为了“全绿”静默删除或修正原始数据；契约要求的必填字段错误仍会阻止通过。
-
-Historical 校验还输出 `nonpositive_duration_count`：时长由已成功解析的开始/结束时间计算，`duration_seconds <= 0` 只作为可追踪质量指标，不在 Source 层生成 DWD 字段。
-
-## 运行
+source 中 last_reported 为整数必填，内部 event 列可空；不得混淆这两个边界。Source 时长指标不产生 DWD 字段。既有 [GBFS handoff](../gbfs/README.md) 和 [历史 handoff](../source/citibike-202501.md) 保留实测历史。
 
 ```bash
-python3 -m citibike.contract_validator historical fixtures/contracts/historical_trip_sample.csv
-python3 -m citibike.contract_validator discovery fixtures/contracts/gbfs.json
-python3 -m citibike.contract_validator station_information fixtures/contracts/station_information.json
-python3 -m citibike.contract_validator station_status fixtures/contracts/station_status.json
-python3 -m citibike.contract_validator vehicle_types fixtures/contracts/vehicle_types.json
-python3 -m unittest discover -s tests -p 'test_*.py' -v
+python3 -m citibike.contract_validator historical fixtures/day2/trips/part-a.csv
+python3 -m citibike.contract_validator historical fixtures/day2/trips/part-b.csv
+python3 -m citibike.contract_validator station_information fixtures/day2/station_information.json
+python3 -m citibike.contract_validator station_status fixtures/day2/station_status.json
+python3 -m citibike.gbfs_fixture fixtures/gbfs/station_status_event_v1.sample.json
+uv run --with-requirements requirements-contracts.txt python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-退出码 `0` 表示 PASS，退出码 `1` 表示存在契约错误；标准输出为带有 `status`、`errors`、`warnings` 和质量指标的 JSON，可直接保存为 CI 或 Day 1 验收证据。
+最后一条包含新契约检查；第一组 source 命令为已有可运行入口。旧 event fixture 仅验证 Day 1 payload 结构，新的 canonical/Kafka 交接另由 day2 fixtures 验证。
 
-正常输出示例（节选）：
+## 开工与变更门禁
 
-```json
-{
-  "kind": "station_status",
-  "status": "PASS",
-  "errors": [],
-  "warnings": [],
-  "metrics": {
-    "records": 2507,
-    "station_id_type": "STRING",
-    "distinct_station_ids": 2507,
-    "invalid_station_id_records": 0
-  }
-}
-```
+文档、DDL、HTTP/Kafka schema、同源样例、异常算例、分工和运行标准齐全，契约检查与仓库 CI 通过后，由组长确认文档 PR 并记录基线提交。#31 保留实际评审/签收证据。启动不要求产品提前完成；最终产品必须执行 runbook 的真实集成验收。
 
-错误输出示例：
-
-```json
-{
-  "kind": "station_information",
-  "status": "FAIL",
-  "errors": ["station_id must be STRING and non-empty: 1 invalid records"]
-}
-```
-
-`historical_trip_sample.csv`、GBFS Fixture 和 `station_status_event_v1.json` 均为 synthetic 小样本，仅用于复现 schema 和测试边界，不代表完整生产数据；其字段结构来自 #4 冻结契约和 #7 实测 GBFS 结构。
-
-## 真实源观察记录
-
-2026-09-11 访问官方入口 `https://gbfs.citibikenyc.com/gbfs/2.3/gbfs.json` 成功。Discovery 声明 GBFS 2.3，但 Feed URL 当前指向 `https://gbfs.lyft.com/gbfs/2.3/bkn/...`。这是 provider 路由变化，不改变内部 `station_status_event_v1` 契约；Track B 应把实际 URL 和采集时间写入 snapshot manifest。
-
-原始月度 ZIP、完整 GBFS 快照和个人运行数据不进入 GitHub；仓库只保留下面的小型、脱敏结构 Fixture。
+改变字段、nullable、ID、时间、粒度、阈值、排序或失败行为时，先在 #31/后继变更 Issue 记录影响，再同步契约、样例及任务，交受影响两端复核。内部函数、组件和样式无需另立架构文档。

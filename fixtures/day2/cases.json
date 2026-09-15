@@ -1,0 +1,1582 @@
+{
+  "risk": [
+    {
+      "name": "ratio-0",
+      "input": {
+        "bikes": 0,
+        "docks": 100,
+        "capacity": 100,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "SHORTAGE_RISK",
+        "forecast": "SHORTAGE_RISK",
+        "projected": 0
+      }
+    },
+    {
+      "name": "ratio-15",
+      "input": {
+        "bikes": 15,
+        "docks": 85,
+        "capacity": 100,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "SHORTAGE_RISK",
+        "forecast": "SHORTAGE_RISK",
+        "projected": 15
+      }
+    },
+    {
+      "name": "ratio-16",
+      "input": {
+        "bikes": 16,
+        "docks": 84,
+        "capacity": 100,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "LOW_INVENTORY",
+        "forecast": "LOW_INVENTORY",
+        "projected": 16
+      }
+    },
+    {
+      "name": "ratio-30",
+      "input": {
+        "bikes": 30,
+        "docks": 70,
+        "capacity": 100,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "LOW_INVENTORY",
+        "forecast": "LOW_INVENTORY",
+        "projected": 30
+      }
+    },
+    {
+      "name": "ratio-31",
+      "input": {
+        "bikes": 31,
+        "docks": 69,
+        "capacity": 100,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "HEALTHY",
+        "forecast": "HEALTHY",
+        "projected": 31
+      }
+    },
+    {
+      "name": "ratio-69",
+      "input": {
+        "bikes": 69,
+        "docks": 31,
+        "capacity": 100,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "HEALTHY",
+        "forecast": "HEALTHY",
+        "projected": 69
+      }
+    },
+    {
+      "name": "ratio-70",
+      "input": {
+        "bikes": 70,
+        "docks": 30,
+        "capacity": 100,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "HIGH_INVENTORY",
+        "forecast": "HIGH_INVENTORY",
+        "projected": 70
+      }
+    },
+    {
+      "name": "ratio-84",
+      "input": {
+        "bikes": 84,
+        "docks": 16,
+        "capacity": 100,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "HIGH_INVENTORY",
+        "forecast": "HIGH_INVENTORY",
+        "projected": 84
+      }
+    },
+    {
+      "name": "ratio-85",
+      "input": {
+        "bikes": 85,
+        "docks": 15,
+        "capacity": 100,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "OVERFLOW_RISK",
+        "forecast": "OVERFLOW_RISK",
+        "projected": 85
+      }
+    },
+    {
+      "name": "ratio-100",
+      "input": {
+        "bikes": 100,
+        "docks": 0,
+        "capacity": 100,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "OVERFLOW_RISK",
+        "forecast": "OVERFLOW_RISK",
+        "projected": 100
+      }
+    },
+    {
+      "name": "recover",
+      "input": {
+        "bikes": 2,
+        "docks": 38,
+        "capacity": 40,
+        "net": 18,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "SHORTAGE_RISK",
+        "forecast": "HEALTHY",
+        "projected": 20
+      }
+    },
+    {
+      "name": "prevent",
+      "input": {
+        "bikes": 20,
+        "docks": 20,
+        "capacity": 40,
+        "net": -18,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "HEALTHY",
+        "forecast": "SHORTAGE_RISK",
+        "projected": 2
+      }
+    },
+    {
+      "name": "no-baseline",
+      "input": {
+        "bikes": 20,
+        "docks": 20,
+        "capacity": 40,
+        "net": null,
+        "sample_days": 0,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "HEALTHY",
+        "forecast": "INSUFFICIENT_DATA",
+        "projected": null
+      }
+    },
+    {
+      "name": "stopped",
+      "input": {
+        "bikes": 20,
+        "docks": 20,
+        "capacity": 40,
+        "net": 0,
+        "sample_days": 2,
+        "flags": false,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "SERVICE_UNAVAILABLE",
+        "forecast": "SERVICE_UNAVAILABLE",
+        "projected": null
+      }
+    },
+    {
+      "name": "stale-at-boundary",
+      "input": {
+        "bikes": 20,
+        "docks": 20,
+        "capacity": 40,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 180
+      },
+      "expected": {
+        "current": "STALE_DATA",
+        "forecast": "STALE_DATA",
+        "projected": null
+      }
+    },
+    {
+      "name": "stale-stopped",
+      "input": {
+        "bikes": 20,
+        "docks": 20,
+        "capacity": 40,
+        "net": 0,
+        "sample_days": 2,
+        "flags": false,
+        "age_seconds": 180
+      },
+      "expected": {
+        "current": "STALE_DATA",
+        "forecast": "STALE_DATA",
+        "projected": null
+      }
+    },
+    {
+      "name": "negative",
+      "input": {
+        "bikes": -1,
+        "docks": 41,
+        "capacity": 40,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "INVALID_DATA",
+        "forecast": "INVALID_DATA",
+        "projected": null
+      }
+    },
+    {
+      "name": "missing-docks",
+      "input": {
+        "bikes": 20,
+        "docks": null,
+        "capacity": 40,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "INSUFFICIENT_DATA",
+        "forecast": "INSUFFICIENT_DATA",
+        "projected": null
+      }
+    },
+    {
+      "name": "zero-serviceable",
+      "input": {
+        "bikes": 0,
+        "docks": 0,
+        "capacity": 40,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "INSUFFICIENT_DATA",
+        "forecast": "INSUFFICIENT_DATA",
+        "projected": null
+      }
+    },
+    {
+      "name": "missing-capacity",
+      "input": {
+        "bikes": 20,
+        "docks": 20,
+        "capacity": null,
+        "net": 0,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "HEALTHY",
+        "forecast": "HEALTHY",
+        "projected": 20
+      }
+    },
+    {
+      "name": "raw-negative-projection",
+      "input": {
+        "bikes": 20,
+        "docks": 20,
+        "capacity": 40,
+        "net": -30,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "HEALTHY",
+        "forecast": "SHORTAGE_RISK",
+        "projected": -10
+      }
+    },
+    {
+      "name": "raw-over-capacity",
+      "input": {
+        "bikes": 20,
+        "docks": 20,
+        "capacity": 40,
+        "net": 30,
+        "sample_days": 2,
+        "flags": true,
+        "age_seconds": 20
+      },
+      "expected": {
+        "current": "HEALTHY",
+        "forecast": "OVERFLOW_RISK",
+        "projected": 50
+      }
+    }
+  ],
+  "rebalance": [
+    {
+      "name": "normal",
+      "stations": [
+        {
+          "station_id": "source",
+          "bikes": 34,
+          "docks": 6,
+          "capacity": 40,
+          "projected": 36,
+          "lat": 40.7,
+          "lon": -74.001
+        },
+        {
+          "station_id": "target",
+          "bikes": 6,
+          "docks": 34,
+          "capacity": 40,
+          "projected": 4,
+          "lat": 40.7,
+          "lon": -74
+        }
+      ],
+      "expected": [
+        {
+          "source": "source",
+          "target": "target",
+          "move": 8,
+          "from_surplus": 8,
+          "to_deficit": 8
+        }
+      ]
+    },
+    {
+      "name": "do-not-worsen-now",
+      "stations": [
+        {
+          "station_id": "source",
+          "bikes": 2,
+          "docks": 38,
+          "capacity": 40,
+          "projected": 36,
+          "lat": 40.7,
+          "lon": -74
+        },
+        {
+          "station_id": "target",
+          "bikes": 20,
+          "docks": 20,
+          "capacity": 40,
+          "projected": 2,
+          "lat": 40.7,
+          "lon": -74
+        }
+      ],
+      "expected": []
+    },
+    {
+      "name": "target-currently-full",
+      "stations": [
+        {
+          "station_id": "source",
+          "bikes": 34,
+          "docks": 6,
+          "capacity": 40,
+          "projected": 36,
+          "lat": 40.7,
+          "lon": -74
+        },
+        {
+          "station_id": "target",
+          "bikes": 38,
+          "docks": 2,
+          "capacity": 40,
+          "projected": 2,
+          "lat": 40.7,
+          "lon": -74
+        }
+      ],
+      "expected": []
+    },
+    {
+      "name": "fractional-target",
+      "stations": [
+        {
+          "station_id": "source",
+          "bikes": 35,
+          "docks": 6,
+          "capacity": 41,
+          "projected": 36.6,
+          "lat": 40.7,
+          "lon": -74
+        },
+        {
+          "station_id": "target",
+          "bikes": 6,
+          "docks": 35,
+          "capacity": 41,
+          "projected": 4.4,
+          "lat": 40.7,
+          "lon": -74
+        }
+      ],
+      "expected": [
+        {
+          "source": "source",
+          "target": "target",
+          "move": 7,
+          "from_surplus": 7,
+          "to_deficit": 8
+        }
+      ]
+    },
+    {
+      "name": "one-source-two-targets",
+      "stations": [
+        {
+          "station_id": "source",
+          "bikes": 40,
+          "docks": 0,
+          "capacity": 40,
+          "projected": 40,
+          "lat": 40.7,
+          "lon": -74
+        },
+        {
+          "station_id": "A",
+          "bikes": 6,
+          "docks": 34,
+          "capacity": 40,
+          "projected": 4,
+          "lat": 40.7,
+          "lon": -74.001
+        },
+        {
+          "station_id": "B",
+          "bikes": 6,
+          "docks": 34,
+          "capacity": 40,
+          "projected": 4,
+          "lat": 40.7,
+          "lon": -74.002
+        }
+      ],
+      "expected": [
+        {
+          "source": "source",
+          "target": "A",
+          "move": 8,
+          "from_surplus": 12,
+          "to_deficit": 8
+        },
+        {
+          "source": "source",
+          "target": "B",
+          "move": 4,
+          "from_surplus": 4,
+          "to_deficit": 8
+        }
+      ]
+    },
+    {
+      "name": "distance-tie-by-id",
+      "stations": [
+        {
+          "station_id": "B",
+          "bikes": 34,
+          "docks": 6,
+          "capacity": 40,
+          "projected": 36,
+          "lat": 40.7,
+          "lon": -74
+        },
+        {
+          "station_id": "A",
+          "bikes": 34,
+          "docks": 6,
+          "capacity": 40,
+          "projected": 36,
+          "lat": 40.7,
+          "lon": -74
+        },
+        {
+          "station_id": "target",
+          "bikes": 6,
+          "docks": 34,
+          "capacity": 40,
+          "projected": 4,
+          "lat": 40.7,
+          "lon": -74.001
+        }
+      ],
+      "expected": [
+        {
+          "source": "A",
+          "target": "target",
+          "move": 8,
+          "from_surplus": 8,
+          "to_deficit": 8
+        }
+      ]
+    },
+    {
+      "name": "low-high-only",
+      "stations": [
+        {
+          "station_id": "source",
+          "bikes": 26,
+          "docks": 14,
+          "capacity": 40,
+          "projected": 28,
+          "lat": 40.7,
+          "lon": -74
+        },
+        {
+          "station_id": "target",
+          "bikes": 14,
+          "docks": 26,
+          "capacity": 40,
+          "projected": 12,
+          "lat": 40.7,
+          "lon": -74
+        }
+      ],
+      "expected": []
+    },
+    {
+      "name": "capacity-differs",
+      "stations": [
+        {
+          "station_id": "source",
+          "bikes": 34,
+          "docks": 6,
+          "capacity": 42,
+          "projected": 36,
+          "lat": 40.7,
+          "lon": -74
+        },
+        {
+          "station_id": "target",
+          "bikes": 6,
+          "docks": 34,
+          "capacity": 42,
+          "projected": 4,
+          "lat": 40.7,
+          "lon": -74
+        }
+      ],
+      "expected": [
+        {
+          "source": "source",
+          "target": "target",
+          "move": 6,
+          "from_surplus": 6,
+          "to_deficit": 9
+        }
+      ]
+    },
+    {
+      "name": "missing-coordinates",
+      "stations": [
+        {
+          "station_id": "source",
+          "bikes": 34,
+          "docks": 6,
+          "capacity": 40,
+          "projected": 36,
+          "lat": null,
+          "lon": -74
+        },
+        {
+          "station_id": "target",
+          "bikes": 6,
+          "docks": 34,
+          "capacity": 40,
+          "projected": 4,
+          "lat": 40.7,
+          "lon": -74
+        }
+      ],
+      "expected": []
+    }
+  ],
+  "batches": [
+    {
+      "name": "complete",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "PUBLISH",
+      "station_count": 2
+    },
+    {
+      "name": "duplicate",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "PUBLISH",
+      "station_count": 2
+    },
+    {
+      "name": "partial",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "REJECT_KEEP_PREVIOUS",
+      "station_count": null,
+      "backend_profile": "recorded",
+      "published_as_of_utc": "2025-02-05T12:58:00Z",
+      "expected_as_of_utc": "2025-02-05T12:58:00Z"
+    },
+    {
+      "name": "conflict",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 35,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "REJECT_KEEP_PREVIOUS",
+      "station_count": null
+    },
+    {
+      "name": "empty",
+      "records": [
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "5356bbb42d4b10f56e97c318ce3fe6e6d81db707f66f1dccced2e1d69e636243",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_count": 0,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "PUBLISH",
+      "station_count": 0
+    },
+    {
+      "name": "timeout",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        }
+      ],
+      "advance_wall_seconds": 120,
+      "expected": "REJECT_KEEP_PREVIOUS",
+      "station_count": null
+    },
+    {
+      "name": "already-published",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "published_snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+      "expected": "IGNORE_DUPLICATE",
+      "station_count": null
+    },
+    {
+      "name": "older-than-published",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "published_snapshot_at_utc": "2025-02-05T13:01:00Z",
+      "expected": "REJECT_KEEP_PREVIOUS",
+      "station_count": null
+    },
+    {
+      "name": "unknown-contract",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "2.0",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "REJECT_KEEP_PREVIOUS",
+      "station_count": null
+    },
+    {
+      "name": "key-mismatch",
+      "records": [
+        {
+          "key": "wrong",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "REJECT_KEEP_PREVIOUS",
+      "station_count": null
+    },
+    {
+      "name": "live-rejects-replay",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "GBFS_REPLAY"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "GBFS_REPLAY"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "GBFS_REPLAY"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "REJECT_KEEP_PREVIOUS",
+      "station_count": null,
+      "backend_profile": "live"
+    },
+    {
+      "name": "mixed-origin",
+      "records": [
+        {
+          "key": "4199.12",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "4199.12",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 34,
+            "num_docks_available": 6,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "5484.09",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "station",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "FIXTURE"
+          },
+          "value": {
+            "station_id": "5484.09",
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "snapshot_at_local": "2025-02-05T08:00:00-05:00",
+            "last_reported_at_utc": "2025-02-05T12:59:40Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z",
+            "num_bikes_available": 6,
+            "num_docks_available": 34,
+            "num_bikes_disabled": 0,
+            "num_docks_disabled": 0,
+            "is_installed": true,
+            "is_renting": true,
+            "is_returning": true,
+            "source_version": "2.3"
+          }
+        },
+        {
+          "key": "__snapshot_end__",
+          "headers": {
+            "contract_version": "1.1",
+            "record_type": "snapshot_end",
+            "snapshot_id": "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+            "metadata_version": "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+            "data_origin": "GBFS_REPLAY"
+          },
+          "value": {
+            "station_count": 2,
+            "snapshot_at_utc": "2025-02-05T13:00:00Z",
+            "ingested_at_utc": "2025-02-05T13:00:02Z"
+          }
+        }
+      ],
+      "expected": "REJECT_KEEP_PREVIOUS",
+      "station_count": null,
+      "backend_profile": "recorded"
+    }
+  ],
+  "mapping": [
+    {
+      "name": "short-name",
+      "information": [
+        {
+          "station_id": "provider-A",
+          "short_name": "5484.09"
+        }
+      ],
+      "status_ids": [
+        "provider-A"
+      ],
+      "expected": [
+        {
+          "provider_station_id": "provider-A",
+          "station_id": "5484.09",
+          "mapping_status": "SHORT_NAME",
+          "mapping_reason": null
+        }
+      ]
+    },
+    {
+      "name": "missing-short-name",
+      "information": [
+        {
+          "station_id": "provider-A"
+        }
+      ],
+      "status_ids": [
+        "provider-A"
+      ],
+      "expected": [
+        {
+          "provider_station_id": "provider-A",
+          "station_id": "gbfs:provider-A",
+          "mapping_status": "ISOLATED",
+          "mapping_reason": "MISSING_SHORT_NAME"
+        }
+      ]
+    },
+    {
+      "name": "duplicate-short-name",
+      "information": [
+        {
+          "station_id": "provider-A",
+          "short_name": "5484.09"
+        },
+        {
+          "station_id": "provider-B",
+          "short_name": "5484.09"
+        }
+      ],
+      "status_ids": [
+        "provider-A",
+        "provider-B"
+      ],
+      "expected": [
+        {
+          "provider_station_id": "provider-A",
+          "station_id": "gbfs:provider-A",
+          "mapping_status": "ISOLATED",
+          "mapping_reason": "DUPLICATE_SHORT_NAME"
+        },
+        {
+          "provider_station_id": "provider-B",
+          "station_id": "gbfs:provider-B",
+          "mapping_status": "ISOLATED",
+          "mapping_reason": "DUPLICATE_SHORT_NAME"
+        }
+      ]
+    },
+    {
+      "name": "missing-metadata",
+      "information": [],
+      "status_ids": [
+        "provider-C"
+      ],
+      "expected": [
+        {
+          "provider_station_id": "provider-C",
+          "station_id": "gbfs:provider-C",
+          "mapping_status": "ISOLATED",
+          "mapping_reason": "MISSING_METADATA"
+        }
+      ]
+    }
+  ]
+}

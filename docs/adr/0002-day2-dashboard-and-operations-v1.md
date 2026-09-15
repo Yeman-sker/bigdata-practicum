@@ -1,12 +1,14 @@
 # ADR-0002：Day 2 地图首页与运营建议契约 v1
 
-- 状态：Accepted
+- 状态：Accepted（历史基线，现行产品/API/规则由 [ADR-0004](0004-parallel-development-baseline.md) 指向的后继文件承接）
 - 日期：2026-09-14
 - 关联：[Issue #4：Product & Data Contract v1](https://github.com/Yeman-sker/bigdata-practicum/issues/4)
 - 上位决策：[ADR-0001](0001-product-data-contract-v1.md)
 - 适用范围：从 Day 1 起共 7 天的敏捷开发周期中的 Day 2 产品与接口设计
 
 ## 背景
+
+本文保留当时的决定。现行使用 [产品与交互](../product.md)、[OpenAPI](../contracts/openapi.yaml)、[风险与调度规则](../contracts/operations.md) 和 [交付计划](../plans/delivery.md)；混合 risk_type、旧 move_bikes 公式及旧排期不再作为 v1.1 实现依据。
 
 ADR-0001 已冻结数据源、标识符、时间、数仓和服务层基础契约。本 ADR 只补充本轮已经确认的地图首页、历史回放、风险展示和调度建议规则，不改变 ADR-0001 的数据语义。
 
