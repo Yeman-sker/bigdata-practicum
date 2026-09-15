@@ -134,6 +134,30 @@ public final class Operations {
         return List.copyOf(out);
     }
 
+    /** Apply request-time expiry to a row loaded from ADS. */
+    public static Risk forRead(Risk risk, Instant asOf) {
+        if (asOf.isBefore(risk.expiresAt()) || risk.currentStatus() == Status.INVALID_DATA) return risk;
+        return new Risk(risk.stationId(), risk.metadata(), risk.observation(), Status.STALE_DATA,
+                "STALE_OBSERVATION", Status.STALE_DATA, "STALE_OBSERVATION", null, null, null,
+                null, null, null, null, risk.expiresAt());
+    }
+
+    /** Keep suggestions only while both endpoint observations are still usable. */
+    public static List<Suggestion> suggestionsForRead(List<Suggestion> suggestions,
+                                                       Map<String, Risk> risks, Instant asOf) {
+        return suggestions.stream().filter(s -> asOf.isBefore(s.expiresAt()))
+                .filter(s -> {
+                    Risk from = risks.get(s.fromStationId()), to = risks.get(s.toStationId());
+                    return from != null && to != null && usableForSuggestion(forRead(from, asOf))
+                            && usableForSuggestion(forRead(to, asOf));
+                }).toList();
+    }
+
+    private static boolean usableForSuggestion(Risk risk) {
+        return risk.currentStatus() != Status.STALE_DATA && risk.currentStatus() != Status.SERVICE_UNAVAILABLE
+                && risk.currentStatus() != Status.INVALID_DATA && risk.currentStatus() != Status.INSUFFICIENT_DATA;
+    }
+
     private static int serviceable(Risk r) { return r.observation().bikes() + r.observation().docks(); }
     private static int need(Risk r) { return Math.max(0, (int)Math.ceil(.30 * r.metadata().capacity() - r.projectedBikes())); }
     private static boolean feasible(Risk r) { return r.metadata() != null && r.metadata().capacity() != null && r.metadata().capacity() > 0
