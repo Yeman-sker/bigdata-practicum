@@ -1391,7 +1391,7 @@ export default function App() {
               {transientMessage && <span>{transientDetails[transientMessage] ?? "已恢复上一个合法选择。"}</span>}
               {refreshError && !expired && <span>{map?.mode === "replay" ? "已恢复上一个可用日期和小时。" : "保留上次仍有效的地图数据。"}</span>}
               {(refreshError || expired || fatalError) && <button type="button" className="primary-button" disabled={refreshing || loading} onClick={retry}>{refreshing || loading ? "重试中…" : "重试"}</button>}
-              {!refreshError && !expired && !fatalError && !transientMessage && mode === "live" && <button type="button" className="quiet-button" disabled={refreshing} onClick={retry}>{refreshing ? "刷新中…" : "立即刷新"}</button>}
+              {map && !refreshError && !expired && !fatalError && !transientMessage && mode === "live" && <button type="button" className="quiet-button" disabled={refreshing} onClick={retry}>{refreshing ? "刷新中…" : "立即刷新"}</button>}
             </section>
           )}
         </div>
