@@ -1,0 +1,9 @@
+citibike:
+  api:
+    historical-data-origin: FIXTURE
+    replay-clock-mode: recorded
+
+spring:
+  kafka:
+    listener:
+      auto-startup: false
