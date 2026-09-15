@@ -12,6 +12,7 @@ public final class OperationsSelfTest {
         boundaries();
         forecastAndRebalance();
         batchGate();
+        expiryView();
         System.out.println("OperationsSelfTest: OK");
     }
     private static void boundaries() {
@@ -64,5 +65,17 @@ public final class OperationsSelfTest {
         Headers emptyHeaders = new Headers("1.1", "snapshot_end", emptyId, mv, "FIXTURE");
         assert new BatchConsumer(Set.of(), "recorded").acceptEnd(new SnapshotEnd("__snapshot_end__", emptyHeaders, 0,
                 o.snapshotAt(), AS_OF), AS_OF).outcome() == BatchOutcome.PUBLISH;
+    }
+
+    private static void expiryView() {
+        RiskCalculator c = new RiskCalculator();
+        Instant observed = AS_OF.minusSeconds(20);
+        Observation o = new Observation("s", observed, observed, 5, 5, true, true, true);
+        Metadata m = new Metadata("s", "S", 40.7, -74.0, 10);
+        Risk risk = c.calculate(o, m, Map.of(new DayHour(3, 8), new Profile(0, 0, 0, 1)), AS_OF, "dataset");
+        Risk expired = forRead(risk, risk.expiresAt());
+        assert expired.currentStatus() == Status.STALE_DATA && expired.projectedBikes() == null;
+        Suggestion suggestion = new Suggestion("x", "snap", "s", "s", 1, 1, 1, 0, 1, AS_OF, risk.expiresAt());
+        assert suggestionsForRead(List.of(suggestion), Map.of("s", risk), risk.expiresAt()).isEmpty();
     }
 }

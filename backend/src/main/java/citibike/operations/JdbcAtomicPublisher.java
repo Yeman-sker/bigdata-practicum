@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.PreparedStatement;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.List;
 import java.util.Objects;
@@ -36,7 +37,7 @@ public final class JdbcAtomicPublisher implements Operations.AtomicPublisher {
                      ingested_at_utc,as_of_utc,published_at_utc,data_origin,clock_mode)
                     VALUES (1,?,?,?,?,?,?,?,?,?)
                     """, release.snapshotId(), release.metadataVersion(), release.baselineDatasetId(),
-                    release.snapshotAt(), release.ingestedAt(), release.asOf(), release.publishedAt(),
+                    Timestamp.from(release.snapshotAt()), Timestamp.from(release.ingestedAt()), Timestamp.from(release.asOf()), Timestamp.from(release.publishedAt()),
                     release.dataOrigin(), release.clockMode());
         });
     }
@@ -61,8 +62,8 @@ public final class JdbcAtomicPublisher implements Operations.AtomicPublisher {
             set(ps, 14, r.currentReason(), Types.VARCHAR); set(ps, 15, r.forecastReason(), Types.VARCHAR);
             set(ps, 16, r.fillRatio(), Types.DOUBLE); set(ps, 17, r.expectedInbound(), Types.DOUBLE); set(ps, 18, r.expectedOutbound(), Types.DOUBLE);
             set(ps, 19, r.expectedNetFlow(), Types.DOUBLE); set(ps, 20, r.projectedBikes(), Types.DOUBLE); set(ps, 21, r.sampleDays(), Types.BIGINT);
-            ps.setObject(22, r.observation().snapshotAt()); set(ps, 23, o.lastReportedAt(), Types.TIMESTAMP_WITH_TIMEZONE);
-            ps.setObject(24, r.expiresAt()); set(ps, 25, r.forecastFor(), Types.TIMESTAMP_WITH_TIMEZONE);
+            setInstant(ps, 22, r.observation().snapshotAt()); setInstant(ps, 23, o.lastReportedAt());
+            setInstant(ps, 24, r.expiresAt()); setInstant(ps, 25, r.forecastFor());
         });
     }
 
@@ -76,11 +77,15 @@ public final class JdbcAtomicPublisher implements Operations.AtomicPublisher {
         jdbc.batchUpdate(sql, suggestions, suggestions.size(), (ps, s) -> {
             ps.setString(1, s.suggestionId()); ps.setString(2, s.snapshotId()); ps.setString(3, s.fromStationId()); ps.setString(4, s.toStationId());
             ps.setInt(5, s.moveBikes()); ps.setInt(6, s.fromSurplus()); ps.setInt(7, s.toDeficit()); ps.setInt(8, s.distanceMeters());
-            ps.setInt(9, s.priority()); ps.setObject(10, s.generatedAt()); ps.setObject(11, s.expiresAt());
+            ps.setInt(9, s.priority()); setInstant(ps, 10, s.generatedAt()); setInstant(ps, 11, s.expiresAt());
         });
     }
 
     private static void set(PreparedStatement ps, int index, Object value, int type) throws java.sql.SQLException {
         if (value == null) ps.setNull(index, type); else ps.setObject(index, value);
+    }
+
+    private static void setInstant(PreparedStatement ps, int index, java.time.Instant value) throws java.sql.SQLException {
+        if (value == null) ps.setNull(index, Types.TIMESTAMP); else ps.setTimestamp(index, Timestamp.from(value));
     }
 }
