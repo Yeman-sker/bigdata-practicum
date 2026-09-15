@@ -219,6 +219,12 @@ input:focus-visible {
 
 .status-panel strong { font-size: 15px; }
 .status-panel span { color: var(--muted); }
+.status-panel .lineage { display: grid; gap: 2px; }
+.status-panel .lineage code {
+  overflow-wrap: anywhere;
+  color: var(--primary);
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
 .primary-button,
 .quiet-button {

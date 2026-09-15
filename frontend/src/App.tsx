@@ -15,6 +15,7 @@ import {
   canDrawInventory,
   isExpiredAt,
   isMapExpired,
+  isTraversalStatus,
   nextAvailableHour,
   particleOffsets,
   playbackDelay,
@@ -72,7 +73,9 @@ type MapResponse = {
   data_origin: "GBFS_LIVE" | "GBFS_REPLAY" | "HISTORICAL" | "FIXTURE";
   clock_mode: "wall" | "recorded";
   dataset_id: string | null;
+  baseline_dataset_id: string | null;
   snapshot_id: string | null;
+  metadata_version: string | null;
   service_date: string;
   hour: number | null;
   observed_at_utc: string | null;
@@ -319,6 +322,13 @@ const errorLabels: Record<number, string> = {
   503: "暂时无法连接",
 };
 
+const transientDetails: Record<string, string> = {
+  "查询范围过大": "请缩小查询范围后重试。",
+  "暂无可用历史": "当前没有可回放的日期。",
+  "该小时不可用": "已保留当前合法小时。",
+  "该日期不可用": "已保留当前合法日期。",
+};
+
 const originLabels = {
   GBFS_LIVE: "实时",
   GBFS_REPLAY: "录制快照",
@@ -356,6 +366,13 @@ function newYorkHour(value: string | null) {
     hour: "2-digit",
     hourCycle: "h23",
   }).format(new Date(value)));
+}
+
+function compactLabel(value: string, limit = 10) {
+  const characters = Array.from(value);
+  return characters.length > limit
+    ? `${characters.slice(0, limit - 1).join("")}…`
+    : value;
 }
 
 function isoWeekday(serviceDate: string) {
@@ -558,6 +575,7 @@ function MapScene({
 
   const dispatches =
     map.mode === "live" && view === "dispatch" && !expired ? suggestions : [];
+  const stationById = new Map(map.stations.map((station) => [station.station_id, station]));
   const selectedSuggestion = dispatches.find(
     ({ suggestion_id }) => suggestion_id === selectedSuggestionId,
   );
@@ -568,8 +586,14 @@ function MapScene({
     const selected = suggestion.suggestion_id === selectedSuggestionId;
     const path = curvePath(from, to, suggestion.suggestion_id);
     const routeWidth = Math.min(7, 2.5 + suggestion.move_bikes * 0.25);
-    const labelX = Math.min(width - 246, Math.max(16, (from.x + to.x) / 2 - 115));
+    const labelWidth = 320;
+    const labelX = Math.min(width - labelWidth - 16, Math.max(16, (from.x + to.x) / 2 - labelWidth / 2));
     const labelY = Math.min(height - 72, Math.max(16, (from.y + to.y) / 2 - 96));
+    const fromStation = stationById.get(suggestion.from_station_id);
+    const toStation = stationById.get(suggestion.to_station_id);
+    const fromName = fromStation?.station_name || suggestion.from_station_id;
+    const toName = toStation?.station_name || suggestion.to_station_id;
+    const routeReason = `依据：+1h ${statusLabels[fromStation?.forecast_status ?? ""] ?? "可调出"} → ${statusLabels[toStation?.forecast_status ?? ""] ?? "需补车"}`;
     return (
       <g
         key={`${suggestion.suggestion_id}:${overlay ? "overlay" : "base"}`}
@@ -588,7 +612,7 @@ function MapScene({
             d={path}
             role="button"
             tabIndex={0}
-            aria-label={`${suggestion.from_station_id} 到 ${suggestion.to_station_id}，调度 ${suggestion.move_bikes} 辆，${suggestion.distance_meters} 米；按方括号键巡览建议`}
+            aria-label={`${fromName}（${suggestion.from_station_id}）到 ${toName}（${suggestion.to_station_id}），调度 ${suggestion.move_bikes} 辆，${suggestion.distance_meters} 米；${routeReason}；按方括号键巡览建议`}
             onClick={(event) => { event.stopPropagation(); onSelectSuggestion(suggestion.suggestion_id); }}
             onFocus={() => onSelectSuggestion(suggestion.suggestion_id)}
             onKeyDown={(event) => {
@@ -601,9 +625,9 @@ function MapScene({
         )}
         {overlay && (
           <g className="route-label" transform={`translate(${labelX} ${labelY})`}>
-            <rect width="230" height="56" rx="12" />
-            <text x="14" y="22">{suggestion.from_station_id} → {suggestion.to_station_id} · {suggestion.move_bikes} 辆 · {suggestion.distance_meters} m</text>
-            <text className="route-reason" x="14" y="43">缓解 +1h 缺车风险</text>
+            <rect width={labelWidth} height="56" rx="12" />
+            <text x="14" y="22">{compactLabel(fromName)} → {compactLabel(toName)} · {suggestion.move_bikes} 辆 · {suggestion.distance_meters} m</text>
+            <text className="route-reason" x="14" y="43">{routeReason}</text>
           </g>
         )}
       </g>
@@ -1058,8 +1082,29 @@ export default function App() {
   }, [clockElapsedMs, map]);
 
   const sortedStations = useMemo(
-    () => sortStations(map?.stations ?? [], view) as Station[],
-    [map?.stations, view],
+    () => sortStations(
+      map?.stations ?? [],
+      view,
+      (station: Station) => displayStatus(
+        station,
+        mode,
+        view,
+        expired || isExpiredAt(map, station.expires_at_utc, clockElapsedMs),
+      ),
+    ) as Station[],
+    [clockElapsedMs, expired, map, mode, view],
+  );
+  const traversalStations = useMemo(
+    () => sortedStations.filter((station) => isTraversalStatus(
+      displayStatus(
+        station,
+        mode,
+        view,
+        expired || isExpiredAt(map, station.expires_at_utc, clockElapsedMs),
+      ),
+      mode,
+    )),
+    [clockElapsedMs, expired, map, mode, sortedStations, view],
   );
   const searchResults = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("zh-CN");
@@ -1098,16 +1143,16 @@ export default function App() {
         return;
       }
       if (typing) return;
-      if (event.key.toLocaleLowerCase() === "n" && sortedStations.length) {
+      if (!event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLocaleLowerCase() === "n" && traversalStations.length) {
         event.preventDefault();
-        const index = sortedStations.findIndex(({ station_id }) => station_id === selectedStationId);
+        const index = traversalStations.findIndex(({ station_id }) => station_id === selectedStationId);
         const delta = event.shiftKey ? -1 : 1;
-        const next = sortedStations[index < 0
-          ? delta > 0 ? 0 : sortedStations.length - 1
-          : (index + delta + sortedStations.length) % sortedStations.length];
+        const next = traversalStations[index < 0
+          ? delta > 0 ? 0 : traversalStations.length - 1
+          : (index + delta + traversalStations.length) % traversalStations.length];
         openStation(next.station_id);
       }
-      if (view === "dispatch" && suggestions.length && ["[", "]"].includes(event.key)) {
+      if (!event.altKey && !event.ctrlKey && !event.metaKey && view === "dispatch" && suggestions.length && ["[", "]"].includes(event.key)) {
         event.preventDefault();
         const index = suggestions.findIndex(({ suggestion_id }) => suggestion_id === selectedSuggestionId);
         const delta = event.key === "]" ? 1 : -1;
@@ -1119,7 +1164,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closePanel, closeStation, openStation, panel, selectedStationId, selectedSuggestionId, sortedStations, suggestions, view]);
+  }, [closePanel, closeStation, openStation, panel, selectedStationId, selectedSuggestionId, suggestions, traversalStations, view]);
 
   useEffect(() => {
     if (fatalError && !map) window.requestAnimationFrame(() => retryButtonRef.current?.focus());
@@ -1172,6 +1217,7 @@ export default function App() {
     if (expired) return { text: "数据已过期", kind: "error" };
     if (refreshError) return { text: `刷新失败 · ${formatNewYorkTime(map?.observed_at_utc ?? null)}`, kind: "warning" };
     if (map?.mode === "live" && map.stations.length === 0) return { text: "暂无站点", kind: "empty" };
+    if (map?.mode === "live" && view === "dispatch" && suggestions.length === 0) return { text: "暂无可行建议", kind: "empty" };
     if (map?.mode === "replay" && map.flows.length === 0) return { text: "本小时无流量", kind: "empty" };
     if (!map && mode === "replay" && availability?.dates.length === 0) return { text: "暂无可用历史", kind: "empty" };
     if (!map) return { text: "加载中", kind: "loading" };
@@ -1204,7 +1250,7 @@ export default function App() {
 
   const handleMapBackground = () => {
     if (selectedStationId) closeStation();
-    else if (panel) closePanel(false);
+    else if (panel) closePanel();
     else if (selectedSuggestionId) setSelectedSuggestionId(null);
   };
 
@@ -1326,9 +1372,13 @@ export default function App() {
             <section className="status-panel surface" aria-label="数据状态详情">
               <strong>{status.text}</strong>
               <span>{map ? `契约 ${map.contract_version} · ${originLabels[map.data_origin]}` : "尚未取得可用响应"}</span>
+              {!map && mode === "replay" && availability?.dates.length === 0 && <span>当前没有可回放的日期。</span>}
               {map?.observed_at_utc && <span>最后观测 {formatNewYorkTime(map.observed_at_utc)}</span>}
+              {map?.dataset_id && <span className="lineage">数据集 <code>{map.dataset_id}</code></span>}
+              {map?.baseline_dataset_id && <span className="lineage">基线 <code>{map.baseline_dataset_id}</code></span>}
+              {map?.snapshot_id && <span className="lineage">快照 <code>{map.snapshot_id}</code></span>}
               {hiddenFlows.length > 0 && <span>未绘制 {hiddenFlows.length} 条 OD，共 {hiddenFlowRides} 次骑行</span>}
-              {transientMessage && <span>{transientMessage === "查询范围过大" ? "请缩小查询范围后重试。" : "已恢复上一个合法选择。"}</span>}
+              {transientMessage && <span>{transientDetails[transientMessage] ?? "已恢复上一个合法选择。"}</span>}
               {refreshError && !expired && <span>保留上次仍有效的地图数据。</span>}
               {(refreshError || expired || fatalError) && <button type="button" className="primary-button" disabled={refreshing || loading} onClick={retry}>{refreshing || loading ? "重试中…" : "重试"}</button>}
               {!refreshError && !expired && !fatalError && !transientMessage && mode === "live" && <button type="button" className="quiet-button" disabled={refreshing} onClick={retry}>{refreshing ? "刷新中…" : "立即刷新"}</button>}

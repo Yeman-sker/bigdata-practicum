@@ -5,6 +5,7 @@ import {
   canDrawInventory,
   isExpiredAt,
   isMapExpired,
+  isTraversalStatus,
   nextAvailableHour,
   particleOffsets,
   playbackDelay,
@@ -24,6 +25,10 @@ test("UI model preserves contract semantics", () => {
   ];
   assert.deepEqual(sortStations(stations).map(({ station_id }) => station_id), ["a", "x", "b"]);
   assert.deepEqual(sortStations(stations, "dispatch").map(({ station_id }) => station_id), ["b", "x", "a"]);
+  assert.deepEqual(sortStations(stations, "current", () => "STALE_DATA").map(({ station_id }) => station_id), ["a", "b", "x"]);
+  assert.equal(isTraversalStatus("HEALTHY", "live"), false);
+  assert.equal(isTraversalStatus("SHORTAGE_RISK", "live"), true);
+  assert.equal(isTraversalStatus("NOT_APPLICABLE", "replay"), true);
 
   assert.equal(nextAvailableHour([8, 10, 12], 10), 12);
   assert.equal(nextAvailableHour([8, 10, 12], 12), null);

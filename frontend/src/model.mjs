@@ -31,13 +31,18 @@ export function particleOffsets(stationId, count) {
   });
 }
 
-export function sortStations(stations, view = "current") {
+export function sortStations(stations, view = "current", resolveStatus) {
   const field = view === "current" ? "current_status" : "forecast_status";
+  const statusOf = resolveStatus ?? ((station) => station[field]);
   return [...stations].sort(
     (a, b) =>
-      (riskOrder.get(a[field]) ?? 99) - (riskOrder.get(b[field]) ?? 99) ||
+      (riskOrder.get(statusOf(a)) ?? 99) - (riskOrder.get(statusOf(b)) ?? 99) ||
       String(a.station_id).localeCompare(String(b.station_id)),
   );
+}
+
+export function isTraversalStatus(status, mode = "live") {
+  return mode === "replay" || status !== "HEALTHY";
 }
 
 export function isExpiredAt(map, expiresAt, elapsedMs = 0) {
