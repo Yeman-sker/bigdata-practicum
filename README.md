@@ -10,7 +10,7 @@
 
 ## 组员从这里开始
 
-1. 阅读 [产品与交互](docs/product.md)，了解五条 P0 使用路径。
+1. 阅读 [产品与交互](docs/product.md) 和 [前端交互与视觉设计](docs/frontend-design.md)，了解五条 P0 使用路径及页面呈现。
 2. 阅读 [架构与模块边界](docs/architecture.md)，找到自己生产/消费的数据。
 3. 按 [契约索引](docs/contracts/README.md) 查看字段、表、事件、规则和 [OpenAPI](docs/contracts/openapi.yaml)。
 4. 从 [交付计划](docs/plans/delivery.md) 进入自己的 Issue，用 [共享样例](fixtures/day2/README.md) 独立开工。
@@ -150,6 +150,8 @@ bigdata-practicum/
 │   └── gbfs/                         # Day 1 GBFS 交接样例
 ├── docs/
 │   ├── product.md                    # 产品与 UI 行为
+│   ├── frontend-design.md            # #30 全屏地图交互与视觉规范
+│   ├── assets/frontend/              # 前端状态设计图
 │   ├── architecture.md               # 进程、目录责任与交接
 │   ├── runbook.md                    # 现有/待实现入口与运行验收
 │   ├── contracts/                    # 字段、数仓、Kafka、规则和 OpenAPI
