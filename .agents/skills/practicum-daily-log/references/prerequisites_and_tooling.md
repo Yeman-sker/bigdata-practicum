@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | 视频音轨 / 关键帧提取 | 已有 `ffmpeg`，或已提供的转录与截图 | 只列缺少的能力和拟执行命令；已有转录时不必安装 ffmpeg |
 | Word 编辑与渲染 | 当前环境的文档工具、已安装的 `python-docx` 与渲染器 | Codex 可先查询 `load_workspace_dependencies`；其他环境检查实际可用工具 |
-| 浏览器 / 桌面截图 | 用户指定的工具；Codex 中为 `cua_repl` | 读取运行时 API；不因缺少开源 Cua CLI 改换工具 |
+| 浏览器 / 桌面截图 | WSL 控制 Windows 时使用安装在 Windows 的开源 Cua Driver；其他环境使用用户指定的可用工具 | 读取 [WSL 宿主机参考](wsl_cua_host_setup.md)；工具不可用时说明证据缺口，继续处理已有录屏或截图 |
 | 个人字段 | 用户信息、已有文档或已提供的配置 | 仅补充缺失字段，不要求安装 dotenv 或创建仓库内配置 |
 | 复现实操 | 用户选定的现有 WSL2 / OrbStack 或远程环境 | 仅检查任务涉及的组件，不运行仓库开发流程或全套环境验收 |
 
@@ -22,8 +22,6 @@
 
 Linux 组件和数据保留在 Linux 本地；所有本次脚本、构建、截图与中间文档放任务目录。只检查涉及的 Java / Hadoop 等依赖，不将完整大数据部署作为写日志的前置条件。
 
-AutoDL 由用户选择并启动。仅在提供的运行实例执行已授权任务，取回并核验产物后通过远程命令关机，不使用控制台管理生命周期。
+## WSL 控制 Windows 桌面时
 
-## 用户选择开源 Cua 时
-
-只有用户选择该工具且实际需要 Windows 原生桌面操作，才使用 [WSL 宿主机参考](wsl_cua_host_setup.md)。WSLg 窗口不能证明 Windows Chrome 可被捕获；`cua_repl` 与 `cua-driver` / `cua do` 的 API 不通用。
+执行环境为 WSL2 且需要控制 Windows 原生桌面时，使用 [WSL 宿主机参考](wsl_cua_host_setup.md)。开源 Cua Driver 安装并运行在 Windows，WSL 通过 Windows PowerShell 调用；WSLg 窗口不能证明 Windows Chrome 可被捕获。先核验已安装版本的实际 API，`cua do` 与 `cua-driver call` 的命令不能混用。

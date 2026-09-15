@@ -27,7 +27,7 @@ description: Generate or update a personal daily practicum log from teaching mat
 - 需要音视频抽取、运行实操或缺少文档工具时，读 [工具准备](references/prerequisites_and_tooling.md)；不把整张工具清单当作每次启动的门禁。
 - 写正文时读 [语言与事实规范](references/humanize_student_tone_guide.md)。
 - 创建 / 更新 Word 时读 [文档格式](references/document_format_spec.md)，使用包内 [校标](assets/ecut_logo.png)。有用户模板则优先采用；无需访问项目的 `docs/` 目录。
-- 浏览器 / 桌面操作遵循当前用户的工具偏好；Codex 中使用 `cua_repl` 并读取其运行时文档。只有用户选择开源 Cua 且需从 WSL 控制 Windows 原生窗口时，才读 [WSL 参考](references/wsl_cua_host_setup.md)。
+- 在 WSL 中需要操作或截取 Windows 原生窗口时，读取 [WSL 参考](references/wsl_cua_host_setup.md)，通过 Windows PowerShell 调用安装在 Windows 宿主机上的开源 Cua Driver；不要在 WSL 内安装或运行 Linux 驱动代替。其他环境使用用户指定且实际可用的工具。
 
 ## 完成条件
 
