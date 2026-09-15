@@ -11,7 +11,9 @@ import {
 import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import examplesJson from "../../fixtures/day2/http-examples.json";
 import {
+  canDrawForecast,
   canDrawInventory,
+  isExpiredAt,
   isMapExpired,
   nextAvailableHour,
   particleOffsets,
@@ -134,9 +136,9 @@ class ApiFailure extends Error {
 const cloneExample = <T,>(name: string): T =>
   structuredClone(examples[name].value) as T;
 
-const delay = (signal: AbortSignal) =>
+const delay = (signal: AbortSignal, milliseconds = 90) =>
   new Promise<void>((resolve, reject) => {
-    const id = window.setTimeout(resolve, 90);
+    const id = window.setTimeout(resolve, milliseconds);
     signal.addEventListener(
       "abort",
       () => {
@@ -177,7 +179,7 @@ async function getMap(
     return requestJson(`/api/v1/map?${query}`, signal);
   }
 
-  await delay(signal);
+  await delay(signal, refresh && fixtureScenario === "refresh_failure" ? 650 : 90);
   if (refresh && fixtureScenario === "refresh_failure") {
     throw new ApiFailure(503, "DATA_UNAVAILABLE", "fixture refresh failure");
   }
@@ -210,18 +212,27 @@ async function getMap(
       response.stations[0].forecast_status = "INVALID_DATA";
       response.stations[0].current_reason = "NEGATIVE_INVENTORY";
       response.stations[0].forecast_reason = "NEGATIVE_INVENTORY";
-      response.suggestions = [];
+    }
+    if (fixtureScenario === "expired_suggestion" && response.suggestions[0]) {
+      response.suggestions[0].expires_at_utc = response.as_of_utc;
     }
     return response;
   }
 
   const response = cloneExample<MapResponse>("replay");
+  if (fixtureScenario === "no_coordinates" && response.stations[0]) {
+    response.stations[0].lat = null;
+    response.stations[0].lon = null;
+  }
   if (selection) {
     const isExampleHour =
       selection.serviceDate === response.service_date && selection.hour === response.hour;
     response.service_date = selection.serviceDate;
     response.hour = selection.hour;
     if (!isExampleHour) response.flows = [];
+    if (fixtureScenario === "replay_not_found" && selection.hour === 1) {
+      throw new ApiFailure(404, "NOT_FOUND", "fixture replay date/hour unavailable");
+    }
   }
   return response;
 }
@@ -251,12 +262,16 @@ async function getHistory(
   }
 
   await delay(signal);
+  if (fixtureScenario === "history_failure") {
+    throw new ApiFailure(503, "DATA_UNAVAILABLE", "fixture history failure");
+  }
   const hasProfile = station.station_id === "5484.09" && fixtureScenario !== "no_baseline";
   const response = cloneExample<HistoryResponse>(hasProfile ? "history" : "empty_history");
+  const exampleDate = response.service_date;
   response.station_id = station.station_id;
   response.station_name = station.station_name;
   response.service_date = serviceDate;
-  if (!serviceDate) response.actual = [];
+  if (!serviceDate || serviceDate !== exampleDate) response.actual = [];
   return response;
 }
 
@@ -321,6 +336,28 @@ function formatNewYorkTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatNewYorkDateTime(value: string | null) {
+  if (!value) return "时间未知";
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "America/New_York",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(value));
+}
+
+function newYorkHour(value: string | null) {
+  if (!value) return null;
+  return Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(value)));
+}
+
 function isoWeekday(serviceDate: string) {
   const day = new Date(`${serviceDate}T12:00:00Z`).getUTCDay();
   return day === 0 ? 7 : day;
@@ -332,6 +369,12 @@ function statusClass(status: string) {
   if (status === "HEALTHY") return "healthy";
   if (status === "NOT_APPLICABLE") return "replay";
   return "neutral";
+}
+
+function displayStatus(station: Station, mode: Mode, view: View, expired: boolean) {
+  if (mode === "replay") return "NOT_APPLICABLE";
+  if (expired) return "STALE_DATA";
+  return view === "current" ? station.current_status : station.forecast_status;
 }
 
 function Icon({ name }: { name: "search" | "clock" | "layers" | "close" }) {
@@ -388,10 +431,10 @@ function MapBackdrop({ background = true }: { background?: boolean }) {
           <path d="M0 8h78M0 36h78M12 0v66M52 0v66" fill="none" stroke="#fff" strokeWidth="5" />
           <path d="M0 8h78M0 36h78M12 0v66M52 0v66" fill="none" stroke="#d9e1ea" strokeWidth="1" />
         </pattern>
-        <marker id="dispatch-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+        <marker id="dispatch-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
           <path d="M0 0 10 5 0 10Z" fill="#f5a000" />
         </marker>
-        <marker id="replay-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+        <marker id="replay-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
           <path d="M0 0 10 5 0 10Z" fill="#11a8a5" />
         </marker>
         <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -456,10 +499,9 @@ function MapSync({
       if (located.length === 1) {
         map.setView([located[0].lat!, located[0].lon!], 16, { animate: false });
       } else {
-        const narrow = map.getSize().x < 760;
         map.fitBounds(located.map(({ lat, lon }) => [lat!, lon!]), {
-          paddingTopLeft: [narrow ? 48 : 180, narrow ? 150 : 110],
-          paddingBottomRight: [narrow ? 48 : 180, narrow ? 170 : 130],
+          paddingTopLeft: [180, 110],
+          paddingBottomRight: [180, 130],
           maxZoom: 17,
           animate: false,
         });
@@ -489,6 +531,8 @@ function MapScene({
   map,
   view,
   expired,
+  suggestions,
+  elapsedMs,
   positions,
   selectedStationId,
   hoveredStationId,
@@ -500,6 +544,8 @@ function MapScene({
   map: MapResponse | null;
   view: View;
   expired: boolean;
+  suggestions: Suggestion[];
+  elapsedMs: number;
   positions: Map<string, Position>;
   selectedStationId: string | null;
   hoveredStationId: string | null;
@@ -511,61 +557,78 @@ function MapScene({
   if (!map) return <svg className="map-svg" viewBox={`0 0 ${width} ${height}`}><MapBackdrop background={false} /></svg>;
 
   const dispatches =
-    map.mode === "live" && view === "dispatch" && !expired ? map.suggestions : [];
+    map.mode === "live" && view === "dispatch" && !expired ? suggestions : [];
+  const selectedSuggestion = dispatches.find(
+    ({ suggestion_id }) => suggestion_id === selectedSuggestionId,
+  );
+  const renderDispatch = (suggestion: Suggestion, overlay = false) => {
+    const from = positions.get(suggestion.from_station_id);
+    const to = positions.get(suggestion.to_station_id);
+    if (!from || !to) return null;
+    const selected = suggestion.suggestion_id === selectedSuggestionId;
+    const path = curvePath(from, to, suggestion.suggestion_id);
+    const routeWidth = Math.min(7, 2.5 + suggestion.move_bikes * 0.25);
+    const labelX = Math.min(width - 246, Math.max(16, (from.x + to.x) / 2 - 115));
+    const labelY = Math.min(height - 72, Math.max(16, (from.y + to.y) / 2 - 96));
+    return (
+      <g
+        key={`${suggestion.suggestion_id}:${overlay ? "overlay" : "base"}`}
+        className={`${selected ? "route selected" : suggestion.priority <= 5 ? "route top" : "route"} ${overlay ? "route-overlay" : ""}`}
+        aria-hidden={overlay || undefined}
+      >
+        <path
+          className="route-line"
+          d={path}
+          markerEnd="url(#dispatch-arrow)"
+          style={{ strokeWidth: selected ? routeWidth + 2 : routeWidth }}
+        />
+        {!overlay && (
+          <path
+            className="route-hit"
+            d={path}
+            role="button"
+            tabIndex={0}
+            aria-label={`${suggestion.from_station_id} 到 ${suggestion.to_station_id}，调度 ${suggestion.move_bikes} 辆，${suggestion.distance_meters} 米；按方括号键巡览建议`}
+            onClick={(event) => { event.stopPropagation(); onSelectSuggestion(suggestion.suggestion_id); }}
+            onFocus={() => onSelectSuggestion(suggestion.suggestion_id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelectSuggestion(suggestion.suggestion_id);
+              }
+            }}
+          />
+        )}
+        {overlay && (
+          <g className="route-label" transform={`translate(${labelX} ${labelY})`}>
+            <rect width="230" height="56" rx="12" />
+            <text x="14" y="22">{suggestion.from_station_id} → {suggestion.to_station_id} · {suggestion.move_bikes} 辆 · {suggestion.distance_meters} m</text>
+            <text className="route-reason" x="14" y="43">缓解 +1h 缺车风险</text>
+          </g>
+        )}
+      </g>
+    );
+  };
   return (
     <svg className="map-svg" viewBox={`0 0 ${width} ${height}`} role="group" aria-label="运营地图数据图层">
       <MapBackdrop background={false} />
 
       <g className="routes">
-        {dispatches.map((suggestion) => {
-          const from = positions.get(suggestion.from_station_id);
-          const to = positions.get(suggestion.to_station_id);
-          if (!from || !to) return null;
-          const selected = suggestion.suggestion_id === selectedSuggestionId;
-          const path = curvePath(from, to, suggestion.suggestion_id);
-          const labelX = (from.x + to.x) / 2;
-          const labelY = (from.y + to.y) / 2 - 90;
-          return (
-            <g key={suggestion.suggestion_id} className={selected ? "route selected" : suggestion.priority <= 5 ? "route top" : "route"}>
-              <path className="route-line" d={path} markerEnd="url(#dispatch-arrow)" />
-              <path
-                className="route-hit"
-                d={path}
-                role="button"
-                tabIndex={0}
-                aria-label={`${suggestion.from_station_id} 到 ${suggestion.to_station_id}，调度 ${suggestion.move_bikes} 辆，${suggestion.distance_meters} 米`}
-                onClick={(event) => { event.stopPropagation(); onSelectSuggestion(suggestion.suggestion_id); }}
-                onFocus={() => onSelectSuggestion(suggestion.suggestion_id)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onSelectSuggestion(suggestion.suggestion_id);
-                  }
-                }}
-              />
-              {selected && (
-                <g className="route-label" transform={`translate(${labelX - 115} ${labelY - 28})`}>
-                  <rect width="230" height="56" rx="12" />
-                  <text x="14" y="22">{suggestion.from_station_id} → {suggestion.to_station_id} · {suggestion.move_bikes} 辆 · {suggestion.distance_meters} m</text>
-                  <text className="route-reason" x="14" y="43">缓解 +1h 缺车风险</text>
-                </g>
-              )}
-            </g>
-          );
-        })}
+        {dispatches.map((suggestion) => renderDispatch(suggestion))}
 
         {map.mode === "replay" && map.flows.map((flow) => {
           const from = positions.get(flow.from_station_id);
           const to = positions.get(flow.to_station_id);
           if (!from || !to) return null;
-          const path = curvePath(from, to, `${flow.from_station_id}:${flow.to_station_id}`);
+          const key = `${flow.from_station_id}:${flow.to_station_id}`;
+          const path = curvePath(from, to, key);
+          const pathId = `flow-${stableHash(key)}`;
           return (
-            <g key={`${flow.from_station_id}:${flow.to_station_id}`} className="flow-route">
-              <path d={path} markerEnd="url(#replay-arrow)" />
-              <g className="flow-label" transform={`translate(${(from.x + to.x) / 2 - 39} ${(from.y + to.y) / 2 - 36})`}>
-                <rect width="78" height="34" rx="10" />
-                <text x="39" y="22" textAnchor="middle">{flow.ride_count} 次骑行</text>
-              </g>
+            <g key={key} className="flow-route" role="img" aria-label={`${flow.from_station_id} 到 ${flow.to_station_id}，${flow.ride_count} 次骑行`}>
+              <path id={pathId} d={path} markerEnd="url(#replay-arrow)" style={{ strokeWidth: Math.min(8, 2.5 + Math.sqrt(flow.ride_count)) }} />
+              {[34, 68].map((offset) => (
+                <text key={offset} className="flow-arrow" aria-hidden="true"><textPath href={`#${pathId}`} startOffset={`${offset}%`}>›</textPath></text>
+              ))}
             </g>
           );
         })}
@@ -575,15 +638,14 @@ function MapScene({
         {map.stations.map((station) => {
           const position = positions.get(station.station_id);
           if (!position) return null;
-          const status = map.mode === "replay"
-            ? "NOT_APPLICABLE"
-            : view === "forecast"
-              ? station.forecast_status
-              : station.current_status;
+          const stationExpired = expired || isExpiredAt(map, station.expires_at_utc, elapsedMs);
+          const status = displayStatus(station, map.mode, view, stationExpired);
           const kind = statusClass(status);
-          const showInventory = map.mode === "live" && canDrawInventory(station, expired);
-          const showLabel =
-            station.station_id === selectedStationId || station.station_id === hoveredStationId;
+          const showInventory = map.mode === "live" && canDrawInventory(station, stationExpired);
+          const routeEndpoint = selectedSuggestion && [
+            selectedSuggestion.from_station_id,
+            selectedSuggestion.to_station_id,
+          ].includes(station.station_id);
           const particles = showInventory
             ? particleOffsets(station.station_id, station.num_bikes_available)
             : [];
@@ -597,13 +659,35 @@ function MapScene({
               {particles.map((offset: Position, index: number) => (
                 <circle key={index} className="inventory-particle" cx={offset.x} cy={offset.y} r="4" />
               ))}
+              {routeEndpoint && <circle className="route-endpoint-ring" r="18" />}
               {kind === "overflow" ? <rect className="station-anchor" x="-9" y="-9" width="18" height="18" rx="3" /> : <circle className="station-anchor" r="9" />}
-              {showLabel && (
-                <g className="station-label" transform="translate(-78 -64)">
-                  <rect width="156" height="40" rx="10" />
-                  <text x="12" y="25">{station.station_name || station.station_id}</text>
-                </g>
-              )}
+            </g>
+          );
+        })}
+      </g>
+
+      {selectedSuggestion && renderDispatch(selectedSuggestion, true)}
+
+      <g className="map-labels" aria-hidden="true">
+        {map.mode === "replay" && map.flows.map((flow) => {
+          const from = positions.get(flow.from_station_id);
+          const to = positions.get(flow.to_station_id);
+          if (!from || !to) return null;
+          return (
+            <g key={`${flow.from_station_id}:${flow.to_station_id}`} className="flow-label" transform={`translate(${(from.x + to.x) / 2 - 39} ${(from.y + to.y) / 2 - 36})`}>
+              <rect width="78" height="34" rx="10" />
+              <text x="39" y="22" textAnchor="middle">{flow.ride_count} 次骑行</text>
+            </g>
+          );
+        })}
+        {map.stations.map((station) => {
+          const position = positions.get(station.station_id);
+          const showLabel = station.station_id === selectedStationId || station.station_id === hoveredStationId;
+          if (!position || !showLabel) return null;
+          return (
+            <g key={station.station_id} className="station-label" transform={`translate(${position.x - 78} ${position.y - 64})`}>
+              <rect width="156" height="40" rx="10" />
+              <text x="12" y="25">{station.station_name || station.station_id}</text>
             </g>
           );
         })}
@@ -612,7 +696,7 @@ function MapScene({
   );
 }
 
-function FlowChart({ history, replay }: { history: HistoryResponse; replay: boolean }) {
+function FlowChart({ history, replay, currentHour }: { history: HistoryResponse; replay: boolean; currentHour: number | null }) {
   const values = [
     ...history.profile.flatMap((item) => [item.avg_inbound, item.avg_outbound, item.avg_net_flow]),
     ...history.actual.map((item) => item.net_flow),
@@ -626,8 +710,12 @@ function FlowChart({ history, replay }: { history: HistoryResponse; replay: bool
         <span className="inbound">入</span><span className="outbound">出</span><span className="net">净</span>
         {replay && <span className="actual">当日净</span>}
       </div>
-      <svg className="flow-chart" viewBox="0 0 340 105" role="img" aria-label="24 小时流入、流出和净流量曲线">
+      <svg className="flow-chart" viewBox="0 0 340 105" role="img" aria-label={`24 小时流入、流出和净流量曲线${currentHour === null ? "" : `，当前 ${String(currentHour).padStart(2, "0")} 时`}`}>
         <path className="chart-axis" d="M24 25V78H322M24 61H322" />
+        {currentHour !== null && <>
+          <path className="chart-current" d={`M${24 + (currentHour / 23) * 292} 25V78`} />
+          <text className="chart-current-label" x={24 + (currentHour / 23) * 292} y="18" textAnchor="middle">当前</text>
+        </>}
         {[0, 8, 16, 23].map((hour) => <text key={hour} x={24 + (hour / 23) * 292} y="98" textAnchor="middle">{String(hour).padStart(2, "0")}</text>)}
         {history.profile.length > 0 && <>
           <polyline className="chart-line inbound" points={points(history.profile.map((item) => ({ hour: item.hour, value: item.avg_inbound })))} />
@@ -658,19 +746,28 @@ export default function App() {
   const [selectedSuggestionId, setSelectedSuggestionId] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<ApiFailure | null>(null);
+  const [historyRetry, setHistoryRetry] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [fatalError, setFatalError] = useState<ApiFailure | null>(null);
   const [refreshError, setRefreshError] = useState<ApiFailure | null>(null);
   const [transientMessage, setTransientMessage] = useState<string | null>(null);
+  const [statusHeld, setStatusHeld] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof speeds)[number]>(1);
   const [replayActivity, setReplayActivity] = useState(0);
+  const [replayHeld, setReplayHeld] = useState(false);
+  const [clockElapsedMs, setClockElapsedMs] = useState(0);
 
   const mapRef = useRef<MapResponse | null>(null);
   const mapAbortRef = useRef<AbortController | null>(null);
   const mapRequestRef = useRef(0);
   const modeRequestRef = useRef(0);
   const historyAbortRef = useRef<AbortController | null>(null);
+  const replayCacheRef = useRef(new Map<string, MapResponse>());
+  const replayDatasetRef = useRef<string | null>(null);
+  const mapReceivedAtRef = useRef(performance.now());
   const panelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const modeButtonRef = useRef<HTMLButtonElement>(null);
@@ -679,7 +776,14 @@ export default function App() {
   const retryButtonRef = useRef<HTMLButtonElement>(null);
   const lensRef = useRef<HTMLElement>(null);
   const replayRef = useRef<HTMLDivElement>(null);
+  const replayDateRef = useRef<HTMLInputElement>(null);
   const stationRefs = useRef(new Map<string, HTMLButtonElement>());
+
+  const applyAvailability = useCallback((response: AvailabilityResponse) => {
+    if (replayDatasetRef.current !== response.dataset_id) replayCacheRef.current.clear();
+    replayDatasetRef.current = response.dataset_id;
+    setAvailability(response);
+  }, []);
 
   const loadMap = useCallback(async (
     targetMode: Mode,
@@ -690,14 +794,24 @@ export default function App() {
     mapAbortRef.current?.abort();
     const controller = new AbortController();
     mapAbortRef.current = controller;
-    if (!mapRef.current || mapRef.current.mode !== targetMode) setLoading(true);
+    const previous = mapRef.current;
+    const keepsMap = previous?.mode === targetMode;
+    if (!keepsMap) setLoading(true);
+    setRefreshing(Boolean(refresh && keepsMap));
     setTransientMessage(null);
     try {
-      const response = await getMap(targetMode, controller.signal, selection, refresh);
+      const cacheKey = targetMode === "replay" && selection
+        ? `${replayDatasetRef.current}:${selection.serviceDate}:${selection.hour}`
+        : null;
+      const cached = !refresh && cacheKey ? replayCacheRef.current.get(cacheKey) : undefined;
+      const response = cached ?? await getMap(targetMode, controller.signal, selection, refresh);
       assertMapSelection(response, targetMode, selection);
       if (request !== mapRequestRef.current) return;
+      if (cacheKey) replayCacheRef.current.set(cacheKey, response);
       mapRef.current = response;
+      mapReceivedAtRef.current = performance.now();
       setMap(response);
+      setClockElapsedMs(0);
       setFatalError(null);
       setRefreshError(null);
       setSelectedSuggestionId((current) =>
@@ -716,13 +830,37 @@ export default function App() {
       const failure = error instanceof ApiFailure
         ? error
         : new ApiFailure(0, "NETWORK_ERROR", "network failure");
-      const previous = mapRef.current;
-      if (previous && previous.mode === targetMode) setRefreshError(failure);
-      else setFatalError(failure);
+      if (previous && previous.mode === targetMode) {
+        if (targetMode === "replay") setPlaying(false);
+        if (targetMode === "replay" && selection && [400, 404, 422].includes(failure.status)) {
+          setServiceDate(previous.service_date);
+          setHour(previous.hour ?? 0);
+          setTransientMessage(errorLabels[failure.status]);
+          setRefreshError(null);
+          setSelectedStationId(null);
+          panelTriggerRef.current = statusButtonRef.current;
+          setPanel("status");
+          if (failure.status === 404) {
+            try {
+              const currentAvailability = await getAvailability(controller.signal);
+              if (request === mapRequestRef.current) applyAvailability(currentAvailability);
+            } catch {
+              // Keep the last known availability; the restored selection is still legal.
+            }
+          }
+        } else {
+          setRefreshError(failure);
+        }
+      } else {
+        setFatalError(failure);
+      }
     } finally {
-      if (request === mapRequestRef.current) setLoading(false);
+      if (request === mapRequestRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, []);
+  }, [applyAvailability]);
 
   useEffect(() => {
     void loadMap("live");
@@ -747,6 +885,7 @@ export default function App() {
 
   const closePanel = useCallback((restoreFocus = true) => {
     setPanel(null);
+    setReplayHeld(false);
     if (restoreFocus) window.requestAnimationFrame(() => panelTriggerRef.current?.focus());
   }, []);
 
@@ -777,26 +916,23 @@ export default function App() {
 
     setMode("replay");
     setView("current");
+    setAvailability(null);
+    setServiceDate("");
+    setHour(0);
     setLoading(true);
     const controller = new AbortController();
     mapAbortRef.current = controller;
     try {
       const response = await getAvailability(controller.signal);
       if (request !== modeRequestRef.current) return;
-      setAvailability(response);
+      applyAvailability(response);
       if (!response.dates.length) {
         setLoading(false);
         setTransientMessage("暂无可用历史");
         return;
       }
-      const fixtureReplay = cloneExample<MapResponse>("replay");
-      const preferred = usesFixture
-        ? response.dates.find(({ service_date }) => service_date === fixtureReplay.service_date)
-        : response.dates.at(-1);
-      const date = preferred ?? response.dates.at(-1)!;
-      const selectedHour = usesFixture && date.hours.includes(fixtureReplay.hour ?? -1)
-        ? fixtureReplay.hour!
-        : date.hours[0];
+      const date = response.dates.at(-1)!;
+      const selectedHour = date.hours[0];
       setServiceDate(date.service_date);
       setHour(selectedHour);
       panelTriggerRef.current = modeButtonRef.current;
@@ -814,13 +950,15 @@ export default function App() {
   const availableHours = currentDate?.hours ?? [];
 
   const selectHour = useCallback((nextHour: number, pause = true) => {
+    if (pause) setPlaying(false);
     if (!serviceDate || !availableHours.includes(nextHour)) {
       setTransientMessage("该小时不可用");
+      panelTriggerRef.current = statusButtonRef.current;
+      setPanel("status");
       return;
     }
-    if (pause) setPlaying(false);
     setHour(nextHour);
-    setReplayActivity((value) => value + 1);
+    if (pause) setReplayActivity((value) => value + 1);
     void loadMap("replay", { serviceDate, hour: nextHour });
   }, [availableHours, loadMap, serviceDate]);
 
@@ -830,6 +968,8 @@ export default function App() {
       const next = nextAvailableHour(availableHours, hour);
       if (next === null) {
         setPlaying(false);
+        setSelectedStationId(null);
+        setPanel("replay");
         return;
       }
       selectHour(next, false);
@@ -838,44 +978,85 @@ export default function App() {
   }, [availableHours, hour, mode, playing, selectHour, speed]);
 
   useEffect(() => {
-    if (!playing || panel !== "replay") return;
+    if (!playing || panel !== "replay" || replayHeld) return;
     const timer = window.setTimeout(() => {
       if (!replayRef.current?.contains(document.activeElement)) setPanel(null);
     }, 3000);
     return () => window.clearTimeout(timer);
-  }, [panel, playing, replayActivity]);
+  }, [panel, playing, replayActivity, replayHeld]);
 
   const selectedStation = map?.stations.find(({ station_id }) => station_id === selectedStationId) ?? null;
   useEffect(() => {
     historyAbortRef.current?.abort();
     setHistory(null);
-    if (!selectedStation) return;
+    setHistoryError(null);
+    if (!selectedStation) {
+      setHistoryLoading(false);
+      return;
+    }
     const controller = new AbortController();
     historyAbortRef.current = controller;
     setHistoryLoading(true);
     const date = mode === "replay" ? serviceDate : null;
     void getHistory(selectedStation, isoWeekday(date ?? map?.service_date ?? "2025-01-01"), date, controller.signal)
-      .then((response) => setHistory(response))
+      .then((response) => {
+        if (!controller.signal.aborted) setHistory(response);
+      })
       .catch((error) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setHistory({
-            station_id: selectedStation.station_id,
-            station_name: selectedStation.station_name,
-            service_date: date,
-            profile_start_date: null,
-            profile_end_date: null,
-            profile: [],
-            actual: [],
-          });
+        if (!controller.signal.aborted) {
+          setHistoryError(error instanceof ApiFailure
+            ? error
+            : new ApiFailure(0, "NETWORK_ERROR", "network failure"));
         }
       })
-      .finally(() => setHistoryLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setHistoryLoading(false);
+      });
     window.requestAnimationFrame(() => lensRef.current?.focus());
     return () => controller.abort();
-  }, [map?.service_date, mode, selectedStation, serviceDate]);
+  }, [historyRetry, map?.service_date, mode, selectedStation, serviceDate]);
 
   const positions = projection.positions;
-  const expired = isMapExpired(map);
+  const expired = isMapExpired(map, clockElapsedMs);
+  const suggestions = useMemo(() => {
+    if (!map || map.mode !== "live" || expired) return [];
+    const stations = new Map(map.stations.map((station) => [station.station_id, station]));
+    return map.suggestions.filter((suggestion) => {
+      const from = stations.get(suggestion.from_station_id);
+      const to = stations.get(suggestion.to_station_id);
+      return from && to &&
+        Number.isFinite(from.lat) && Number.isFinite(from.lon) &&
+        Number.isFinite(to.lat) && Number.isFinite(to.lon) &&
+        !isExpiredAt(map, suggestion.expires_at_utc, clockElapsedMs) &&
+        !isExpiredAt(map, from.expires_at_utc, clockElapsedMs) &&
+        !isExpiredAt(map, to.expires_at_utc, clockElapsedMs) &&
+        canDrawForecast(from) && canDrawForecast(to);
+    });
+  }, [clockElapsedMs, expired, map]);
+
+  useEffect(() => {
+    if (selectedSuggestionId && !suggestions.some(
+      ({ suggestion_id }) => suggestion_id === selectedSuggestionId,
+    )) setSelectedSuggestionId(null);
+  }, [selectedSuggestionId, suggestions]);
+
+  useEffect(() => {
+    if (!map || map.clock_mode !== "wall") return;
+    const businessTime = Date.parse(map.as_of_utc) + clockElapsedMs;
+    const nextExpiry = Math.min(
+      ...[map.expires_at_utc, ...map.stations.map(({ expires_at_utc }) => expires_at_utc), ...map.suggestions.map(({ expires_at_utc }) => expires_at_utc)]
+        .filter((value): value is string => Boolean(value))
+        .map(Date.parse)
+        .filter((value) => Number.isFinite(value) && value > businessTime),
+    );
+    if (!Number.isFinite(nextExpiry)) return;
+    const timer = window.setTimeout(
+      () => setClockElapsedMs(Math.max(0, performance.now() - mapReceivedAtRef.current)),
+      Math.max(0, nextExpiry - businessTime + 20),
+    );
+    return () => window.clearTimeout(timer);
+  }, [clockElapsedMs, map]);
+
   const sortedStations = useMemo(
     () => sortStations(map?.stations ?? [], view) as Station[],
     [map?.stations, view],
@@ -888,6 +1069,7 @@ export default function App() {
   }, [query, sortedStations]);
 
   useEffect(() => setSearchIndex(0), [query]);
+  useEffect(() => setSearchIndex((index) => Math.min(index, Math.max(0, searchResults.length - 1))), [searchResults.length]);
 
   const openStation = useCallback((stationId: string) => {
     setPanel(null);
@@ -920,35 +1102,45 @@ export default function App() {
         event.preventDefault();
         const index = sortedStations.findIndex(({ station_id }) => station_id === selectedStationId);
         const delta = event.shiftKey ? -1 : 1;
-        const next = sortedStations[(index + delta + sortedStations.length) % sortedStations.length];
+        const next = sortedStations[index < 0
+          ? delta > 0 ? 0 : sortedStations.length - 1
+          : (index + delta + sortedStations.length) % sortedStations.length];
         openStation(next.station_id);
       }
-      if (view === "dispatch" && map?.suggestions.length && ["[", "]"].includes(event.key)) {
+      if (view === "dispatch" && suggestions.length && ["[", "]"].includes(event.key)) {
         event.preventDefault();
-        const index = map.suggestions.findIndex(({ suggestion_id }) => suggestion_id === selectedSuggestionId);
+        const index = suggestions.findIndex(({ suggestion_id }) => suggestion_id === selectedSuggestionId);
         const delta = event.key === "]" ? 1 : -1;
-        const next = map.suggestions[(index + delta + map.suggestions.length) % map.suggestions.length];
+        const next = suggestions[index < 0
+          ? delta > 0 ? 0 : suggestions.length - 1
+          : (index + delta + suggestions.length) % suggestions.length];
         setSelectedSuggestionId(next.suggestion_id);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closePanel, closeStation, map?.suggestions, openStation, panel, selectedStationId, selectedSuggestionId, sortedStations, view]);
+  }, [closePanel, closeStation, openStation, panel, selectedStationId, selectedSuggestionId, sortedStations, suggestions, view]);
 
   useEffect(() => {
     if (fatalError && !map) window.requestAnimationFrame(() => retryButtonRef.current?.focus());
   }, [fatalError, map]);
 
   useEffect(() => {
-    if (!transientMessage) return;
-    const timer = window.setTimeout(() => setTransientMessage(null), 4000);
+    if (!transientMessage || statusHeld) return;
+    const timer = window.setTimeout(() => {
+      setTransientMessage(null);
+      setPanel((current) => current === "status" ? null : current);
+    }, 4000);
     return () => window.clearTimeout(timer);
-  }, [transientMessage]);
+  }, [statusHeld, transientMessage]);
 
   const changeDate = (nextDate: string) => {
     const next = availability?.dates.find(({ service_date }) => service_date === nextDate);
     if (!next) {
+      setPlaying(false);
       setTransientMessage("该日期不可用");
+      panelTriggerRef.current = statusButtonRef.current;
+      setPanel("status");
       return;
     }
     setPlaying(false);
@@ -964,32 +1156,50 @@ export default function App() {
     else void toggleMode(true);
   };
 
+  const locatedStationIds = new Set(
+    map?.stations
+      .filter(({ lat, lon }) => Number.isFinite(lat) && Number.isFinite(lon))
+      .map(({ station_id }) => station_id) ?? [],
+  );
+  const hiddenFlows = map?.mode === "replay"
+    ? map.flows.filter((flow) => !locatedStationIds.has(flow.from_station_id) || !locatedStationIds.has(flow.to_station_id))
+    : [];
+  const hiddenFlowRides = hiddenFlows.reduce((sum, flow) => sum + flow.ride_count, 0);
   const status = (() => {
     if (loading && !map) return { text: "加载中", kind: "loading" };
     if (fatalError && !map) return { text: errorLabels[fatalError.status] ?? "暂时无法连接", kind: "error" };
     if (transientMessage) return { text: transientMessage, kind: "warning" };
-    if (refreshError) return { text: `刷新失败 · ${formatNewYorkTime(map?.observed_at_utc ?? null)}`, kind: "warning" };
     if (expired) return { text: "数据已过期", kind: "error" };
+    if (refreshError) return { text: `刷新失败 · ${formatNewYorkTime(map?.observed_at_utc ?? null)}`, kind: "warning" };
     if (map?.mode === "live" && map.stations.length === 0) return { text: "暂无站点", kind: "empty" };
     if (map?.mode === "replay" && map.flows.length === 0) return { text: "本小时无流量", kind: "empty" };
     if (!map && mode === "replay" && availability?.dates.length === 0) return { text: "暂无可用历史", kind: "empty" };
     if (!map) return { text: "加载中", kind: "loading" };
     const source = originLabels[map.data_origin];
     return map.mode === "replay"
-      ? { text: `回放 · ${source} · ${map.service_date} ${String(map.hour).padStart(2, "0")}:00`, kind: "replay" }
+      ? { text: `回放 · ${source} · ${map.service_date} ${String(map.hour).padStart(2, "0")}:00${hiddenFlows.length ? ` · 未绘制 ${hiddenFlows.length} 条/${hiddenFlowRides} 次` : ""}`, kind: "replay" }
       : { text: `${view === "forecast" ? "+1h · " : view === "dispatch" ? "调度 · " : ""}${source} · ${formatNewYorkTime(map.observed_at_utc)}`, kind: "live" };
   })();
 
-  const hiddenFlows = map?.mode === "replay"
-    ? map.flows.filter((flow) => !positions.has(flow.from_station_id) || !positions.has(flow.to_station_id))
-    : [];
+  const selectedStationExpired = Boolean(selectedStation && (
+    expired || isExpiredAt(map, selectedStation.expires_at_utc, clockElapsedMs)
+  ));
+  const selectedInventoryAvailable = Boolean(
+    selectedStation && canDrawInventory(selectedStation, selectedStationExpired),
+  );
+  const selectedForecastAvailable = Boolean(selectedStation && canDrawForecast(selectedStation, selectedStationExpired));
+  const chartHour = mode === "replay" ? hour : newYorkHour(map?.observed_at_utc ?? null);
   const selectedPosition = selectedStation ? positions.get(selectedStation.station_id) : null;
   const lensStyle = selectedPosition
-    ? ({
-        left: `${(selectedPosition.x / projection.width) * 100}%`,
-        top: `${(selectedPosition.y / projection.height) * 100}%`,
-        transform: `${selectedPosition.x < projection.width / 2 ? "translate(36px, -50%)" : "translate(calc(-100% - 36px), -50%)"}`,
-      } as CSSProperties)
+    ? (() => {
+        const centerY = Math.min(projection.height - 224, Math.max(224, selectedPosition.y));
+        return {
+          left: `${(selectedPosition.x / projection.width) * 100}%`,
+          top: `${(centerY / projection.height) * 100}%`,
+          "--pointer-y": `${Math.min(376, Math.max(24, selectedPosition.y - centerY + 200))}px`,
+          transform: `${selectedPosition.x < projection.width / 2 ? "translate(36px, -50%)" : "translate(calc(-100% - 36px), -50%)"}`,
+        } as CSSProperties;
+      })()
     : undefined;
 
   const handleMapBackground = () => {
@@ -999,7 +1209,7 @@ export default function App() {
   };
 
   return (
-    <main className={`app mode-${mode}`}>
+    <main className={`app mode-${mode} view-${view}`}>
       <div className="map-stage" onClick={handleMapBackground}>
         <svg className="fallback-map" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><MapBackdrop /></svg>
         <MapContainer
@@ -1028,6 +1238,8 @@ export default function App() {
           map={map}
           view={view}
           expired={expired}
+          suggestions={suggestions}
+          elapsedMs={clockElapsedMs}
           positions={positions}
           selectedStationId={selectedStationId}
           hoveredStationId={hoveredStationId}
@@ -1040,7 +1252,8 @@ export default function App() {
         {map?.stations.map((station) => {
           const position = positions.get(station.station_id);
           if (!position) return null;
-          const label = `${station.station_name || "未命名站点"}，${station.station_id}，${statusLabels[mode === "replay" ? "NOT_APPLICABLE" : view === "forecast" ? station.forecast_status : station.current_status] ?? "状态未知"}`;
+          const stationExpired = expired || isExpiredAt(map, station.expires_at_utc, clockElapsedMs);
+          const label = `${station.station_name || "未命名站点"}，${station.station_id}，${statusLabels[displayStatus(station, mode, view, stationExpired)] ?? "状态未知"}`;
           return (
             <button
               key={station.station_id}
@@ -1065,7 +1278,7 @@ export default function App() {
         <nav className="global-controls" aria-label="地图工具" onClick={(event) => event.stopPropagation()}>
           <IconButton
             buttonRef={searchButtonRef}
-            label="搜索站点"
+            label="搜索站点 · N/Shift+N 巡览"
             icon="search"
             active={panel === "search"}
             expanded={panel === "search"}
@@ -1080,7 +1293,7 @@ export default function App() {
           />
           <IconButton
             buttonRef={viewButtonRef}
-            label={mode === "replay" ? "回放中不提供实时视角" : `地图视角：${view === "current" ? "当前" : view === "forecast" ? "+1h" : "调度"}`}
+            label={mode === "replay" ? "回放中不提供实时视角" : `地图视角：${view === "current" ? "当前" : view === "forecast" ? "+1h" : "调度"} · [/] 巡览调度`}
             icon="layers"
             active={panel === "view" || view !== "current"}
             disabled={mode === "replay"}
@@ -1089,7 +1302,16 @@ export default function App() {
           />
         </nav>
 
-        <div className="status-area" onClick={(event) => event.stopPropagation()}>
+        <div
+          className="status-area"
+          onClick={(event) => event.stopPropagation()}
+          onMouseEnter={() => setStatusHeld(true)}
+          onMouseLeave={() => setStatusHeld(false)}
+          onFocusCapture={() => setStatusHeld(true)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setStatusHeld(false);
+          }}
+        >
           <button
             ref={statusButtonRef}
             type="button"
@@ -1105,9 +1327,11 @@ export default function App() {
               <strong>{status.text}</strong>
               <span>{map ? `契约 ${map.contract_version} · ${originLabels[map.data_origin]}` : "尚未取得可用响应"}</span>
               {map?.observed_at_utc && <span>最后观测 {formatNewYorkTime(map.observed_at_utc)}</span>}
-              {hiddenFlows.length > 0 && <span>未绘制 {hiddenFlows.length} 条 OD，共 {hiddenFlows.reduce((sum, flow) => sum + flow.ride_count, 0)} 次骑行</span>}
-              {(refreshError || expired || fatalError) && <button type="button" className="primary-button" onClick={retry}>重试</button>}
-              {!refreshError && !expired && !fatalError && mode === "live" && <button type="button" className="quiet-button" onClick={retry}>立即刷新</button>}
+              {hiddenFlows.length > 0 && <span>未绘制 {hiddenFlows.length} 条 OD，共 {hiddenFlowRides} 次骑行</span>}
+              {transientMessage && <span>{transientMessage === "查询范围过大" ? "请缩小查询范围后重试。" : "已恢复上一个合法选择。"}</span>}
+              {refreshError && !expired && <span>保留上次仍有效的地图数据。</span>}
+              {(refreshError || expired || fatalError) && <button type="button" className="primary-button" disabled={refreshing || loading} onClick={retry}>{refreshing || loading ? "重试中…" : "重试"}</button>}
+              {!refreshError && !expired && !fatalError && !transientMessage && mode === "live" && <button type="button" className="quiet-button" disabled={refreshing} onClick={retry}>{refreshing ? "刷新中…" : "立即刷新"}</button>}
             </section>
           )}
         </div>
@@ -1123,14 +1347,19 @@ export default function App() {
                 autoFocus
                 value={query}
                 placeholder="站名或站点 ID"
+                role="combobox"
+                aria-expanded="true"
+                aria-autocomplete="list"
+                aria-controls="station-search-results"
+                aria-activedescendant={searchResults[searchIndex] ? `station-option-${stableHash(searchResults[searchIndex].station_id)}` : undefined}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "ArrowDown") {
                     event.preventDefault();
-                    setSearchIndex((index) => Math.min(index + 1, searchResults.length - 1));
+                    if (searchResults.length) setSearchIndex((index) => Math.min(index + 1, searchResults.length - 1));
                   } else if (event.key === "ArrowUp") {
                     event.preventDefault();
-                    setSearchIndex((index) => Math.max(index - 1, 0));
+                    if (searchResults.length) setSearchIndex((index) => Math.max(index - 1, 0));
                   } else if (event.key === "Enter" && searchResults[searchIndex]) {
                     event.preventDefault();
                     openStation(searchResults[searchIndex].station_id);
@@ -1139,13 +1368,15 @@ export default function App() {
               />
               {query && <button type="button" aria-label="清空搜索" onClick={() => setQuery("")}><svg viewBox="0 0 24 24" aria-hidden="true"><Icon name="close" /></svg></button>}
             </label>
-            <div className="search-results" role="listbox" aria-label="站点结果">
+            <div id="station-search-results" className="search-results" role="listbox" aria-label="站点结果">
               {searchResults.length ? searchResults.map((station, index) => {
-                const stationStatus = mode === "replay" ? "NOT_APPLICABLE" : view === "forecast" ? station.forecast_status : station.current_status;
+                const stationExpired = expired || isExpiredAt(map, station.expires_at_utc, clockElapsedMs);
+                const stationStatus = displayStatus(station, mode, view, stationExpired);
                 return (
                   <button
                     type="button"
                     role="option"
+                    id={`station-option-${stableHash(station.station_id)}`}
                     aria-selected={index === searchIndex}
                     className={index === searchIndex ? "selected" : ""}
                     key={station.station_id}
@@ -1159,7 +1390,7 @@ export default function App() {
                 );
               }) : <p className="empty-copy">没有匹配站点</p>}
             </div>
-            <footer>↑↓ 选择 · Enter 打开 · Esc 关闭 · N 巡览</footer>
+            <footer>↑↓ 选择 · Enter 打开 · Esc 关闭 · N/Shift+N 站点 · [/] 建议</footer>
           </section>
         )}
 
@@ -1179,7 +1410,7 @@ export default function App() {
                   closePanel();
                 }}
               >
-                {item === "current" ? "当前" : item === "forecast" ? "+1h" : `调度 ${map?.suggestions.length ?? 0}`}
+                {item === "current" ? "当前" : item === "forecast" ? "+1h" : `调度 ${suggestions.length}`}
               </button>
             ))}
           </div>
@@ -1200,32 +1431,50 @@ export default function App() {
             </button>
             <header>
               <h1>{selectedStation.station_name || "未命名站点"}</h1>
-              <span className={`station-state ${statusClass(mode === "replay" ? "NOT_APPLICABLE" : view === "forecast" ? selectedStation.forecast_status : selectedStation.current_status)}`}>
-                {statusLabels[mode === "replay" ? "NOT_APPLICABLE" : view === "forecast" ? selectedStation.forecast_status : selectedStation.current_status]}
+              <span className={`station-state ${statusClass(displayStatus(selectedStation, mode, view, selectedStationExpired))}`}>
+                {statusLabels[displayStatus(selectedStation, mode, view, selectedStationExpired)]}
               </span>
               <p>{selectedStation.station_id}{!selectedPosition && " · 无法定位"}</p>
             </header>
             {mode === "live" && (
               <div className="lens-numbers">
-                <strong>{canDrawInventory(selectedStation, expired) ? selectedStation.num_bikes_available : "—"}</strong>
+                <span
+                  className="metric-value"
+                  tabIndex={0}
+                  aria-label={`当前车辆 ${selectedInventoryAvailable ? selectedStation.num_bikes_available : "不可用"}，观测时间 ${formatNewYorkDateTime(selectedStation.observed_at_utc ?? map?.observed_at_utc ?? null)}`}
+                  data-tooltip={`观测 ${formatNewYorkDateTime(selectedStation.observed_at_utc ?? map?.observed_at_utc ?? null)}`}
+                ><strong>{selectedInventoryAvailable ? selectedStation.num_bikes_available : "—"}</strong></span>
                 <span>→</span><span>+1h</span>
-                <strong>{selectedStation.projected_bikes_1h ?? "—"}</strong>
+                <span
+                  className="metric-value"
+                  tabIndex={0}
+                  aria-label={`一小时估计 ${selectedForecastAvailable ? selectedStation.projected_bikes_1h : "不可用"}，目标时间 ${formatNewYorkDateTime(selectedStation.forecast_for_utc)}`}
+                  data-tooltip={`目标 ${formatNewYorkDateTime(selectedStation.forecast_for_utc)}`}
+                ><strong>{selectedForecastAvailable ? selectedStation.projected_bikes_1h : "—"}</strong></span>
                 <i />
-                <span>空桩</span><strong>{selectedStation.num_docks_available ?? "—"}</strong>
+                <span>空桩</span><strong>{selectedInventoryAvailable ? selectedStation.num_docks_available ?? "—" : "—"}</strong>
               </div>
             )}
-            {(selectedStation.current_reason || selectedStation.forecast_reason) && (
-              <p className="reason-copy">{reasonLabels[(view === "forecast" ? selectedStation.forecast_reason : selectedStation.current_reason) ?? ""] ?? "数据暂不可用"}</p>
+            {(selectedStationExpired || selectedStation.current_reason || selectedStation.forecast_reason) && (
+              <p className="reason-copy">{selectedStationExpired ? "数据已过期" : reasonLabels[(view === "current" ? selectedStation.current_reason : selectedStation.forecast_reason) ?? ""] ?? "数据暂不可用"}</p>
             )}
             {historyLoading && <p className="lens-loading">正在加载 24 小时曲线…</p>}
+            {!historyLoading && historyError && (
+              <p className="lens-history-error" role="alert">
+                <span>{errorLabels[historyError.status] ?? "历史数据加载失败"}</span>
+                <button type="button" onClick={() => setHistoryRetry((value) => value + 1)}>重试</button>
+              </p>
+            )}
             {!historyLoading && history && <>
-              {history.profile.length > 0 ? <FlowChart history={history} replay={mode === "replay"} /> : <p className="empty-copy lens-empty">暂无历史基线</p>}
+              {history.profile.length > 0 ? <FlowChart history={history} replay={mode === "replay"} currentHour={chartHour} /> : <p className="empty-copy lens-empty">暂无历史基线</p>}
               {mode === "replay" && history.actual.length === 0 && <p className="actual-empty">当日无活动</p>}
-              <footer>
-                {history.profile.length > 0 && <span>{history.profile[0].sample_days} 日样本</span>}
-                {history.profile_start_date && <span>{history.profile_start_date} — {history.profile_end_date}</span>}
-              </footer>
             </>}
+            <footer>
+              {history?.profile.length ? <span>{history.profile[0].sample_days} 日样本</span> : null}
+              {history?.profile_start_date && <span>{history.profile_start_date} — {history.profile_end_date}</span>}
+              {mode === "live" && (selectedStation.observed_at_utc || map?.observed_at_utc) && <span>观测 {formatNewYorkTime(selectedStation.observed_at_utc ?? map?.observed_at_utc ?? null)}</span>}
+              {mode === "live" && selectedStation.forecast_for_utc && <span>预测至 {formatNewYorkTime(selectedStation.forecast_for_utc)}</span>}
+            </footer>
           </section>
         )}
 
@@ -1235,11 +1484,17 @@ export default function App() {
             className="replay-controller surface"
             aria-label="历史回放控制器"
             onClick={(event) => { event.stopPropagation(); setReplayActivity((value) => value + 1); }}
-            onFocusCapture={() => setReplayActivity((value) => value + 1)}
+            onPointerEnter={() => { setReplayHeld(true); setReplayActivity((value) => value + 1); }}
+            onPointerLeave={() => setReplayHeld(false)}
+            onFocusCapture={() => { setReplayHeld(true); setReplayActivity((value) => value + 1); }}
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setReplayHeld(false);
+            }}
           >
             <label className="date-control">
               <span className="sr-only">回放日期</span>
               <input
+                ref={replayDateRef}
                 type="date"
                 value={serviceDate}
                 min={availability.dates[0]?.service_date}
@@ -1288,12 +1543,19 @@ export default function App() {
             type="button"
             className="replay-compact surface"
             aria-label={`展开回放控制器，当前 ${String(hour).padStart(2, "0")}:00，${speed} 倍速`}
+            onPointerEnter={(event) => {
+              setReplayHeld(true);
+              openPanel("replay", event.currentTarget);
+            }}
             onClick={(event) => {
               event.stopPropagation();
-              panelTriggerRef.current = event.currentTarget;
-              setPanel("replay");
+              openPanel("replay", event.currentTarget);
+              window.requestAnimationFrame(() => replayDateRef.current?.focus());
             }}
-            onFocus={() => setPanel("replay")}
+            onFocus={(event) => {
+              openPanel("replay", event.currentTarget);
+              window.requestAnimationFrame(() => replayDateRef.current?.focus());
+            }}
           >{String(hour).padStart(2, "0")}:00 · {speed}×</button>
         ) : null}
 
@@ -1301,7 +1563,7 @@ export default function App() {
           <section className="fatal-card surface" role="alert" onClick={(event) => event.stopPropagation()}>
             <h1>{errorLabels[fatalError.status] ?? "暂时无法连接"}</h1>
             <p>没有可显示的业务数据。</p>
-            <button ref={retryButtonRef} type="button" className="primary-button" onClick={retry}>重试</button>
+            <button ref={retryButtonRef} type="button" className="primary-button" disabled={loading} onClick={retry}>{loading ? "重试中…" : "重试"}</button>
           </section>
         )}
       </div>

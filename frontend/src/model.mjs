@@ -32,7 +32,7 @@ export function particleOffsets(stationId, count) {
 }
 
 export function sortStations(stations, view = "current") {
-  const field = view === "forecast" ? "forecast_status" : "current_status";
+  const field = view === "current" ? "current_status" : "forecast_status";
   return [...stations].sort(
     (a, b) =>
       (riskOrder.get(a[field]) ?? 99) - (riskOrder.get(b[field]) ?? 99) ||
@@ -40,11 +40,15 @@ export function sortStations(stations, view = "current") {
   );
 }
 
-export function isMapExpired(map, now = Date.now()) {
-  if (!map?.expires_at_utc) return false;
+export function isExpiredAt(map, expiresAt, elapsedMs = 0) {
+  if (!map || !expiresAt) return false;
   const reference =
-    map.clock_mode === "recorded" ? Date.parse(map.as_of_utc) : now;
-  return reference >= Date.parse(map.expires_at_utc);
+    Date.parse(map.as_of_utc) + (map.clock_mode === "recorded" ? 0 : Math.max(0, elapsedMs));
+  return reference >= Date.parse(expiresAt);
+}
+
+export function isMapExpired(map, elapsedMs = 0) {
+  return isExpiredAt(map, map?.expires_at_utc, elapsedMs);
 }
 
 export function canDrawInventory(station, mapExpired = false) {
@@ -59,6 +63,15 @@ export function canDrawInventory(station, mapExpired = false) {
       "INSUFFICIENT_DATA",
       "NOT_APPLICABLE",
     ].includes(station.current_status)
+  );
+}
+
+export function canDrawForecast(station, mapExpired = false) {
+  return (
+    canDrawInventory(station, mapExpired) &&
+    Number.isSafeInteger(station.projected_bikes_1h) &&
+    station.projected_bikes_1h >= 0 &&
+    !["SERVICE_UNAVAILABLE", "STALE_DATA", "INVALID_DATA", "INSUFFICIENT_DATA"].includes(station.forecast_status)
   );
 }
 
