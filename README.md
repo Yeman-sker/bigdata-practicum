@@ -1,5 +1,9 @@
 # 共享单车智能运营与调度大数据平台
 
+![城市骑行流动与供需调度的概念示意图](docs/concepts/city-bikes-concept.png)
+
+*项目概念图：用于表达车辆分布、流动与调度思路，不是 UI 设计稿或实际运行截图。*
+
 东华理工大学 2023 级数据科学与大数据技术专业生产实习项目。平台面向共享单车运营与调度人员，结合历史骑行记录和实时站点库存，识别站点供需规律、缺车/满桩风险，并给出可解释的调度建议。
 
 项目主题见 [Issue #3](https://github.com/Yeman-sker/bigdata-practicum/issues/3)。Day 2 v1.1 文档基线由 [ADR-0004](docs/adr/0004-parallel-development-baseline.md) 承接既有决策，任务与评审记录见 [Issue #4](https://github.com/Yeman-sker/bigdata-practicum/issues/4) 和 [#31](https://github.com/Yeman-sker/bigdata-practicum/issues/31)。
@@ -156,7 +160,8 @@ bigdata-practicum/
 │   ├── gbfs/                         # Day 1 采集交接
 │   ├── hdfs-hive/                    # Day 1 RAW / ODS 交接
 │   ├── spark/                        # Day 1 Spark 读取交接
-│   ├── concepts/                     # 既有概念预览
+│   ├── concepts/                     # 项目概念图与既有预览
+│   │   └── city-bikes-concept.png     # README 首屏概念图
 │   ├── handbook/                     # 教师手册
 │   ├── notes/                        # 课堂笔记
 │   └── templates/                    # 实习日志与报告模板
