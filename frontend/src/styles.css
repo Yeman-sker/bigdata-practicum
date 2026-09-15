@@ -99,6 +99,8 @@ input:focus-visible {
   -webkit-backdrop-filter: blur(12px);
 }
 
+.status-capsule:disabled { cursor: default; }
+
 .global-controls {
   position: absolute;
   z-index: 20;

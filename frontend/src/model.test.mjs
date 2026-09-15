@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  canDispatchStation,
   canDrawForecast,
   canDrawInventory,
   isExpiredAt,
@@ -50,5 +51,10 @@ test("UI model preserves contract semantics", () => {
   assert.equal(canDrawInventory({ num_bikes_available: 6, current_status: "SHORTAGE_RISK" }), true);
   assert.equal(canDrawInventory({ num_bikes_available: -1, current_status: "INVALID_DATA" }), false);
   assert.equal(canDrawForecast({ num_bikes_available: 6, current_status: "HEALTHY", projected_bikes_1h: 4, forecast_status: "SHORTAGE_RISK" }), true);
+  const fractionalForecast = { num_bikes_available: 6, current_status: "HEALTHY", projected_bikes_1h: -2.4, forecast_status: "SHORTAGE_RISK", capacity: 40, lat: 40.7, lon: -74 };
+  assert.equal(canDrawForecast(fractionalForecast), true);
+  assert.equal(canDispatchStation(fractionalForecast), true);
+  assert.equal(canDispatchStation({ ...fractionalForecast, capacity: null }), false);
+  assert.equal(canDispatchStation({ ...fractionalForecast, lat: null }), false);
   assert.equal(canDrawForecast({ num_bikes_available: 6, current_status: "HEALTHY", projected_bikes_1h: null, forecast_status: "INSUFFICIENT_DATA" }), false);
 });

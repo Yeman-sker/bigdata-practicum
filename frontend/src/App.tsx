@@ -11,6 +11,7 @@ import {
 import { MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import examplesJson from "../../fixtures/day2/http-examples.json";
 import {
+  canDispatchStation,
   canDrawForecast,
   canDrawInventory,
   isExpiredAt,
@@ -882,6 +883,7 @@ export default function App() {
           setRefreshError(failure);
         }
       } else {
+        setPanel(null);
         setFatalError(failure);
       }
     } finally {
@@ -1055,12 +1057,10 @@ export default function App() {
       const from = stations.get(suggestion.from_station_id);
       const to = stations.get(suggestion.to_station_id);
       return from && to &&
-        Number.isFinite(from.lat) && Number.isFinite(from.lon) &&
-        Number.isFinite(to.lat) && Number.isFinite(to.lon) &&
         !isExpiredAt(map, suggestion.expires_at_utc, clockElapsedMs) &&
         !isExpiredAt(map, from.expires_at_utc, clockElapsedMs) &&
         !isExpiredAt(map, to.expires_at_utc, clockElapsedMs) &&
-        canDrawForecast(from) && canDrawForecast(to);
+        canDispatchStation(from) && canDispatchStation(to);
     });
   }, [clockElapsedMs, expired, map]);
 
@@ -1372,6 +1372,7 @@ export default function App() {
             type="button"
             className={`status-capsule ${status.kind}`}
             aria-expanded={panel === "status"}
+            disabled={Boolean(fatalError && !map)}
             onClick={() => panel === "status" ? closePanel() : openPanel("status", statusButtonRef.current)}
           >
             <span className="status-dot" aria-hidden="true" />

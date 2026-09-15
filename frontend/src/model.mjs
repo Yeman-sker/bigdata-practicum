@@ -83,9 +83,18 @@ export function canDrawInventory(station, mapExpired = false) {
 export function canDrawForecast(station, mapExpired = false) {
   return (
     canDrawInventory(station, mapExpired) &&
-    Number.isSafeInteger(station.projected_bikes_1h) &&
-    station.projected_bikes_1h >= 0 &&
+    Number.isFinite(station.projected_bikes_1h) &&
     !["SERVICE_UNAVAILABLE", "STALE_DATA", "INVALID_DATA", "INSUFFICIENT_DATA"].includes(station.forecast_status)
+  );
+}
+
+export function canDispatchStation(station, mapExpired = false) {
+  return (
+    canDrawForecast(station, mapExpired) &&
+    Number.isSafeInteger(station.capacity) &&
+    station.capacity > 0 &&
+    Number.isFinite(station.lat) &&
+    Number.isFinite(station.lon)
   );
 }
 
