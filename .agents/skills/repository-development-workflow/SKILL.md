@@ -1,57 +1,41 @@
 ---
 name: repository-development-workflow
-description: Use for code, configuration, documentation, or maintenance changes in this repository; enforces GitHub CLI checks, safe cleanup of merged Codex worktrees, remote synchronization, issue-driven development, pre-flight code-review self-checks, and PR quality gates.
+description: Develop changes to repository source, configuration, shared docs, or skills and deliver a verified PR. Excludes personal practicum log generation.
 ---
 
-# 仓库开发规范
+# 仓库开发工作流
 
-本规范适用于本仓库的开发类任务。Issue 是范围、验收标准和后续反馈的唯一事实来源；不要把未经确认的额外需求带进实现。
+`practicum-daily-log` 生成或更新个人日志不适用本流程：不检查 GitHub、不同步仓库、不创建 worktree / Issue / PR、不运行仓库 CI。日志中的临时代码、截图和文档也不算仓库开发。混合请求只对明确要求修改仓库文件的部分应用本流程。
 
-## `gh` 先验门禁与 worktree 回收
+交付目标：完成用户要求的改动、适当验证与本地审查，提交可复核的 PR 并检查 CI。用户只要求本地改动或审查时，以该范围为完成条件。不要在首次实现后提前停工，也不要无限扩展任务。
 
-每次任务开始时，以及执行 `git worktree add` 前，必须执行一次完整的 `gh` 先验门禁。门禁未通过时，不得删除任何 worktree，也不得创建本次任务的 worktree。
+## 范围与授权
 
-1. **确认 GitHub CLI**：执行 `command -v gh`。未安装时：
-   - macOS 且存在 Homebrew：执行 `brew install gh`；
-   - Ubuntu/WSL 且存在 `apt-get`：执行 `sudo apt-get update` 和 `sudo apt-get install -y gh`（已是 root 时去掉 `sudo`）；
-   - 其他情况，提供 [GitHub CLI 官方安装指引](https://cli.github.com/manual/installation) 并停止流程。
-   安装命令失败或安装后仍找不到 `gh` 时停止，不继续后续 worktree 操作。
-2. **确认认证**：执行 `gh auth status --hostname github.com`。未认证或认证失效时，引导组员执行 `gh auth login --hostname github.com --web`，随后再次执行上述状态检查。Agent 不代替组员输入凭据；状态检查未成功时停止，不删除、不创建 worktree。
-3. **确认仓库权限**：执行 `gh repo view --json nameWithOwner --jq '.nameWithOwner'` 获取当前仓库的 `owner/name`。命令因仓库权限不足、网络异常或其他原因失败时，视为门禁失败并停止，不绕过认证。
+- 团队实现以组长发布的 Issue 和已确认的后续决定为依据；用户本轮明确要求优先于旧说明。缺少 Issue 时先查已有任务；只有范围仍不清楚时才询问。
+- 纯阅读、答疑、协作规范维护和小型文档修正可直接按用户请求执行，在 PR 写明依据，无需为了编号额外建 Issue。跨模块任务采用 [Issue 约定](../../../docs/agents/issue-tracker.md) 和详细模板。
+- 本 skill 的开发交付流程包含推送任务分支、创建 PR，以及记录本任务的验证结果；不扩大到无关 Issue、评论或外部发布。用户限定“本地”时不执行这些远程写入。
+- 默认由仓库负责人决定合并；只有负责人明确授权时才代为执行合并。未获合并结果，不关闭 Issue 或回收本任务 worktree。
 
-认证和仓库权限确认成功后，先执行 `git worktree list --porcelain` 回收已完成的并行任务：
+## 分支与同步
 
-- 只考虑同一条 porcelain 记录中同时明确给出路径和 `refs/heads/codex/*` 分支的 worktree；detached HEAD、`main`、非 `codex/*` 分支、路径不可访问或归属无法确认的全部跳过。传给 GitHub CLI 的分支名去掉 `refs/heads/` 前缀。
-- 将当前 `git rev-parse --show-toplevel` 对应的 worktree 跳过；比较前将路径规范化为绝对路径。对候选路径执行 `git -C <path> rev-parse --show-toplevel` 确认归属，再执行 `git -C <path> status --porcelain --untracked-files=all --ignored=matching`；任一命令失败或状态有任何输出时保留该 worktree。
-- 用 `gh pr list --repo <owner/name> --head <codex-branch> --state all --json number,state,mergedAt,url` 查询 PR。查询失败、无 PR、存在多个 PR，或唯一 PR 不是 `state == MERGED` 且 `mergedAt` 非空时，安全跳过并报告原因。
-- 只有候选 worktree 干净且对应唯一 PR 已合并时，才执行 `git worktree remove <path>`。禁止使用 `--force`，不删除本地分支；删除命令失败时保留并报告。
+1. 查看 `git status --short --branch`、`git worktree list --porcelain` 和远程地址，保留用户及其他任务的改动。
+2. 需要 GitHub 操作时检查一次 `command -v gh`、`gh auth status --hostname github.com`、`gh repo view --json nameWithOwner`。认证或仓库发生变化、调用失败后再重查；不在同一流程重复门禁。不代填凭据。缺失工具时复用已授权的安装范围，否则说明缺口。
+3. 修改前 `git fetch origin`。当前在干净的 `main` 才执行 `git pull --ff-only origin main`；在任务分支不要把这条命令当作同步默认分支。同步失败时保留现场，继续可做的阅读或诊断，说明基线未更新，不发布为已同步 PR。
+4. 从最新 `origin/main` 建 `codex/<issue-number>-<slug>` 分支和独立 worktree；维护例外可用 `codex/<slug>`。若当前已是本任务的 Codex worktree，检查基线后继续使用，不再嵌套创建。其他任务的分支不复用。
 
-单个候选的 GitHub 查询失败只影响该候选，不能据此删除；重复门禁仍需在创建新 worktree 前通过。门禁通过但清理查询遇到网络或状态不明确时，可以继续任务并报告保留的 worktree。
+旧 worktree 回收独立于开发；需要清理时才读 [安全回收规则](references/worktree-cleanup.md)，不让清理查询失败阻塞实现。
 
-## 工作流
+## 验证与审查
 
-1. **接收 Issue**：确认 Issue 编号、目标、验收标准和影响范围。没有对应 Issue 时，先请用户提供或确认 Issue；纯阅读、答疑和本规范维护可例外。
-2. **同步远程**：开始修改前先检查工作区并同步远程代码。
-   - 工作区干净时：执行 `git fetch origin`，再对默认分支（本仓库为 `main`）执行 `git pull --ff-only origin main`。
-   - 工作区有本地改动时：不得覆盖、重置或强行合并这些改动；至少执行 `git fetch origin`，并从最新的 `origin/main` 创建后续 worktree。
-   - 同步失败或远程历史无法快进时，停止开发并报告原因，不绕过同步门禁。
-3. **创建 Codex worktree**：创建前重复完整 `gh` 先验门禁；然后从已同步的 `origin/main` 创建独立分支和 worktree，分支命名为 `codex/<issue-number>-<short-slug>`；所有实现和验证都在该 worktree 中进行，避免直接修改 `main`。
-4. **敏捷实现**：以 Issue 验收标准为最小交付切片，优先复用仓库现有实现；每次只做能形成可验证反馈的改动。范围变化先回到 Issue 记录并确认，不做推测性功能。
-5. **本地自检 (Pre-flight Self-Review)**：
-   在推送分支和提交 PR 前，必须在 worktree 内调用 `code-review` 技能对本次改动（`origin/main...HEAD`）执行本地自检：
-   - **灭红灯（原地自愈）**：若自检报告存在 `🔴 阻断项 (Blockers)`（违反 ADR-0001 契约、单元测试不通过、遗漏 Issue 验收标准），**必须在本地就地修复**，直至消除所有阻断项。
-   - **放行黄灯（严禁内耗）**：若自检报告仅包含 `🟡 建议项 (Non-blocking / Nits)`（Fowler 异味、命名建议、非关键重构），**严禁在本地耗费时间过度设计，直接放行**，允许带入主干。
-6. **验证与创建 PR**：
-   - 运行与改动匹配的最小测试（例如 `python3 -m unittest discover` 或契约校验脚本），确保本地与 CI 门禁一致。
-   - 推送 `codex/...` 分支，严格按照 `.github/pull_request_template.md` 模板创建 Pull Request，明确填写关联 Issue、契约核验项以及实际验证命令输出。
-7. **负责人评估与快速收敛**：
-   Agent 不自行合并 PR。仓库负责人根据收敛型代码审查规范进行复审：
-   - **通过（APPROVE）**：无阻断项且 CI 自动化流水线（`Code Quality & Lint` / `Contract & Unit Tests`）全绿时，由负责人执行合并（`gh pr merge`）。
-   - **需修改（REQUEST_CHANGES）**：仅针对未修复的 Blocker 提出具体修改点。组员修复后触发复审模式（仅核验上轮 Blocker 是否解除，不增加新阻断项），确保 2 轮内快速收敛闭环。
+- 按改动选择验证。skill / AGENTS / 文档路由改动运行 `python -B -m unittest discover -s tests -p 'test_agent_skills.py' -v`，并用真实任务场景检查触发、授权与停止条件；其他改动运行受影响测试。依赖与完整本地命令见 [runbook](../../../docs/runbook.md)。
+- 提交前用 [code-review](../code-review/SKILL.md) 对实际交付 diff 自检。已提交内容用 `origin/main...HEAD`；尚未提交时还要包含 staged / unstaged / 本次新增文件，避免审到空 diff。
+- 修复本次引入的阻断问题，复跑受影响检查；无新增改动、失败或疑点时不重复全套验证。命名偏好、可选重构不阻塞交付。
+- 不提交密钥、个人资料、全量源数据、缓存、构建产物或临时截图。报告实际命令、关键结果及跳过项；检查未运行和检查失败都不能写成通过。
 
-## 交付门禁
+## PR 与完成条件
 
-- 未同步远程、未在 Codex worktree 中开发、未执行本地自检消除 Blocker 或未记录验证结果，不得发布正式 PR。
-- 绝不提交密钥、个人信息、全量源数据大文件、构建产物、缓存和临时截图。
-- 必须确保 GitHub Actions 自动化门禁全绿（绿色通过）。
-- 未得到负责人合并结果或后续指示前，不关闭 Issue，也不删除仍需复核的 worktree。
+按 [PR 模板](../../../.github/pull_request_template.md) 推送并创建 PR。已有 Issue 则引用；维护例外写明用户请求。数据契约未受影响时标为不适用，无需伪造契约核验。
+
+PR 创建后检查其最新提交的 CI（定义在 [.github/workflows/ci.yml](../../../.github/workflows/ci.yml)），修复本次改动导致的失败。创建 PR 是触发检查的步骤，不能要求 PR 创建前已有 CI 结果。排队、未运行或网络不可达如实标明，不宣称全绿。
+
+完成时给出 PR / 本地改动位置、验证结果和实际限制。合并条件是内容审查无阻断、最新 CI 通过及负责人决定；本地审查通过不等于已批准或已合并 GitHub PR。

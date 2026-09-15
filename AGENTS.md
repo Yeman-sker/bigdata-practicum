@@ -1,26 +1,23 @@
 # 仓库协作说明
 
-## 开发规范 skill
+## 任务边界
 
-涉及本仓库代码、配置、文档或其他开发改动时，必须先读取并遵循 [repository-development-workflow](.agents/skills/repository-development-workflow/SKILL.md)。该 skill 规定远程同步、Issue 驱动的敏捷开发、Codex worktree、PR 关联 Issue 以及仓库负责人评估和合并流程。
+用户当前明确要求及已给出的授权优先于本仓库 skill 的默认流程。先完成已授权的实现、验证与修复；仅对影响范围、数据安全或外部操作的真实缺口提问。若某条本地指令导致暂停，说明文件路径、原文和受影响步骤，并继续不受阻的工作。
 
-## `practicum-daily-log` 日志任务的临时文件隔离
+修改本仓库源码、配置、共享文档或 skill 本身时，先使用 [repository-development-workflow](.agents/skills/repository-development-workflow/SKILL.md)。它定义分支、Issue、PR 与完成条件；纯阅读和答疑无需运行发布流程。
 
-调用 `.agents/skills/practicum-daily-log` 生成实习日志时，凡是任务执行过程中涉及代码或产生的临时内容，必须放在 WSL 临时目录中，不得污染本代码库。
+**生成或更新个人实习日志是独立文档任务，不属于仓库开发。** 即使从本仓库启动或调用仓库分发的 `practicum-daily-log`，也不执行 Git / `gh` 门禁、同步、worktree、Issue、PR 或仓库 CI。临时代码和截图仍属于日志任务；只有用户明确要求修改仓库文件时，才对该部分使用开发流程。
 
-- 临时任务目录统一使用 `/tmp/practicum-daily-log/`，可在其下按日期或任务名继续分目录。
-- 临时编写、复制或修改的 Java/Python/Shell 代码、样例数据、构建目录、编译产物、运行日志、截图、中间文档和转换文件，全部放在该临时目录中。
-- 不要在仓库根目录或仓库内新增临时任务目录、源码副本、`target/`、缓存、截图和运行日志；不要为验证任务把临时文件写入 `src/`、`docs/` 或其他代码库目录。
-- 执行构建、测试或服务启动时，将工作目录、输出目录和日志路径显式指向 `/tmp/practicum-daily-log/` 下的对应任务目录。
-- 只有用户明确要求保留的最终交付物，才能从 `/tmp/practicum-daily-log/` 复制回代码库；复制前确认不包含临时产物、个人信息或无关文件。
-- 任务结束后优先保留临时目录供用户复核；如需清理，必须只清理本次任务创建的明确目录，不得影响仓库或其他临时任务。
+## 按任务查阅
 
-## Agent skills
+- 产品、模块或数据语义：从 [领域文档导航](docs/agents/domain.md) 选择相关文档，无需每次读取全仓库背景。
+- 发布或拆解团队任务：看 [Issue 约定](docs/agents/issue-tracker.md)。跨模块工作流使用详细模板，小型维护按实际范围说明目标和验证。
+- 环境部署或运行验收：看 [runbook](docs/runbook.md)；安装大数据组件时使用 `bigdata-env-setup`。
+- 实习日志：使用 `practicum-daily-log`。代码、样例、构建、日志、截图和中间文档统一放在执行环境的 `/tmp/practicum-daily-log/<task>/`（WSL 任务放 WSL 内）；仅用户明确要求保留的最终交付物可复制回仓库，复制前检查隐私和无关产物。默认保留临时目录供复核。
 
-### Issue tracker
+## 工具与运行边界
 
-本项目使用 GitHub Issues 驱动任务。组长发布 Issue，组员提交 PR，组长审核并合并。详见 `docs/agents/issue-tracker.md`。
-
-### Domain docs
-
-本项目采用 single-context 文档布局。详见 `docs/agents/domain.md`。
+- 浏览器与桌面 UI 使用 Codex Computer Use（`cua_repl`）；不使用 ego-browser / Ego Lite，除非用户改变偏好。接口调用、文件和命令行操作优先用对应 API / CLI。
+- 网页检索使用内置搜索与可用的 Exa；未获得成功结果时不声称使用过 Exa。
+- AutoDL 实例由用户选择并启动；不通过控制台创建、克隆、启动或管理实例。在用户提供的运行实例上继续已授权实验，取回并核验产物后用远程命令关机。
+- 本地 fixture 测试可直接运行并修复本次改动造成的失败；真实集群、业务库和完整数据实验按任务范围执行，不能用 fixture 通过代替真实验收。

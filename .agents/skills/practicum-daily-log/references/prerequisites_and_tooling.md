@@ -1,147 +1,29 @@
-# 生产实习每日日志自动化实操环境与前置工具规范 (Prerequisites & Tooling)
+# 日志任务工具准备
 
-本文档定义了 AI Agent（或组员）在执行 `practicum-daily-log` Skill 之前必须就绪的本地工具链、运行时依赖与权限配置。Agent 在启动视频解析或实操任务前，必须依据本文档进行前置环境检查（Pre-flight Check），若缺少任一组件应立刻给出明确的安装与配置指引。
+仅检查本次步骤需要的能力。生成日志无需 GitHub、Git 仓库、项目依赖或运行中的完整集群；已有材料可用时继续编写。
 
----
+| 当前步骤 | 优先使用 | 缺失时如何处理 |
+| --- | --- | --- |
+| 视频音轨 / 关键帧提取 | 已有 `ffmpeg`，或已提供的转录与截图 | 只列缺少的能力和拟执行命令；已有转录时不必安装 ffmpeg |
+| Word 编辑与渲染 | 当前环境的文档工具、已安装的 `python-docx` 与渲染器 | Codex 可先查询 `load_workspace_dependencies`；其他环境检查实际可用工具 |
+| 浏览器 / 桌面截图 | 用户指定的工具；Codex 中为 `cua_repl` | 读取运行时 API；不因缺少开源 Cua CLI 改换工具 |
+| 个人字段 | 用户信息、已有文档或已提供的配置 | 仅补充缺失字段，不要求安装 dotenv 或创建仓库内配置 |
+| 复现实操 | 用户选定的现有 WSL2 / OrbStack 或远程环境 | 仅检查任务涉及的组件，不运行仓库开发流程或全套环境验收 |
 
-## 一、 必需工具与依赖清单矩阵
+## 安装与授权
 
-| 组件类别 | 工具/依赖项 | 作用说明 | 推荐版本 | 安装/配置命令 |
-| :--- | :--- | :--- | :--- | :--- |
-| **音视频预处理** | `ffmpeg` | 极速剥离视频并压缩音频至 32k mono mp3（原生高效支持老师的 `.wmv` 及 `.mp4` 格式） | 4.x+ / 6.x+ | **macOS**: `brew install ffmpeg`<br>**Ubuntu/WSL2**: `sudo apt update && sudo apt install -y ffmpeg` |
-| **电脑操作驱动** | `cua-driver`<br>(trycua/cua) | 跨平台驱动宿主机浏览器、终端与 VSCode 截图 | 0.23+ | Windows + WSL2：在 Windows PowerShell 执行 `py -m pip install --user cua-driver`；其他环境再使用对应平台安装方式 |
-| **文档处理** | `python-docx` | 动态填充封面表头、增量追加表格、插入图片与排版 | 1.1.0+ | `pip install python-docx` |
-| **环境解析** | `python-dotenv` | 跨平台安全解析 `.practicum.env` 身份配置 | 1.0+ | `pip install python-dotenv` |
-| **宿主机桌面工具** | Google Chrome / Edge | 打开 HDFS 9870、YARN 8088 等 Web UI 供独立单窗口截图 | 最新稳定版 | 系统原生安装并设为默认或就绪 |
-| **宿主机代码工具** | VSCode | 原生打开当前项目，供独立截取高保真代码片段 | 最新稳定版 | 系统原生安装，建议具备 `code` 命令行别名 |
-| **推荐终端工具** | Ghostty (优先) / Windows Terminal | 运行大数据与集群实操命令，供独立单窗口截图 | 最新稳定版 | **macOS**: `brew install --cask ghostty`<br>**Windows**: Windows Terminal |
+复用现有工具和已授予的安装权限。只有确实需要、且不在已有授权范围内的宿主机 / 系统安装才提出确认，列出工具用途和完整命令；先完成能独立推进的材料整理。不要自动安装浏览器、编辑器或新终端来满足示例偏好。
 
----
+用户已同意的安装无需重复索要确认。任务范围内的临时文档脚本及其隔离环境放 `/tmp/practicum-daily-log/<task>/`；不修改仓库或全局 Python 来运行脚本。
 
-## 二、 环境准备与安装显式确认规范 (Confirmation Gate)
+## 需要复现实操时
 
-**核心铁律：严禁 Agent 在组员系统上静默擅自执行安装命令。**
+先确认实际实例名、运行用户和路径，不假定一定叫 `bigdata`。OrbStack 可用 `orb list` 查看、`orb -m <instance> ...` 执行；Windows 可用 `wsl --list --verbose` 查看、`wsl -d <distribution> -u <user> ...` 执行。不为写日志自动创建或重启实例。
 
-当 Agent 运行自检发现缺少必要依赖时，必须严格执行以下确认机制：
+Linux 组件和数据保留在 Linux 本地；所有本次脚本、构建、截图与中间文档放任务目录。只检查涉及的 Java / Hadoop 等依赖，不将完整大数据部署作为写日志的前置条件。
 
-1. **报告缺失现状**：清晰列出检测到缺失的具体工具（如：`cua-driver`、`ffmpeg`、`python-docx`）。
-2. **说明影响与计划执行命令**：
-   - 工具作用（如：“`cua-driver`：用于驱动宿主机浏览器与终端截图存证”）。
-   - 拟在宿主机执行的命令（如：`pip install cua-driver python-docx python-dotenv`）。
-3. **向组员主动发送确认询问**：
-   ```text
-   【环境依赖检查提示】
-   检测到当前环境尚未安装以下必要工具：
-   - cua-driver: 用于驱动宿主机浏览器与终端截图存证
-   - python-docx: 用于向实习日志 Word 表格追加内容与图片
+AutoDL 由用户选择并启动。仅在提供的运行实例执行已授权任务，取回并核验产物后通过远程命令关机，不使用控制台管理生命周期。
 
-   拟执行的安装命令为：
-   pip install cua-driver python-docx python-dotenv
+## 用户选择开源 Cua 时
 
-   请问是否允许我为您自动执行上述安装？
-   [请输入 y 确认执行 / n 拒绝自行安装]
-   ```
-4. **分支处理**：
-   - **组员确认（y/yes/允许/安装）**：Agent 执行安装并打印安装结果验证。
-   - **组员拒绝或未明确同意（n/我自己来/不用装）**：Agent 严禁执行命令，保持等待，并提示组员在终端手动安装完毕后告知 Agent 继续。
-
----
-
-## 三、 虚拟开发环境通道就绪指标 (根据 PRACTICUM_DEV_ENV)
-
-根据 `.practicum.env` 中的 `PRACTICUM_DEV_ENV` 设定，验证底层执行通道：
-
-### 1. 分支 A：macOS + OrbStack (`PRACTICUM_DEV_ENV=orbstack`)
-* **宿主机 CLI 检查**：
-  ```bash
-  which orb
-  orb list  # 必须包含名为 bigdata 且为 Ubuntu 22.04 jammy 的运行实例
-  ```
-* **实例运行状态**：若 `bigdata` 处于 `stopped`，Agent 需先执行 `orb start bigdata` 拉起。
-* **单向执行通道**：
-  ```bash
-  # 测试无密码直接进入 bigdata 实例执行
-  orb -m bigdata bash -c "whoami && uname -a"
-  ```
-
-### 2. 分支 B：Windows + WSL2 (`PRACTICUM_DEV_ENV=wsl2`)
-* **宿主机 CLI 检查**：
-  ```cmd
-  wsl --list --verbose  # 确保默认发行版或 Ubuntu-22.04 状态为 Running
-  ```
-* **单向执行通道**：
-  ```cmd
-  wsl -d Ubuntu-22.04 -u bigdata bash -c "whoami && uname -a"
-  ```
-* **系统守护检查**：确保 `/etc/wsl.conf` 已配置 `[boot]\nsystemd=true`。
-
----
-
-## 三、 Cua Computer-Use 权限与连通性检查
-
-Cua 需要直接控制宿主机的窗口与截屏能力：
-
-1. **CLI 连通性测试**：
-   ```bash
-   cua-driver --version
-   cua-driver list-tools
-   ```
-2. **操作系统权限授予 (重点)**：
-   * **macOS 宿主机**：
-     - 需要在「系统设置 $\to$ 隐私与安全性」中，为当前运行终端（如 Terminal / iTerm2 / VSCode）授予 **辅助功能 (Accessibility)** 和 **屏幕录制 (Screen Recording)** 权限。
-     - 检查命令：`cua-driver permissions status`
-   * **Windows 宿主机**：
-     - Windows + WSL2 时，必须启动 Windows 侧 `cua-driver.exe serve`；仅安装 WSL 版驱动可能只能看到 WSLg 窗口，无法枚举 Windows 原生 Chrome。
-     - 确保 Windows daemon 与 Chrome 位于同一个交互式用户桌面，防止窗口激活被后台安全策略静默拦截。
-     - 完整安装、daemon 启动、PowerShell JSON 调用和窗口级截图流程见 [wsl_cua_host_setup.md](wsl_cua_host_setup.md)。
-
----
-
-## 四、 虚拟机内部大数据基础配置自检 (内部对齐)
-
-Agent 在控制开发机运行实操前，需自检 Linux 实例内部的大数据就绪状态（严格遵循 `bigdata-env-setup` Skill）：
-* **双 JDK 脚本存在性**：
-  - `~/use-jdk8.sh` 能够切入 JDK 8（验证：`source ~/use-jdk8.sh && java -version 2>&1 | grep "1.8"`）。
-  - `~/use-jdk17.sh` 能够切入 JDK 17（验证：`source ~/use-jdk17.sh && java --version`）。
-* **软件与数据挂载根目录**：
-  - 软件部署目录：`/opt/soft` 存在且拥有读写权限。
-  - 大数据存储目录：`/data/hadoop` 存在且属主为工作用户。
-
----
-
-## 五、 Agent 自动化就绪检查命令 (Pre-flight Script)
-
-Agent 在执行前可单行评估环境就绪状态：
-
-```bash
-python3 -c "
-import sys, shutil
-
-def check(name, ok, tip):
-    status = '[\033[32mOK\033[0m]' if ok else '[\033[31mFAIL\033[0m]'
-    print(f'{status} {name}: {tip}')
-    return ok
-
-all_ok = True
-all_ok &= check('ffmpeg', shutil.which('ffmpeg') is not None, '用于抽取视频音轨')
-all_ok &= check('cua-driver', shutil.which('cua-driver') is not None, '用于跨平台电脑控制与截图')
-
-try:
-    import docx
-    check('python-docx', True, '用于 Word 日志表格追加')
-except ImportError:
-    all_ok &= check('python-docx', False, '需执行 pip install python-docx')
-
-try:
-    import dotenv
-    check('python-dotenv', True, '用于解析 .practicum.env')
-except ImportError:
-    all_ok &= check('python-dotenv', False, '需执行 pip install python-dotenv')
-
-if not all_ok:
-    print('\n\033[33m提示：部分前置工具缺失，请根据上述提示安装后再执行实操流水线。\033[0m')
-    sys.exit(1)
-else:
-    print('\n\033[32m所有核心前置工具与依赖已全部就绪！\033[0m')
-"
-```
+只有用户选择该工具且实际需要 Windows 原生桌面操作，才使用 [WSL 宿主机参考](wsl_cua_host_setup.md)。WSLg 窗口不能证明 Windows Chrome 可被捕获；`cua_repl` 与 `cua-driver` / `cua do` 的 API 不通用。

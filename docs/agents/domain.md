@@ -1,36 +1,15 @@
-# Domain Docs
+# 领域文档导航
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+本仓库共享一个业务上下文，Python、Java 与前端目录属于不同运行模块。按当前任务读取相关内容；文字修正、工具配置和协作规范维护无需先通读业务文档。
 
-## Before exploring, read these
+| 当前问题 | 查阅位置 |
+| --- | --- |
+| 业务术语、当前状态与预测风险的区别 | [CONTEXT.md](../../CONTEXT.md) |
+| 页面行为与用户验收 | [product.md](../product.md) |
+| 进程、目录责任与模块边界 | [architecture.md](../architecture.md) |
+| 字段、数仓、Kafka、规则或 HTTP 变更 | [契约索引](../contracts/README.md)，再选对应契约 |
+| 历史决策与条款取代关系 | [ADR-0004](../adr/0004-parallel-development-baseline.md) 及相关 ADR |
+| 启动命令、运行证据与集成验收 | [runbook.md](../runbook.md) |
+| 分工、依赖和交付节奏 | [delivery.md](../plans/delivery.md) |
 
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists: it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`**: read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
-
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
-
-## File structure
-
-This is a single-context repo with separate runtime directories. The actual layout and placeholders are listed in the [root README](../../README.md#3-项目目录与-agent-skill-索引); directory ownership is in [architecture](../architecture.md#目录与冲突边界).
-
-```
-/
-├── CONTEXT.md
-├── docs/adr/       # Decisions for the shared business context
-├── citibike/       # Python data modules and CLI entry points
-├── backend/src/    # One Java backend: API and operations
-└── frontend/src/   # React UI
-```
-
-## Use the glossary's vocabulary
-
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
-
-If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
-
-## Flag ADR conflicts
-
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
-
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+使用术语表已有名称；新概念或决策确实影响契约时才补充文档。遇到与现行 ADR 的冲突，明确指出冲突和拟变更范围，不能以旧文档覆盖已接受的后继决定。缺失的可选背景资料不阻塞探索；缺失的验收标准或契约才需要澄清。
