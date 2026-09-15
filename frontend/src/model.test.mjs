@@ -9,6 +9,7 @@ import {
   nextAvailableHour,
   particleOffsets,
   playbackDelay,
+  sameReplaySelection,
   sortStations,
 } from "./model.mjs";
 
@@ -29,6 +30,8 @@ test("UI model preserves contract semantics", () => {
   assert.equal(isTraversalStatus("HEALTHY", "live"), false);
   assert.equal(isTraversalStatus("SHORTAGE_RISK", "live"), true);
   assert.equal(isTraversalStatus("NOT_APPLICABLE", "replay"), true);
+  assert.equal(sameReplaySelection({ mode: "replay", service_date: "2025-01-15", hour: 8 }, { serviceDate: "2025-01-15", hour: 8 }), true);
+  assert.equal(sameReplaySelection({ mode: "replay", service_date: "2025-01-15", hour: 8 }, { serviceDate: "2025-01-15", hour: 9 }), false);
 
   assert.equal(nextAvailableHour([8, 10, 12], 10), 12);
   assert.equal(nextAvailableHour([8, 10, 12], 12), null);

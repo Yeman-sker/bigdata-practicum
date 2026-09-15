@@ -19,6 +19,7 @@ import {
   nextAvailableHour,
   particleOffsets,
   playbackDelay,
+  sameReplaySelection,
   sortStations,
   stableHash,
 } from "./model.mjs";
@@ -821,7 +822,7 @@ export default function App() {
     const previous = mapRef.current;
     const keepsMap = previous?.mode === targetMode;
     if (!keepsMap) setLoading(true);
-    setRefreshing(Boolean(refresh && keepsMap));
+    setRefreshing(keepsMap);
     setTransientMessage(null);
     try {
       const cacheKey = targetMode === "replay" && selection
@@ -856,9 +857,14 @@ export default function App() {
         : new ApiFailure(0, "NETWORK_ERROR", "network failure");
       if (previous && previous.mode === targetMode) {
         if (targetMode === "replay") setPlaying(false);
-        if (targetMode === "replay" && selection && [400, 404, 422].includes(failure.status)) {
+        const changedReplaySelection = targetMode === "replay" && selection &&
+          !sameReplaySelection(previous, selection);
+        if (targetMode === "replay" && selection) {
           setServiceDate(previous.service_date);
           setHour(previous.hour ?? 0);
+          if (changedReplaySelection) setSelectedStationId(null);
+        }
+        if (targetMode === "replay" && selection && [400, 404, 422].includes(failure.status)) {
           setTransientMessage(errorLabels[failure.status]);
           setRefreshError(null);
           setSelectedStationId(null);
@@ -1214,8 +1220,11 @@ export default function App() {
     if (loading && !map) return { text: "加载中", kind: "loading" };
     if (fatalError && !map) return { text: errorLabels[fatalError.status] ?? "暂时无法连接", kind: "error" };
     if (transientMessage) return { text: transientMessage, kind: "warning" };
+    if (refreshing && map?.mode === "replay" && !refreshError) return { text: `加载回放 · ${serviceDate} ${String(hour).padStart(2, "0")}:00`, kind: "loading" };
     if (expired) return { text: "数据已过期", kind: "error" };
-    if (refreshError) return { text: `刷新失败 · ${formatNewYorkTime(map?.observed_at_utc ?? null)}`, kind: "warning" };
+    if (refreshError) return map?.mode === "replay"
+      ? { text: `回放加载失败 · 保留 ${map.service_date} ${String(map.hour).padStart(2, "0")}:00`, kind: "warning" }
+      : { text: `刷新失败 · ${formatNewYorkTime(map?.observed_at_utc ?? null)}`, kind: "warning" };
     if (map?.mode === "live" && map.stations.length === 0) return { text: "暂无站点", kind: "empty" };
     if (map?.mode === "live" && view === "dispatch" && suggestions.length === 0) return { text: "暂无可行建议", kind: "empty" };
     if (map?.mode === "replay" && map.flows.length === 0) return { text: "本小时无流量", kind: "empty" };
@@ -1379,7 +1388,7 @@ export default function App() {
               {map?.snapshot_id && <span className="lineage">快照 <code>{map.snapshot_id}</code></span>}
               {hiddenFlows.length > 0 && <span>未绘制 {hiddenFlows.length} 条 OD，共 {hiddenFlowRides} 次骑行</span>}
               {transientMessage && <span>{transientDetails[transientMessage] ?? "已恢复上一个合法选择。"}</span>}
-              {refreshError && !expired && <span>保留上次仍有效的地图数据。</span>}
+              {refreshError && !expired && <span>{map?.mode === "replay" ? "已恢复上一个可用日期和小时。" : "保留上次仍有效的地图数据。"}</span>}
               {(refreshError || expired || fatalError) && <button type="button" className="primary-button" disabled={refreshing || loading} onClick={retry}>{refreshing || loading ? "重试中…" : "重试"}</button>}
               {!refreshError && !expired && !fatalError && !transientMessage && mode === "live" && <button type="button" className="quiet-button" disabled={refreshing} onClick={retry}>{refreshing ? "刷新中…" : "立即刷新"}</button>}
             </section>

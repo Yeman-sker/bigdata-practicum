@@ -45,6 +45,15 @@ export function isTraversalStatus(status, mode = "live") {
   return mode === "replay" || status !== "HEALTHY";
 }
 
+export function sameReplaySelection(map, selection) {
+  return Boolean(
+    map?.mode === "replay" &&
+    selection &&
+    map.service_date === selection.serviceDate &&
+    map.hour === selection.hour,
+  );
+}
+
 export function isExpiredAt(map, expiresAt, elapsedMs = 0) {
   if (!map || !expiresAt) return false;
   const reference =
