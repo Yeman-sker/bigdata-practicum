@@ -1,6 +1,6 @@
 # CUA Command Reference
 
-仅用于用户明确选择的开源 Cua CLI；这些命令不适用于 Codex `cua_repl`。先核对本机 `--help` 和版本。安装与轨迹上传各自需要在用户授权范围内；本参考的命令清单不要求执行全部操作。
+仅在已安装的开源 Cua CLI 明确提供 `cua do` 时使用；这些命令不适用于 `cua-driver call`。先核对本机 `--help` 和版本。安装与轨迹上传各自需要在用户授权范围内；本参考的命令清单不要求执行全部操作。
 
 Complete argument syntax for all `cua do` and `cua trajectory` commands.
 

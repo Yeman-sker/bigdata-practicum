@@ -1,6 +1,6 @@
 ---
 name: gui-automation
-description: Operate or visually verify a browser or desktop UI with Codex Computer Use. Use for interactions and screenshots that need a real application.
+description: Operate or visually verify a browser or desktop UI with an available GUI automation tool. Use when WSL must control Windows apps or when interactions and screenshots need a real application.
 ---
 
 # GUI 操作与视觉验证
@@ -9,9 +9,9 @@ description: Operate or visually verify a browser or desktop UI with Codex Compu
 
 ## 工具选择
 
-- 本仓库用户选择 Codex Computer Use（`cua_repl`）。先按该工具说明进入应用 / 浏览器并读取返回文档；只使用当前实际提供的 API。
-- 不用 ego-browser / Ego Lite，也不因为缺少 `cua` CLI 自动安装另一套驱动。工具不可用时说明受影响步骤，继续能独立完成的工作。
-- 仅用户明确选择开源 `trycua/cua` CLI 时，读取 [CLI 参考](references/command-reference.md)，先核验安装版本与帮助。它与 `cua_repl` 是不同接口，命令不能混用。
+- WSL2 中需要控制 Windows 原生 Chrome、Edge、Windows Terminal 或 VSCode 时，通过 Windows PowerShell 调用安装在 Windows 宿主机上的开源 Cua Driver。先核验 `cua-driver --help` 和实际 API，不在 WSL 内安装或运行 Linux 驱动代替。
+- 其他环境使用用户指定且当前实际可用的 GUI 工具。不因为缺少工具自动安装另一套驱动；说明受影响步骤，并继续能独立完成的工作。
+- 只有已安装的开源 Cua CLI 明确提供 `cua do` 时，才读取 [CLI 参考](references/command-reference.md)；`cua do` 与 `cua-driver call` 不是同一接口，命令不能混用。
 
 ## 操作与证据
 

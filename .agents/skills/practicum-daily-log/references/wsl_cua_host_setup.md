@@ -1,6 +1,6 @@
 # WSL2 下 Cua 宿主机安装与排障记录
 
-本参考仅在用户明确选择开源 Cua Driver、环境为 WSL2 且需要控制 Windows 原生桌面时使用；它不是 Codex `cua_repl` 的安装前置条件。以下是已有排障记录，具体 API 先核对本机版本。核心结论：WSL 中运行的驱动不等于 Windows 桌面驱动。
+本参考用于 WSL2 任务控制 Windows 原生桌面。开源 Cua Driver 安装并运行在 Windows 宿主机，WSL 中的 Agent 通过 Windows PowerShell 调用；具体 API 先核对本机版本。核心结论：WSL 中运行的驱动不等于 Windows 桌面驱动。
 
 ## 1. 已验证的运行边界
 
