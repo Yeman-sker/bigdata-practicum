@@ -45,8 +45,8 @@ flowchart LR
 | DIM、flow、profile、OD、历史发布状态 | Hu-tong123 / #28 | API、operations | warehouse、serving.sql |
 | Kafka station 记录与快照结束记录 | OGATA-LINA / #27 | operations | events |
 | 当前风险、调度、实时发布状态 | 1giaowoligiaogiao / #29 | API | operations、serving.sql |
-| HTTP 响应 | OGATA-LINA / #27 | S1lco / #26 | openapi.yaml |
-| 页面交互 | S1lco / #26 | 用户 / #30 验收 | product |
+| HTTP 响应 | S1lco / #26 | Yeman-sker / #30 | openapi.yaml |
+| UI 设计与页面交互 | Yeman-sker / #30 | 用户；S1lco 复核接口集成 | product |
 
 GBFS metadata 以不可变文件 `$DATA_DIR/gbfs/metadata/<metadata_version>.json` 交接：完整写临时文件后改名，同机 backend/offline 只读。内容为 canonical metadata 数组，原始响应另存。历史 DIM 在离线发布时合并 metadata；实时 ADS 直接使用事件绑定的 metadata 版本，新站点无需等离线重跑才能上图。
 
@@ -56,15 +56,15 @@ GBFS metadata 以不可变文件 `$DATA_DIR/gbfs/metadata/<metadata_version>.jso
 
 | 目录/文件 | 主维护人 | 规则 |
 | --- | --- | --- |
-| frontend/ | S1lco | 整个地图、回放、抽屉、风险/调度展示；其他成员提供字段与样例 |
+| frontend/、UI 原型 | Yeman-sker | UI 设计与完整前端；其他成员提供字段、样例及集成证据 |
 | citibike/historical*、citibike/offline.py、hive/、sql/ | Hu-tong123 | 唯一 DWD 产出者，数仓及 MySQL DDL、离线导出 |
 | citibike/gbfs*、collector 配置 | OGATA-LINA | 复用采集器，source 契约变化同步共享测试 |
-| backend/ 的 pom.xml、应用入口、resources、api/ | OGATA-LINA | Maven 工程与完整 API，Day 3 尽早合并最小入口 |
+| backend/ 的 pom.xml、应用入口、resources、api/ | S1lco | Maven 工程与完整 API，Day 3 尽早合并最小入口 |
 | backend/ 的 operations/ | 1giaowoligiaogiao | 纯规则、Kafka 消费、实时 ADS writer，与 API 同 JVM |
 | citibike/contracts.py、fixtures/day2/、契约测试、CI | 领域负责人提出，Yeman-sker 协调 | 同一共享文件同一时间由一个 PR 修改 |
-| docs/product、contracts/openapi | S1lco、OGATA-LINA 分别主维护 | 交叉评审，不增加重复 view-model 规格 |
+| docs/product、contracts/openapi | Yeman-sker、S1lco 分别主维护 | 交叉评审，不增加重复 view-model 规格 |
 
-Day 3 开始一小时内，#27 先提交只含可编译 Maven 入口、包名、无外部服务单测和 Java CI 的最小 PR，再做查询；组长优先评审。#29 同时用 JDK 17 编译纯规则并运行 assert 算例（`java -ea`），入口合并后接入同一 Maven 工程；不得因为缺数据库或 Kafka 而让规则单测启动失败。共同 pom/resources 由 #27 修改，#29 在 Issue 给出必要依赖/配置清单。#26 的首个工程 PR 同时加入 npm ci/build 的 CI；两项 CI 修改按最小后端→前端顺序合并，后者同步主干，不等业务联调。依赖版本在各自首个实现 PR 锁定，不增加当前尚无工程的占位 CI。
+Day 3 开始一小时内，#26 先提交只含可编译 Maven 入口、包名、无外部服务单测和 Java CI 的最小 PR，再做查询；组长优先评审。#29 同时用 JDK 17 编译纯规则并运行 assert 算例（`java -ea`），入口合并后接入同一 Maven 工程；不得因为缺数据库或 Kafka 而让规则单测启动失败。共同 pom/resources 由 #26 修改，#29 在 Issue 给出必要依赖/配置清单。#30 的首个前端工程 PR 同时加入 npm ci/build 的 CI；两项 CI 修改按最小后端→前端顺序合并，后者同步主干，不等业务联调。依赖版本在各自首个实现 PR 锁定，不增加当前尚无工程的占位 CI。
 
 ## 发布与读取
 

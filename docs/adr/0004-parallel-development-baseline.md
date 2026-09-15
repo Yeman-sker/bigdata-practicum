@@ -13,7 +13,7 @@
 
 Kafka 采用单 producer、单分区、顺序消费和显式 snapshot_end；风险与建议一次 MySQL 事务发布，live map 在一次查询中返回两者。选择小规模顺序处理的容量上限，避免引入分布式批次协调。离线采用 staging 校验后整体 DML 发布，接受单月薄表的事务成本，不建立增量版本平台。
 
-四位成员分别负责前端、GBFS+API、离线、规则+消费；API 与规则共用一个 Spring Boot 工程/进程。利用已完成采集/落地 PoC 减少重复建设，Day 3 即并行开发并演示，组长只协调与验收。具体责任与每天切片以 [delivery](../plans/delivery.md) 为准。
+根据组长追加要求，Yeman-sker 负责 UI 设计、完整前端及协调验收；S1lco 负责三个 API 和共享 backend 入口；OGATA-LINA 专注 GBFS/Kafka；Hu-tong123 负责离线，1giaowoligiaogiao 负责规则/消费。API 与规则共用一个 Spring Boot 工程/进程，五条流从 Day 3 并行，UI 定稿不作为其他模块的开工条件。具体责任与每天切片以 [delivery](../plans/delivery.md) 为准。
 
 组长追加开发演练后补全实施顺序：先交付可测试的共享入口；collector 在首次历史计算前生成 metadata；DWD 在 RAW 读取边界保留记录位置，ODS 结构不变；库存重放隔离消费组和业务库，只有成功发布才推进录制时钟。这些补全不新增进程、业务能力或 P0，具体修正与证据见 delivery 的演练记录。
 
@@ -27,9 +27,9 @@ Kafka 采用单 producer、单分区、顺序消费和显式 snapshot_end；风�
 | ADR-0001 §4、ADR-0002 §3 | [events](../contracts/events.md)、OpenAPI：station payload 仍沿用 v1 字段；传输增加 headers 与 snapshot_end 控制记录，控制 key 为明确例外；map 扩展同批风险/建议、来源、版本及新鲜度 |
 | ADR-0001 §10 | [architecture](../architecture.md)、warehouse：GBFS raw 保留，不建设无 P0 消费者的 GBFS ODS/DWD、vehicle DIM；P1 不要求独立 overview 表 |
 | ADR-0002 页面与回放 | [product](../product.md)：当前/预测切换、异常展示、真实历史回放禁止混入当前库存/风险；默认值、请求竞争和倍速行为完整定义 |
-| ADR-0003（Proposed）全部排期与分工 | [delivery](../plans/delivery.md)：原提案撤回，四位实现者与组长角色明确；API/UI 从 Day 3 开始，剩余实现天数为 5 |
+| ADR-0003（Proposed）全部排期与分工 | [delivery](../plans/delivery.md)：原提案撤回，四位组员与负责 UI/前端的组长角色明确；API/UI 从 Day 3 开始，剩余实现天数为 5 |
 
-这些是显式的接口补全/修订，不能将旧 PoC 的 UUID event 或混合 risk_type 当作新基线的最终交付。源验证代码与 Day 1 证据保留；#26–#29 在实现中完成适配，不在文档 PR 提前实现业务。
+这些是显式的接口补全/修订，不能将旧 PoC 的 UUID event 或混合 risk_type 当作新基线的最终交付。源验证代码与 Day 1 证据保留；#26–#30 在实现中完成适配，不在文档 PR 提前实现业务。
 
 ## 适用范围
 

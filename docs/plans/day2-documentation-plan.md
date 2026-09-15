@@ -10,7 +10,7 @@
 | 数据/事件/规则 | [契约索引](../contracts/README.md) | ID/时间、DWD/DWS/服务表、完整批次、风险与整数调度 |
 | HTTP | [OpenAPI](../contracts/openapi.yaml) | 三个 GET、字段、参数、null、错误、上限与样例 |
 | 共享数据 | [fixture](../../fixtures/day2/README.md) | 原始输入、预期表、API/Kafka 与异常算例 |
-| 并行任务 | [delivery](delivery.md) | 四位实现负责人，Day 3 同时开始，逐日可演示切片 |
+| 并行任务 | [delivery](delivery.md) | 四位组员加组长五条工作流，组长负责 UI/前端；Day 3 同时开始，逐日可演示切片 |
 | 运行/验收 | [runbook](../runbook.md) | 现有检查、目标入口、真实验收与证据边界 |
 | 旧文档承接 | [ADR-0004](../adr/0004-parallel-development-baseline.md) | 明确取代关系，保留 Day 1 历史证据 |
 

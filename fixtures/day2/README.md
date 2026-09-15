@@ -10,8 +10,8 @@
 | [metadata.json](metadata.json) | #27 输出/#28/#29 输入：已映射、按 station_id 排序；文件字节 hash 是 metadata_version |
 | [events.ndjson](events.ndjson) | #27/#29：逐行 key/headers/value，两个 station + 一个 snapshot_end；不是一条 events 数组消息 |
 | [expected.json](expected.json) | #28/#29：完整小型 DWD、DIM、DWS、ADS 与发布行，tables 对象按实际表名索引 |
-| [seed.sql](seed.sql) | #27：在空样例 MySQL 库中，先执行 sql/serving.sql，再装载；包含实际薄表与发布行 |
-| [http-examples.json](http-examples.json) | #26/#27：OpenAPI Example Objects，取 `<名称>.value` 即完整响应；x-path/x-query/x-status 指明请求与 HTTP 状态 |
+| [seed.sql](seed.sql) | #26：在空样例 MySQL 库中，先执行 sql/serving.sql，再装载；包含实际薄表与发布行 |
+| [http-examples.json](http-examples.json) | #30/#26：OpenAPI Example Objects，取 `<名称>.value` 即完整响应；x-path/x-query/x-status 指明请求与 HTTP 状态 |
 | [cases.json](cases.json) | #29：22 个风险、9 个匹配、12 个批次与 4 个身份映射输入/期望；不得用这里的期望结果替代生产规则 |
 
 ## 可手算链路
@@ -32,6 +32,6 @@ cases.risk 的 flags 表示三个服务标志同时取该值，age_seconds 是 a
 uv run --with-requirements requirements-contracts.txt python -m unittest discover -s tests -p 'test_day2_contracts.py' -v
 ```
 
-该检查验证 schema、fixture 引用/行数/聚合一致性、源映射和 DDL 字段匹配。#28/#29 必须另运行自己的实现与这些预期比较；#26/#27 必须让真实组件/接口消费同一数据。这里不提供假装业务实现的第二套算法。
+该检查验证 schema、fixture 引用/行数/聚合一致性、源映射和 DDL 字段匹配。#28/#29 必须另运行自己的实现与这些预期比较；#30/#26 必须让真实前端/API 消费同一数据。这里不提供假装业务实现的第二套算法。
 
 多 CSV 的 ZIP 可在外部临时目录用 Python zipfile 的 ZIP_STORED 打包，成员按 part-a/part-b 顺序、时间固定 2025-01-01 00:00:00；manifest 的 hash 对应该可复现档案。不要为运行样例把输出、编译产物或真实下载存回本目录。

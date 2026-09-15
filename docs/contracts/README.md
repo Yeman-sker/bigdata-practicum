@@ -10,10 +10,10 @@
 | RAW/ODS/DWD；物理 Trip | Hu-tong123 / #28 | offline 聚合 | warehouse、[Hive DDL](../../hive/warehouse_v1.sql) | expected.json.tables.dwd_trip_v1 |
 | canonical metadata；一站一行 | OGATA-LINA / #27 | #28、#29 | field_mapping、events | metadata.json、station_information.json |
 | Kafka station/end；站点/快照 | OGATA-LINA / #27 | #29 | [events](events.md)、OpenAPI 的 KafkaRecord schema | events.ndjson、cases.json.batches |
-| DIM/flow/profile/OD；站点、站点日小时、站点星期小时、OD 小时 | Hu-tong123 / #28 | #27 API、#29 | warehouse、Hive/MySQL DDL | expected.json.tables、seed.sql |
-| 风险/调度；站点快照、建议 | 1giaowoligiaogiao / #29 | #27 API、#26 | [operations](operations.md)、[MySQL DDL](../../sql/serving.sql) | cases.json、expected.json 两张 ADS |
-| HTTP；三类 GET 响应 | OGATA-LINA / #27 | S1lco / #26 | [OpenAPI](openapi.yaml) | http-examples.json |
-| 页面；五条 P0 路径 | S1lco / #26 | 用户、#30 | product | 相同 HTTP examples，不另建字段模型 |
+| DIM/flow/profile/OD；站点、站点日小时、站点星期小时、OD 小时 | Hu-tong123 / #28 | #26 API、#29 | warehouse、Hive/MySQL DDL | expected.json.tables、seed.sql |
+| 风险/调度；站点快照、建议 | 1giaowoligiaogiao / #29 | #26 API、#30 前端 | [operations](operations.md)、[MySQL DDL](../../sql/serving.sql) | cases.json、expected.json 两张 ADS |
+| HTTP；三类 GET 响应 | S1lco / #26 | Yeman-sker / #30 | [OpenAPI](openapi.yaml) | http-examples.json |
+| UI / 页面；五条 P0 路径 | Yeman-sker / #30 | 用户；S1lco 核对 API 集成 | product | 相同 HTTP examples，不另建字段模型 |
 | 运行证据；每个切片一次记录 | 各主负责人，组长汇总 | 下游、组长 | runbook | 命令、预期、真实证据边界 |
 
 所有 day2 样例均位于 [fixtures/day2](../../fixtures/day2/README.md)。同一输出仅有一位写入人，相关生产者和消费者评审；负责人实际签收在 Issue/PR 记录，不以自动检查冒充人工评审。

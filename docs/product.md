@@ -2,6 +2,8 @@
 
 版本：Day 2 v1.1；[ADR-0004](adr/0004-parallel-development-baseline.md) 记录取舍，[#31](https://github.com/Yeman-sker/bigdata-practicum/issues/31) 记录发布与评审。本文定义用户可见行为，HTTP 字段以 [OpenAPI](contracts/openapi.yaml) 为准。
 
+产品交互、UI 设计与完整前端由 **Yeman-sker / #30** 负责；HTTP 契约与实现由 **S1lco / #26** 负责。UI 在 frontend 的可交互原型中迭代，先用共享响应确定布局、视觉层级、地图/列表/抽屉和异常状态，再接真实 API。下面的线框约定功能关系，具体视觉方案由 Yeman-sker 设计；视觉定稿不阻塞其他模块按现有契约开发。
+
 ## 目标与范围
 
 用户是共享单车运营人员：看清当前库存、对照历史供需、识别一小时后风险，并查看可行的调度建议。7 天从项目 Day 1 起算，最低真实验收数据为 2025-01 全部 CSV 加 GBFS 快照；页面日期来自已发布数据。
