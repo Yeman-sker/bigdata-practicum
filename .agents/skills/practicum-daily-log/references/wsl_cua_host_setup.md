@@ -1,6 +1,6 @@
 # WSL2 下 Cua 宿主机安装与排障记录
 
-本参考只在 `PRACTICUM_DEV_ENV=wsl2` 且需要控制 Windows 原生桌面时阅读。核心结论：**WSL 中运行的 Cua Driver 不等于 Windows 桌面驱动；Windows 原生 Chrome 必须由 Windows 侧的 Cua Driver 捕获。**
+本参考仅在用户明确选择开源 Cua Driver、环境为 WSL2 且需要控制 Windows 原生桌面时使用；它不是 Codex `cua_repl` 的安装前置条件。以下是已有排障记录，具体 API 先核对本机版本。核心结论：WSL 中运行的驱动不等于 Windows 桌面驱动。
 
 ## 1. 已验证的运行边界
 
@@ -69,7 +69,7 @@ WSL2 + Windows 原生桌面需求
         ↓
 检查 Windows py/python 与 cua-driver
         ↓
-经用户明确同意后在 Windows 侧安装
+缺失且已获安装授权时在 Windows 侧安装
         ↓
 启动 Windows cua-driver daemon
         ↓
@@ -80,7 +80,7 @@ get_window_state（窗口级）
 
 ## 6. 安全与权限门禁
 
-- 安装 Windows 包前，说明安装命令并获得用户明确同意。
-- WSL 与 Windows 的路径、权限和 socket 不要混用；优先使用 Windows 侧绝对路径保存截图，再从 `/mnt/c/...` 读取或归档。
+- 安装 Windows 包前核对已有授权；尚未授权才说明命令并询问，不重复索要确认。
+- WSL 与 Windows 的路径、权限和 socket 不要混用。日志任务将截图输出指向 Windows 可访问的 WSL `/tmp/practicum-daily-log/<task>/` 路径，不采用示例中的个人 Pictures 目录或仓库目录；示例路径和窗口 ID 均需替换。
 - 截图只捕获目标应用窗口；禁止使用 `get_desktop_state` 或包含任务栏/桌面的替代方案。
 - 若 Windows daemon 能运行但窗口列表为空，检查是否处于同一个交互式 Windows 用户桌面、Chrome 是否实际显示，再检查 Cua 权限；不要盲目重试全屏捕获。

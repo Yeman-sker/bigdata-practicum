@@ -1,65 +1,29 @@
 # Issue tracker: GitHub
 
-本项目的任务范围和验收标准以 GitHub Issues 为准，使用 `gh` CLI 管理。
+团队任务和验收标准记录在 GitHub Issues，使用 `gh` CLI。开发交付与维护例外以 [repository-development-workflow](../../.agents/skills/repository-development-workflow/SKILL.md) 为准；已确认的后续决定应更新 Issue，避免实现与正文分离。
 
-工作流任务统一参考仓库中的
-[`workstream-task.md`](../../.github/ISSUE_TEMPLATE/workstream-task.md)。任务至少要写清楚负责人、项目协调人、契约输入/输出、并行策略、里程碑、给定/当/那么验收、异常降级和可复制的验证证据；不能只写一句功能名称。
+## 按任务规模记录
 
-## 组长与任务负责人
+- 跨模块工作流使用 [workstream-task.md](../../.github/ISSUE_TEMPLATE/workstream-task.md)：列出主负责人、项目协调人、契约维护人、输入 / 输出、并行依赖、可运行切片、验收与降级。Day 2–7 任务关联 #4、#31 和适用 ADR；这些编号不套用到无关维护。
+- 小型修复或维护写清问题、目标行为、范围和验证即可；无需复制完整工作流模板或凑足三条验收。
+- 有对应 Issue 的 PR 引用该 Issue。协作规范等维护例外在 PR 写明用户请求，不填空的 `Closes #`，不为编号创建占位 Issue。
 
-- 组长是项目协调人：负责发布任务、统一排期、维护契约门禁、处理跨组冲突、组织联调、执行最终验收和决定是否降级。
-- 主负责人负责自己工作流的实现、测试、运行证据、下游 handoff 和 PR；不能把“组长负责协调”理解成组长包办所有模块。
-- 契约维护人负责字段矩阵、样例和版本追踪；他/她可以维护契约质量，但不自动成为所有模块的实现负责人。
-- 每张工作流 Issue 必须把这三个角色分别写出来；如果一个人同时承担多个角色，也必须逐项写明。
+组长负责排期、跨组冲突和最终验收；主负责人负责实现、验证、下游交接和 PR；契约维护人负责字段、样例与版本追踪。兼任角色也应在跨模块任务中明确。PR 默认由组长审核并决定合并。
 
-## 发布详细 Issue 的最小顺序
+改变跨模块字段、粒度、时间或错误语义时，先在相关 Issue 记录并确认契约变更，再同步权威文档、样例及消费者。只暂停依赖这个决定的实现，其他已明确的工作继续。
 
-1. 先关联父 Issue #4、适用 ADR 和启动门禁 #31。
-2. 写清任务目标、用户价值、负责人/协作人、时间盒、Checkpoint A/B/C 和最终截止。
-3. 列出输入/输出契约：版本、行粒度、生产者、消费者、字段类型、nullable、时区、单位、主键/去重键和样例。
-4. 写出“契约门禁后如何并行”“哪些是运行时依赖但不是启动阻塞”“不能等待谁”和真实数据未就绪时使用什么 fixture。
-5. 至少写三条可复现的 Given/When/Then 验收、空数据/非法字段/重复/上游不可用处理、验证命令和预期证据。
-6. 写明明确不做、风险、最小降级和完成定义；实现范围发生变化时回到 Issue/Contract Change Issue。
+## 常用操作
 
-旧的简短 Issue 只能作为导航，不能作为实现依据；实现 PR 以详细 Issue、ADR 和冻结契约为准。
+在仓库内运行，`gh` 从远程地址推断仓库；跨仓库操作显式指定 `--repo <owner/name>`。
 
-## 团队协作约定
+- 查看：`gh issue view <number> --comments`
+- 查找：`gh issue list --state open --json number,title,labels`
+- 创建：`gh issue create --title "..." --body-file <body.md>`
+- 评论：`gh issue comment <number> --body-file <body.md>`
+- 标签：`gh issue edit <number> --add-label "..." --remove-label "..."`
 
-- 所有开发工作从组长发布的 Issue 开始。
-- 组员根据 Issue 实现并提交 PR。
-- PR 由组长审核，通过后由组长合并。
-- PR 可以引用相关 Issue 便于追踪，但 Issue 关联不是合并硬门禁。
-
-## Conventions
-
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body "..."`
-- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
-
-Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
+多行正文写入临时文件，保留真实换行后用 `--body-file` 提交。只有任务授权包含对应操作时才创建、评论、改标签或关闭；查阅任务不自动授权处理其他 Issue。
 
 ## Pull requests as a triage surface
 
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
-
-## When a skill says "publish to the issue tracker"
-
-Create a GitHub issue.
-
-## When a skill says "fetch the relevant ticket"
-
-Run `gh issue view <number> --comments`.
-
-## Wayfinding operations
-
-Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
-
-- **Map**: a single issue labelled `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. `gh issue create --label wayfinder:map`.
-- **Child ticket**: an issue linked to the map as a GitHub sub-issue (`gh api` on the sub-issues endpoint). Where sub-issues aren't enabled, add the child to a task list in the map body and put `Part of #<map>` at the top of the child body. Labels: `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`). Once claimed, the ticket is assigned to the driving dev.
-- **Blocking**: GitHub's **native issue dependencies**, the canonical, UI-visible representation. Add an edge with `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the blocker's numeric database id (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number` or `node_id`). GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only, the live gate). Where dependencies aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A ticket is unblocked when every blocker is closed.
-- **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
-- **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
-- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+**PRs as a request surface: no.** 默认不将贡献者 PR 纳入需求分诊；用户明确指定的 PR 可以审查或分诊。是否关闭、发布 review 或合并按本次授权决定。
