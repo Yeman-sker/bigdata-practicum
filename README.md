@@ -10,7 +10,7 @@
 
 ## 组员从这里开始
 
-1. 阅读 [产品与交互](docs/product.md) 和 [前端交互与视觉设计](docs/frontend-design.md)，了解五条 P0 使用路径及页面呈现。
+1. 阅读 [产品与交互](docs/product.md)、[DESIGN.md](DESIGN.md) 和 [前端交互与视觉设计](docs/frontend-design.md)，了解五条 P0 使用路径、设计 token 及页面呈现。
 2. 阅读 [架构与模块边界](docs/architecture.md)，找到自己生产/消费的数据。
 3. 按 [契约索引](docs/contracts/README.md) 查看字段、表、事件、规则和 [OpenAPI](docs/contracts/openapi.yaml)。
 4. 从 [交付计划](docs/plans/delivery.md) 进入自己的 Issue，用 [共享样例](fixtures/day2/README.md) 独立开工。
@@ -171,6 +171,7 @@ bigdata-practicum/
 ├── .agents/skills/                   # 团队开发与环境复现 Skill
 ├── AGENTS.md                         # Agent 仓库规则入口
 ├── CONTEXT.md                        # 单一业务上下文与术语
+├── DESIGN.md                         # AI Agent 可读的视觉系统与规范 token
 ├── requirements-contracts.txt        # 契约检查依赖
 └── README.md
 ```

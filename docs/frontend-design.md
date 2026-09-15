@@ -1,6 +1,6 @@
 # 前端交互与视觉设计
 
-状态：2026-09-15 已完成 P0 高保真产品原型与交互定稿；实现与浏览器证据由 [Issue #30](https://github.com/Yeman-sker/bigdata-practicum/issues/30) 跟踪。本文细化 [产品与交互](product.md) 的呈现方式，不重复 [OpenAPI](contracts/openapi.yaml) 字段或 [风险与调度规则](contracts/operations.md)。数据契约版本仍为 `1.1`。
+状态：2026-09-15 已完成 P0 高保真产品原型与交互定稿；实现与浏览器证据由 [Issue #30](https://github.com/Yeman-sker/bigdata-practicum/issues/30) 跟踪。根目录 [DESIGN.md](../DESIGN.md) 提供机器可读的规范视觉 token，本文细化 [产品与交互](product.md) 的状态与操作，不重复 [OpenAPI](contracts/openapi.yaml) 字段或 [风险与调度规则](contracts/operations.md)。数据契约版本仍为 `1.1`。
 
 ## 设计决定
 
@@ -172,6 +172,8 @@
 `400/404/422` 不新增 toast 组件，统一复用右上状态胶囊的展开行；`4s` 后自动收起，但指针悬停或键盘焦点停留时不计时。恢复后台标签页时立即刷新；旧请求晚到不得覆盖当前模式、日期、小时或站点选择。
 
 ## 视觉规范
+
+颜色、字体、间距、圆角和基础组件 token 以 [DESIGN.md](../DESIGN.md) 为规范值；本节说明这些 token 在业务图层中的用途。两处发生冲突时先修正文档，并以 `DESIGN.md` 的机器可读值实现。
 
 | 用途 | 规范 |
 | --- | --- |
