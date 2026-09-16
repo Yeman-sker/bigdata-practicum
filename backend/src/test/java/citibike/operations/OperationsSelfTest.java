@@ -33,6 +33,10 @@ public final class OperationsSelfTest {
         assert tr.forecastStatus() == Status.SHORTAGE_RISK;
         List<Suggestion> s = rebalance("snapshot", List.of(sr,tr), AS_OF);
         assert s.size() == 1 && s.get(0).moveBikes() == 8 && s.get(0).distanceMeters() == 84;
+        Observation wideSource = new Observation("source", AS_OF.minusSeconds(20), AS_OF.minusSeconds(20), 20, 20, true,true,true);
+        Risk wide = c.calculate(wideSource, source, Map.of(new DayHour(3, 8), new Profile(0, 0, 20, 2)), AS_OF, "dataset");
+        List<Suggestion> safeLimited = rebalance("snapshot", List.of(wide, tr), AS_OF);
+        assert safeLimited.size() == 1 && safeLimited.get(0).moveBikes() == 8 && safeLimited.get(0).fromSurplus() == 12;
     }
     private static void batchGate() {
         String id = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -46,6 +50,9 @@ public final class OperationsSelfTest {
         assert result.outcome() == BatchOutcome.PUBLISH;
         gate.markPublished(o.snapshotAt());
         assert gate.acceptStation(new StationEvent("s", h, o), AS_OF).outcome() == BatchOutcome.IGNORE_DUPLICATE;
+        assert gate.acceptEnd(new SnapshotEnd("__snapshot_end__", eh, 1, o.snapshotAt(), AS_OF), AS_OF).outcome() == BatchOutcome.IGNORE_DUPLICATE;
+        BatchConsumer restored = new BatchConsumer(Set.of("s"), "recorded", id, o.snapshotAt());
+        assert restored.acceptStation(new StationEvent("s", h, o), AS_OF).outcome() == BatchOutcome.IGNORE_DUPLICATE;
         assert new BatchConsumer(Set.of("s"), "live").acceptStation(new StationEvent("s", h, o), AS_OF).outcome()
                 == BatchOutcome.REJECT_KEEP_PREVIOUS;
         final boolean[] attempted = {false};
@@ -77,5 +84,9 @@ public final class OperationsSelfTest {
         assert expired.currentStatus() == Status.STALE_DATA && expired.projectedBikes() == null;
         Suggestion suggestion = new Suggestion("x", "snap", "s", "s", 1, 1, 1, 0, 1, AS_OF, risk.expiresAt());
         assert suggestionsForRead(List.of(suggestion), Map.of("s", risk), risk.expiresAt()).isEmpty();
+        Observation missingTime = new Observation("s", null, observed, 5, 5, true, true, true);
+        assert c.calculate(missingTime, m, Map.of(), AS_OF, null).currentReason().equals("INVALID_TIME");
+        Observation stopped = new Observation("s", observed, observed, -1, 5, false, null, true);
+        assert c.calculate(stopped, m, Map.of(), AS_OF, null).currentReason().equals("SERVICE_FLAGS");
     }
 }

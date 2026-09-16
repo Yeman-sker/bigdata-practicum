@@ -36,44 +36,39 @@ public final class Operations {
         public Risk calculate(Observation o, Metadata m, Map<DayHour, Profile> profiles,
                               Instant asOf, String baselineDatasetId) {
             Objects.requireNonNull(o); Objects.requireNonNull(asOf);
-            Instant observed = o.lastReportedAt() == null ? o.snapshotAt() :
-                    min(o.snapshotAt(), o.lastReportedAt());
-            Instant expires = observed == null ? asOf : observed.plus(FRESHNESS);
-            String reason = null;
-            Status current;
             if (o.snapshotAt() == null || o.snapshotAt().isAfter(asOf.plus(CLOCK_SKEW)) ||
                     (o.lastReportedAt() != null && o.lastReportedAt().isAfter(asOf.plus(CLOCK_SKEW)))) {
-                current = Status.INVALID_DATA; reason = "INVALID_TIME";
-            } else if (asOf.compareTo(expires) >= 0) {
-                current = Status.STALE_DATA; reason = "STALE_OBSERVATION";
-            } else if (o.installed() == null || o.renting() == null || o.returning() == null) {
-                current = Status.INSUFFICIENT_DATA; reason = "MISSING_INVENTORY";
-            } else if (!Boolean.TRUE.equals(o.installed()) || !Boolean.TRUE.equals(o.renting()) ||
-                    !Boolean.TRUE.equals(o.returning())) {
-                current = Status.SERVICE_UNAVAILABLE; reason = "SERVICE_FLAGS";
-            } else if (o.bikes() != null && o.bikes() < 0 || o.docks() != null && o.docks() < 0) {
-                current = Status.INVALID_DATA; reason = "NEGATIVE_INVENTORY";
-            } else if (o.bikes() == null || o.docks() == null) {
-                current = Status.INSUFFICIENT_DATA; reason = "MISSING_INVENTORY";
-            } else {
-                int serviceable = o.bikes() + o.docks();
-                if (serviceable == 0) { current = Status.INSUFFICIENT_DATA; reason = "ZERO_SERVICEABLE_CAPACITY"; }
-                else current = classify((double) o.bikes() / serviceable);
+                Instant expires = o.snapshotAt() == null ? asOf : effectiveObservation(o).plus(FRESHNESS);
+                return invalid(o, m, Status.INVALID_DATA, "INVALID_TIME", expires);
             }
-
-            if (reason != null) return new Risk(o.stationId(), m, o, current, reason, current, reason,
-                    null, null, null, null, null, null, null, expires);
-
-            DayHour key = dayHour(o.snapshotAt());
-            Profile p = profiles == null ? null : profiles.get(key);
+            Instant expires = effectiveObservation(o).plus(FRESHNESS);
+            if (asOf.compareTo(expires) >= 0) return invalid(o, m, Status.STALE_DATA, "STALE_OBSERVATION", expires);
+            if (Boolean.FALSE.equals(o.installed()) || Boolean.FALSE.equals(o.renting()) || Boolean.FALSE.equals(o.returning()))
+                return invalid(o, m, Status.SERVICE_UNAVAILABLE, "SERVICE_FLAGS", expires);
+            if (o.installed() == null || o.renting() == null || o.returning() == null)
+                return invalid(o, m, Status.INSUFFICIENT_DATA, "MISSING_INVENTORY", expires);
+            if (o.bikes() != null && o.bikes() < 0 || o.docks() != null && o.docks() < 0)
+                return invalid(o, m, Status.INVALID_DATA, "NEGATIVE_INVENTORY", expires);
+            if (o.bikes() == null || o.docks() == null)
+                return invalid(o, m, Status.INSUFFICIENT_DATA, "MISSING_INVENTORY", expires);
+            int serviceable = o.bikes() + o.docks();
+            if (serviceable == 0) return invalid(o, m, Status.INSUFFICIENT_DATA, "ZERO_SERVICEABLE_CAPACITY", expires);
+            Status current = classify((double) o.bikes() / serviceable);
+            Profile p = profiles == null ? null : profiles.get(dayHour(o.snapshotAt()));
             boolean usable = p != null && p.sampleDays() >= 1 && baselineDatasetId != null;
             Double projected = usable ? o.bikes() + p.avgNetFlow() : null;
-            Status forecast = usable ? classify(projected / (o.bikes() + o.docks())) : Status.INSUFFICIENT_DATA;
-            String forecastReason = usable ? null : "NO_BASELINE";
-            return new Risk(o.stationId(), m, o, current, null, forecast, forecastReason,
-                    (double) o.bikes() / (o.bikes() + o.docks()), usable ? p.avgInbound() : null,
-                    usable ? p.avgOutbound() : null, usable ? p.avgNetFlow() : null, projected,
-                    usable ? p.sampleDays() : null, usable ? o.snapshotAt().plusSeconds(3600) : null, expires);
+            Status forecast = usable ? classify(projected / serviceable) : Status.INSUFFICIENT_DATA;
+            return new Risk(o.stationId(), m, o, current, null, forecast, usable ? null : "NO_BASELINE",
+                    (double) o.bikes() / serviceable, usable ? p.avgInbound() : null, usable ? p.avgOutbound() : null,
+                    usable ? p.avgNetFlow() : null, projected, usable ? p.sampleDays() : null,
+                    usable ? o.snapshotAt().plusSeconds(3600) : null, expires);
+        }
+
+        private static Instant effectiveObservation(Observation o) {
+            return o.lastReportedAt() == null || o.snapshotAt().isBefore(o.lastReportedAt()) ? o.snapshotAt() : o.lastReportedAt();
+        }
+        private static Risk invalid(Observation o, Metadata m, Status status, String reason, Instant expires) {
+            return new Risk(o.stationId(), m, o, status, reason, status, reason, null, null, null, null, null, null, null, expires);
         }
 
         public static Status classify(double ratio) {
@@ -101,13 +96,14 @@ public final class Operations {
         List<Risk> sources = risks.stream().filter(r -> r.forecastStatus() == Status.OVERFLOW_RISK)
                 .filter(r -> feasible(r) && r.projectedBikes() != null).toList();
         Map<String, Integer> supplies = new HashMap<>();
+        Map<String, Integer> sourceSafe = new HashMap<>();
         Map<String, Integer> needs = new HashMap<>();
         Map<String, Integer> sourceBikes = new HashMap<>();
         Map<String, Integer> targetDocks = new HashMap<>();
         Map<String, Integer> targetSafe = new HashMap<>();
         for (Risk r : sources) { int s = Math.max(0, (int)Math.floor(r.projectedBikes() - .70 * r.metadata().capacity()));
             int safe = Math.max(0, r.observation().bikes() - (int)Math.ceil(.30 * serviceable(r)));
-            supplies.put(r.stationId(), Math.min(s, safe)); sourceBikes.put(r.stationId(), r.observation().bikes()); }
+            supplies.put(r.stationId(), s); sourceSafe.put(r.stationId(), safe); sourceBikes.put(r.stationId(), r.observation().bikes()); }
         for (Risk r : targets) { needs.put(r.stationId(), need(r));
             targetDocks.put(r.stationId(), r.observation().docks());
             targetSafe.put(r.stationId(), Math.max(0, (int)Math.floor(.70 * serviceable(r)) - r.observation().bikes())); }
@@ -116,12 +112,13 @@ public final class Operations {
             List<Risk> ordered = sources.stream().sorted(Comparator.comparingDouble((Risk s) -> distance(s.metadata(), target.metadata()))
                     .thenComparing(Risk::stationId)).toList();
             for (Risk source : ordered) {
-                int move = Math.min(Math.min(supplies.get(source.stationId()), needs.get(target.stationId())),
+                int move = Math.min(Math.min(Math.min(supplies.get(source.stationId()), sourceSafe.get(source.stationId())), needs.get(target.stationId())),
                         Math.min(Math.min(sourceBikes.get(source.stationId()), targetDocks.get(target.stationId())),
                                 targetSafe.get(target.stationId())));
                 if (move <= 0) continue;
                 int fromSurplus = supplies.get(source.stationId()), toDeficit = needs.get(target.stationId());
                 supplies.put(source.stationId(), fromSurplus - move); needs.put(target.stationId(), toDeficit - move);
+                sourceSafe.put(source.stationId(), sourceSafe.get(source.stationId()) - move);
                 sourceBikes.put(source.stationId(), sourceBikes.get(source.stationId()) - move);
                 targetDocks.put(target.stationId(), targetDocks.get(target.stationId()) - move);
                 targetSafe.put(target.stationId(), targetSafe.get(target.stationId()) - move);
@@ -178,7 +175,7 @@ public final class Operations {
     public record StationEvent(String key, Headers headers, Observation observation) {}
     public record SnapshotEnd(String key, Headers headers, int stationCount,
                               Instant snapshotAt, Instant ingestedAt) {}
-    public enum BatchOutcome { BUFFERED, PUBLISH, IGNORE_DUPLICATE, REJECT_KEEP_PREVIOUS }
+    public enum BatchOutcome { BUFFERED, PUBLISH, IGNORE_DUPLICATE, REJECT_KEEP_PREVIOUS, UNCONSUMED }
     public record BatchResult(BatchOutcome outcome, String snapshotId, String reason,
                               List<StationEvent> stations) {}
 
@@ -190,30 +187,56 @@ public final class Operations {
         private static final String END_KEY = "__snapshot_end__";
         private static final Duration MAX_BATCH_AGE = Duration.ofSeconds(120);
         private final Set<String> metadataStationIds;
-        private final Set<String> published = new HashSet<>();
         private final Map<String, StationEvent> stations = new LinkedHashMap<>();
         private String snapshotId;
         private Headers batchHeaders;
         private Instant startedAt;
+        private String skippingSnapshotId;
         private Instant lastPublishedSnapshotAt;
         private final String mode;
 
         public BatchConsumer(Set<String> metadataStationIds) {
-            this(metadataStationIds, "any");
+            this(metadataStationIds, "any", null, null);
         }
         public BatchConsumer(Set<String> metadataStationIds, String mode) {
+            this(metadataStationIds, mode, null, null);
+        }
+        public BatchConsumer(Set<String> metadataStationIds, String mode, String lastPublishedSnapshotId,
+                             Instant lastPublishedSnapshotAt) {
             this.metadataStationIds = Set.copyOf(metadataStationIds);
             if (!Set.of("any", "live", "recorded").contains(mode)) throw new IllegalArgumentException("mode");
             this.mode = mode;
+            this.skippingSnapshotId = null;
+            this.lastPublishedSnapshotAt = lastPublishedSnapshotAt;
+            this.lastPublishedSnapshotId = lastPublishedSnapshotId;
         }
+        private String lastPublishedSnapshotId;
 
         public BatchResult acceptStation(StationEvent event, Instant receivedAt) {
             if (!validHeaders(event.headers(), "station") || !allowedOrigin(event.headers().dataOrigin()) || !originAllowedForMode(event.headers().dataOrigin()))
                 return reject(event.headers(), "INVALID_HEADERS_ORIGIN");
             if (!event.key().equals(event.observation().stationId())) return reject(event.headers(), "KEY_MISMATCH");
-            if (snapshotId == null) { snapshotId = event.headers().snapshotId(); batchHeaders = event.headers(); startedAt = receivedAt; }
-            if (!sameBatch(event.headers())) return reject(event.headers(), "MIXED_BATCH");
-            if (published.contains(snapshotId)) { clearRejected(); return new BatchResult(BatchOutcome.IGNORE_DUPLICATE, snapshotId, "ALREADY_PUBLISHED", List.of()); }
+            if (snapshotId == null && skippingSnapshotId == null) {
+                if (event.headers().snapshotId().equals(lastPublishedSnapshotId)) {
+                    skippingSnapshotId = event.headers().snapshotId(); batchHeaders = event.headers();
+                    return new BatchResult(BatchOutcome.IGNORE_DUPLICATE, skippingSnapshotId, "ALREADY_PUBLISHED", List.of());
+                }
+                if (event.observation().snapshotAt() == null) return reject(event.headers(), "INVALID_TIME");
+                if (lastPublishedSnapshotAt != null && !event.observation().snapshotAt().isAfter(lastPublishedSnapshotAt))
+                    return reject(event.headers(), "OLDER_THAN_PUBLISHED");
+                snapshotId = event.headers().snapshotId(); batchHeaders = event.headers(); startedAt = receivedAt;
+            }
+            if (skippingSnapshotId != null) {
+                if (skippingSnapshotId.equals(event.headers().snapshotId()))
+                    return new BatchResult(BatchOutcome.IGNORE_DUPLICATE, skippingSnapshotId, "ALREADY_PUBLISHED", List.of());
+                clearRejected();
+                return new BatchResult(BatchOutcome.UNCONSUMED, event.headers().snapshotId(), "DUPLICATE_END_EXPECTED", List.of(event));
+            }
+            if (!sameBatch(event.headers())) {
+                String unconsumed = event.headers().snapshotId();
+                clearRejected();
+                return new BatchResult(BatchOutcome.UNCONSUMED, unconsumed, "PREVIOUS_BATCH_REJECTED", List.of(event));
+            }
             if (stations.size() >= 5000 && !stations.containsKey(event.key())) return reject(event.headers(), "STATION_LIMIT");
             StationEvent previous = stations.putIfAbsent(event.key(), event);
             if (previous != null && !previous.observation().equals(event.observation())) return reject(event.headers(), "STATION_CONFLICT");
@@ -223,12 +246,20 @@ public final class Operations {
         public BatchResult acceptEnd(SnapshotEnd end, Instant receivedAt) {
             if (!validHeaders(end.headers(), "snapshot_end") || !allowedOrigin(end.headers().dataOrigin()) || !originAllowedForMode(end.headers().dataOrigin()))
                 return reject(end.headers(), "INVALID_HEADERS_ORIGIN");
-            if (snapshotId == null && END_KEY.equals(end.key()) && end.stationCount() == 0) {
+            if (snapshotId == null && skippingSnapshotId == null && END_KEY.equals(end.key()) && end.stationCount() == 0) {
+                if (end.headers().snapshotId().equals(lastPublishedSnapshotId))
+                    return new BatchResult(BatchOutcome.IGNORE_DUPLICATE, end.headers().snapshotId(), "ALREADY_PUBLISHED", List.of());
                 snapshotId = end.headers().snapshotId(); batchHeaders = end.headers(); startedAt = receivedAt;
+            }
+            if (skippingSnapshotId != null) {
+                if (skippingSnapshotId.equals(end.headers().snapshotId())) {
+                    String duplicate = skippingSnapshotId; clearRejected();
+                    return new BatchResult(BatchOutcome.IGNORE_DUPLICATE, duplicate, "ALREADY_PUBLISHED", List.of());
+                }
+                return reject(end.headers(), "MIXED_BATCH");
             }
             if (snapshotId == null || !sameBatch(end.headers()) || !END_KEY.equals(end.key()))
                 return reject(end.headers(), "INCOMPLETE_OR_MIXED_BATCH");
-            if (published.contains(snapshotId)) { clearRejected(); return new BatchResult(BatchOutcome.IGNORE_DUPLICATE, snapshotId, "ALREADY_PUBLISHED", List.of()); }
             if (end.stationCount() != stations.size() || !metadataStationIds.containsAll(stations.keySet()))
                 return reject(end.headers(), "COUNT_OR_METADATA_MISMATCH");
             if (lastPublishedSnapshotAt != null && !end.snapshotAt().isAfter(lastPublishedSnapshotAt))
@@ -248,11 +279,12 @@ public final class Operations {
         /** Call only after the ADS/live_release transaction commits. */
         public void markPublished(Instant snapshotAt) {
             if (snapshotId == null) throw new IllegalStateException("no batch");
-            published.add(snapshotId); lastPublishedSnapshotAt = snapshotAt;
+            lastPublishedSnapshotId = snapshotId; lastPublishedSnapshotAt = snapshotAt;
             stations.clear(); snapshotId = null; batchHeaders = null; startedAt = null;
+            skippingSnapshotId = null;
         }
 
-        public void clearRejected() { stations.clear(); snapshotId = null; batchHeaders = null; startedAt = null; }
+        public void clearRejected() { stations.clear(); snapshotId = null; batchHeaders = null; startedAt = null; skippingSnapshotId = null; }
         private boolean sameBatch(Headers h) { return batchHeaders.snapshotId().equals(h.snapshotId()) &&
                 batchHeaders.metadataVersion().equals(h.metadataVersion()) && batchHeaders.dataOrigin().equals(h.dataOrigin()) &&
                 batchHeaders.contractVersion().equals(h.contractVersion()); }
