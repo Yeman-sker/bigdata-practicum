@@ -74,11 +74,11 @@ Flume 在日志目录存在后启动，其失败不伪装成业务数据失败�
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=fixture` | 读取样例 MySQL；禁用 Kafka consumer；按已存 recorded 时钟查询 |
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=live` | 同 JVM 启用 consumer/规则与三个 HTTP API，墙钟判新鲜度 |
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=recorded` | 独立演练库/组的录制库存；消费、原子发布和录制时钟，不伪装成实时 |
-| #30 | `npm --prefix frontend ci`；`npm --prefix frontend run dev` | 全屏地图、风险/调度拨盘、日期/小时、站点透镜及 /api 代理 |
+| #30 | `npm --prefix frontend ci`；`npm --prefix frontend run dev` | 开发根地址默认共享 live 样例；全屏地图、风险/调度拨盘、日期/小时及站点透镜；`?api=1` 切换 /api 代理 |
 | #30 | `npm --prefix frontend run build` | TypeScript 与静态构建成功 |
 | #26/#29 | `mvn -f backend/pom.xml test` | HTTP 契约、规则算例、批次/事务边界测试通过 |
 
-无 MySQL 时前端直接加载 http-examples.json；API 可先用 MockMvc 和同一输入做控制器测试，不新增替代数据库。完整服务演示仍须使用 MySQL。
+无 MySQL 时前端开发根地址直接加载 http-examples.json；`?fixture=...` 选择其他样例状态，`?api=1` 显式连接 backend。API 可先用 MockMvc 和同一输入做控制器测试，不新增替代数据库。生产构建与完整服务演示仍使用真实 API/MySQL。
 
 ## Kafka 与录制事件
 

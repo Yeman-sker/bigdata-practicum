@@ -179,6 +179,6 @@ bigdata-practicum/
 ```
 
 - #26 首个实现 PR 创建 `backend/pom.xml` 和 `citibike` 根包下的应用入口；`api` 与 `operations` 共用这个工程和进程，测试目录按包镜像组织。
-- #30 前端使用 `npm --prefix frontend ci` 安装锁定依赖，以 `?fixture=live` 显式加载共享 HTTP 样例；不带 fixture 参数时通过 Vite 的 `/api` 代理连接 backend。
+- #30 前端使用 `npm --prefix frontend ci` 安装锁定依赖；开发服务器根地址默认加载共享 `live` HTTP 样例，`?fixture=...` 可选择其他样例状态，`?api=1` 显式通过 Vite 的 `/api` 代理连接 backend。生产构建不带 fixture 参数时仍连接真实 API。
 - `citibike/` 继续承接 [runbook](docs/runbook.md) 中待实现的 Python 入口；真实数据、运行日志和证据放仓库外的 `$DATA_DIR`，共享样例统一放 `fixtures/`。
 - 首个真实文件进入占位目录时，删除该目录的 `.gitkeep`。构建输出 `backend/target/`、`frontend/node_modules/` 和 `frontend/dist/` 已加入忽略规则。

@@ -123,8 +123,9 @@ type HistoryResponse = {
 
 type Example = { value: unknown; "x-status"?: number };
 const examples = examplesJson as Record<string, Example>;
-const fixtureParameter = new URLSearchParams(window.location.search).get("fixture");
-const usesFixture = fixtureParameter !== null;
+const pageQuery = new URLSearchParams(window.location.search);
+const fixtureParameter = pageQuery.get("fixture");
+const usesFixture = fixtureParameter !== null || (import.meta.env.DEV && !pageQuery.has("api"));
 const fixtureScenario = fixtureParameter || "live";
 const speeds = [0.5, 1, 2, 5] as const;
 
