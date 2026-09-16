@@ -48,3 +48,12 @@ jobs:
         run: |
           python -m pip install -r requirements-contracts.txt
           python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Compile and Run Java Operations Self-Checks
+        run: |
+          rm -rf /tmp/operations-classes
+          mkdir -p /tmp/operations-classes
+          javac --release 17 -Xlint:all -d /tmp/operations-classes \
+            $(find backend/src/main/java backend/src/test/java -name '*.java' -print)
+          java -ea -cp /tmp/operations-classes citibike.operations.OperationsSelfTest
+          java -ea -cp /tmp/operations-classes citibike.operations.FixtureDrivenSelfTest fixtures/day2/cases.json

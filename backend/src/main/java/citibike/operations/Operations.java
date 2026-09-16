@@ -262,11 +262,11 @@ public final class Operations {
                 return reject(end.headers(), "INCOMPLETE_OR_MIXED_BATCH");
             if (end.stationCount() != stations.size() || !metadataStationIds.containsAll(stations.keySet()))
                 return reject(end.headers(), "COUNT_OR_METADATA_MISMATCH");
-            if (lastPublishedSnapshotAt != null && !end.snapshotAt().isAfter(lastPublishedSnapshotAt))
-                return reject(end.headers(), "OLDER_THAN_PUBLISHED");
             if (end.snapshotAt() == null || end.ingestedAt() == null || stations.values().stream()
                     .anyMatch(e -> !end.snapshotAt().equals(e.observation().snapshotAt())))
                 return reject(end.headers(), "SNAPSHOT_TIME_MISMATCH");
+            if (lastPublishedSnapshotAt != null && !end.snapshotAt().isAfter(lastPublishedSnapshotAt))
+                return reject(end.headers(), "OLDER_THAN_PUBLISHED");
             return new BatchResult(BatchOutcome.PUBLISH, snapshotId, null, List.copyOf(stations.values()));
         }
 

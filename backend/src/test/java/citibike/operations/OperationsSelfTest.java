@@ -88,5 +88,18 @@ public final class OperationsSelfTest {
         assert c.calculate(missingTime, m, Map.of(), AS_OF, null).currentReason().equals("INVALID_TIME");
         Observation stopped = new Observation("s", observed, observed, -1, 5, false, null, true);
         assert c.calculate(stopped, m, Map.of(), AS_OF, null).currentReason().equals("SERVICE_FLAGS");
+        Headers endHeaders = new Headers("1.1", "snapshot_end",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", "FIXTURE");
+        BatchConsumer missingEndTime = new BatchConsumer(Set.of("s"), "recorded",
+                "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+                observed.minusSeconds(1));
+        missingEndTime.acceptStation(new StationEvent("s", endHeadersForStation(endHeaders), o), AS_OF);
+        assert missingEndTime.acceptEnd(new SnapshotEnd("__snapshot_end__", endHeaders, 1, null, AS_OF), AS_OF)
+                .reason().equals("SNAPSHOT_TIME_MISMATCH");
+    }
+
+    private static Headers endHeadersForStation(Headers h) {
+        return new Headers(h.contractVersion(), "station", h.snapshotId(), h.metadataVersion(), h.dataOrigin());
     }
 }
