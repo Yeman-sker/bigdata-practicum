@@ -152,8 +152,7 @@ bigdata-practicum/
 │   └── gbfs/                         # Day 1 GBFS 交接样例
 ├── docs/
 │   ├── product.md                    # 产品与 UI 行为
-│   ├── frontend-design.md            # #30 全屏地图交互与视觉规范
-│   ├── assets/frontend/              # 前端状态设计图
+│   ├── frontend-design.md            # #30 运营工作台交互与视觉规范
 │   ├── architecture.md               # 进程、目录责任与交接
 │   ├── runbook.md                    # 现有/待实现入口与运行验收
 │   ├── contracts/                    # 字段、数仓、Kafka、规则和 OpenAPI

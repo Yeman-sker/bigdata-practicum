@@ -8,7 +8,7 @@
 
 ## 背景
 
-本文保留当时的决定。现行使用 [产品与交互](../product.md)、[OpenAPI](../contracts/openapi.yaml)、[风险与调度规则](../contracts/operations.md) 和 [交付计划](../plans/delivery.md)；混合 risk_type、旧 move_bikes 公式及旧排期不再作为 v1.1 实现依据。
+本文保留当时的决定。现行使用 [产品与交互](../product.md)、[OpenAPI](../contracts/openapi.yaml)、[风险与调度规则](../contracts/operations.md) 和 [交付计划](../plans/delivery.md)；混合 risk_type、旧 move_bikes 公式及旧排期不再作为 v1.1 实现依据。2026-09-16 用户要求重设计 UI，本文的大屏与布局描述也由 [现行前端设计](../frontend-design.md) 取代。
 
 ADR-0001 已冻结数据源、标识符、时间、数仓和服务层基础契约。本 ADR 只补充本轮已经确认的地图首页、历史回放、风险展示和调度建议规则，不改变 ADR-0001 的数据语义。
 
