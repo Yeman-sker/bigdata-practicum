@@ -74,7 +74,7 @@ Flume 在日志目录存在后启动，其失败不伪装成业务数据失败�
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=fixture` | 读取样例 MySQL；禁用 Kafka consumer；按已存 recorded 时钟查询 |
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=live` | 同 JVM 启用 consumer/规则与三个 HTTP API，墙钟判新鲜度 |
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=recorded` | 独立演练库/组的录制库存；消费、原子发布和录制时钟，不伪装成实时 |
-| #30 | `npm --prefix frontend ci`；`npm --prefix frontend run dev` | 开发根地址默认共享 live 样例；全屏地图、风险/调度拨盘、日期/小时及站点透镜；`?api=1` 切换 /api 代理 |
+| #30 | `npm --prefix frontend ci`；`npm --prefix frontend run dev` | 开发根地址默认共享 live 样例；运营工作台、风险/调度视图、历史回放及站点详情；`?api=1` 切换 /api 代理 |
 | #30 | `npm --prefix frontend run build` | TypeScript 与静态构建成功 |
 | #26/#29 | `mvn -f backend/pom.xml test` | HTTP 契约、规则算例、批次/事务边界测试通过 |
 
@@ -121,7 +121,7 @@ curl --fail-with-body 'http://localhost:8080/api/v1/stations/5484.09/history?day
 
 | Given / When | Then / 最低证据 | 责任 |
 | --- | --- | --- |
-| 样例/真实当前库存，打开实时地图 | 数量与 API 相同，光晕默认当前；切换未来只改光晕；站点透镜同时显示当前与预测 | #30/#26 |
+| 样例/真实当前库存，打开实时地图 | 数量与 API 相同，风险默认当前；切换未来不改实际库存；站点详情同时显示当前与预测 | #30/#26 |
 | 真实 2025-01 已发布，切换日期/小时及四档倍速 | 非零 OD 与查询一致；历史不显示今日库存/风险；到末小时暂停 | #30/#28 |
 | 查询站点历史 | profile/实际均可手算；sample_days 按活跃日；无数据不假填零 | #30/#26/#28 |
 | 当前有效且基线可用，生成一小时估计 | raw p、两项状态、目标时间与规则算例一致 | #29 |
