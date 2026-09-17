@@ -192,6 +192,7 @@ public final class Operations {
         private String snapshotId;
         private Headers batchHeaders;
         private Instant startedAt;
+        private SnapshotEnd completedEnd;
         private String skippingSnapshotId;
         private Instant lastPublishedSnapshotAt;
         private final String mode;
@@ -221,6 +222,7 @@ public final class Operations {
         private String lastPublishedSnapshotId;
 
         public BatchResult acceptStation(StationEvent event, Instant receivedAt) {
+            if (completedEnd != null) throw new IllegalStateException("complete batch awaits publication");
             if (!validHeaders(event.headers(), "station") || !metadataVersionAllowed(event.headers()) ||
                     !allowedOrigin(event.headers().dataOrigin()) || !originAllowedForMode(event.headers().dataOrigin()))
                 return reject(event.headers(), "INVALID_HEADERS_ORIGIN");
@@ -260,9 +262,16 @@ public final class Operations {
         }
 
         public BatchResult acceptEnd(SnapshotEnd end, Instant receivedAt) {
+            if (completedEnd != null) {
+                if (!completedEnd.equals(end)) throw new IllegalStateException("complete batch awaits publication");
+                return new BatchResult(BatchOutcome.PUBLISH, snapshotId, null, List.copyOf(stations.values()));
+            }
             if (!validHeaders(end.headers(), "snapshot_end") || !metadataVersionAllowed(end.headers()) ||
                     !allowedOrigin(end.headers().dataOrigin()) || !originAllowedForMode(end.headers().dataOrigin()))
                 return reject(end.headers(), "INVALID_HEADERS_ORIGIN");
+            if (snapshotId == null && skippingSnapshotId == null && END_KEY.equals(end.key())
+                    && end.headers().snapshotId().equals(lastPublishedSnapshotId))
+                return new BatchResult(BatchOutcome.IGNORE_DUPLICATE, end.headers().snapshotId(), "ALREADY_PUBLISHED", List.of());
             if (snapshotId != null && isTimedOut(receivedAt)) {
                 if (!snapshotId.equals(end.headers().snapshotId())) {
                     clearRejected();
@@ -271,8 +280,6 @@ public final class Operations {
                 return reject(end.headers(), "BATCH_TIMEOUT");
             }
             if (snapshotId == null && skippingSnapshotId == null && END_KEY.equals(end.key()) && end.stationCount() == 0) {
-                if (end.headers().snapshotId().equals(lastPublishedSnapshotId))
-                    return new BatchResult(BatchOutcome.IGNORE_DUPLICATE, end.headers().snapshotId(), "ALREADY_PUBLISHED", List.of());
                 snapshotId = end.headers().snapshotId(); batchHeaders = end.headers(); startedAt = receivedAt;
             }
             if (skippingSnapshotId != null) {
@@ -296,11 +303,12 @@ public final class Operations {
                 return reject(end.headers(), "SNAPSHOT_TIME_MISMATCH");
             if (lastPublishedSnapshotAt != null && !end.snapshotAt().isAfter(lastPublishedSnapshotAt))
                 return reject(end.headers(), "OLDER_THAN_PUBLISHED");
+            completedEnd = end;
             return new BatchResult(BatchOutcome.PUBLISH, snapshotId, null, List.copyOf(stations.values()));
         }
 
         public BatchResult timeout(Instant now) {
-            if (snapshotId == null || startedAt == null || now.isBefore(startedAt.plus(MAX_BATCH_AGE)))
+            if (completedEnd != null || snapshotId == null || startedAt == null || now.isBefore(startedAt.plus(MAX_BATCH_AGE)))
                 return new BatchResult(BatchOutcome.BUFFERED, snapshotId, null, List.copyOf(stations.values()));
             return reject(batchHeaders, "BATCH_TIMEOUT");
         }
@@ -309,11 +317,10 @@ public final class Operations {
         public void markPublished(Instant snapshotAt) {
             if (snapshotId == null) throw new IllegalStateException("no batch");
             lastPublishedSnapshotId = snapshotId; lastPublishedSnapshotAt = snapshotAt;
-            stations.clear(); snapshotId = null; batchHeaders = null; startedAt = null;
-            skippingSnapshotId = null;
+            clearRejected();
         }
 
-        public void clearRejected() { stations.clear(); snapshotId = null; batchHeaders = null; startedAt = null; skippingSnapshotId = null; }
+        public void clearRejected() { stations.clear(); snapshotId = null; batchHeaders = null; startedAt = null; completedEnd = null; skippingSnapshotId = null; }
         private boolean sameBatch(Headers h) { return batchHeaders.snapshotId().equals(h.snapshotId()) &&
                 batchHeaders.metadataVersion().equals(h.metadataVersion()) && batchHeaders.dataOrigin().equals(h.dataOrigin()) &&
                 batchHeaders.contractVersion().equals(h.contractVersion()); }

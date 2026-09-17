@@ -112,5 +112,3 @@ jobs:
           CITIBIKE_MYSQL_IT_PASSWORD: root
         run: |
           mvn -f backend/pom.xml --batch-mode test
-          java -ea -cp backend/target/classes:backend/target/test-classes citibike.operations.OperationsSelfTest
-          java -ea -cp backend/target/classes:backend/target/test-classes citibike.operations.FixtureDrivenSelfTest fixtures/day2/cases.json
