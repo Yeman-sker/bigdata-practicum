@@ -74,24 +74,15 @@ Flume 在日志目录存在后启动，其失败不伪装成业务数据失败�
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=fixture` | 读取样例 MySQL；禁用 Kafka consumer；按已存 recorded 时钟查询 |
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=live` | 同 JVM 启用 consumer/规则与三个 HTTP API，墙钟判新鲜度 |
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=recorded` | 独立演练库/组的录制库存；消费、原子发布和录制时钟，不伪装成实时 |
-| #30 | `npm --prefix frontend ci`；`npm --prefix frontend run dev` | 全屏地图、风险/调度拨盘、日期/小时、站点透镜及 /api 代理 |
+| #30 | `npm --prefix frontend ci`；`npm --prefix frontend run dev` | 棱镜空间三维地图、右侧风险/调度面板、日期/小时、站点详情及 /api 代理 |
 | #30 | `npm --prefix frontend run build` | TypeScript 与静态构建成功 |
 | #26/#29 | `mvn -f backend/pom.xml test` | HTTP 契约、规则算例、批次/事务边界测试通过 |
 
-后端的真实 JDBC 验收使用独立的 MySQL 样例库，不得指向现有业务库。先执行上面的 `serving.sql` 和 `fixtures/day2/seed.sql`，再设置以下变量运行；测试会让 availability、live map、replay map 和 station history 全部经过 Spring/JDBC repository，并在事务内删除 `live_release` 验证 503，事务结束后自动回滚：
+开发根地址默认加载 `fixtures/day2/http-examples.json`，`?fixture=...` 选择异常状态，`?api=1` 显式连接 backend。生产构建没有 fixture 参数时使用真实 API。API 可先用 MockMvc 和同一输入做控制器测试，不新增替代数据库。完整服务演示仍须使用 MySQL。
 
-```bash
-export CITIBIKE_MYSQL_IT=true
-export CITIBIKE_MYSQL_IT_URL='jdbc:mysql://127.0.0.1:3306/citibike_fixture_it?serverTimezone=UTC'
-export CITIBIKE_MYSQL_IT_USERNAME=root
-export CITIBIKE_MYSQL_IT_PASSWORD=''
-JAVA_HOME=/opt/jdk17 PATH=/opt/jdk17/bin:$PATH \
-  mvn -f backend/pom.xml --batch-mode test
-```
+前端使用 Node.js 22.12 或更高版本；CI 使用 Node.js 22。自检使用 `npm --prefix frontend test`，构建使用 `npm --prefix frontend run build`。MapLibre 依赖锁定在 npm 锁文件中；OpenFreeMap 的矢量瓦片和字体仍需要网络。底图加载失败与 API 失败分别提示，保留地图署名。
 
-GitHub Java CI 使用 MySQL 8 服务并自动装载相同 DDL/seed；未显式设置 `CITIBIKE_MYSQL_IT=true` 时，该集成类跳过，普通单测不依赖外部服务。
-
-无 MySQL 时前端直接加载 http-examples.json；API 可先用 MockMvc 和同一输入做控制器测试，不新增替代数据库。完整服务演示仍须使用 MySQL。
+共享 live 样例只有两个站点，坐标和名称是契约测试数据，不是真实站点分布。`?fixture=live` 的调度为乙到甲 8 辆、84 米。回放默认最新可用日期，该日可以没有 OD；选择 2025-01-15 08:00 才有共享样例的 2 次 OD。不要用原型中另造的业务数据填充地图。
 
 ## Kafka 与录制事件
 
@@ -134,7 +125,7 @@ curl --fail-with-body 'http://localhost:8080/api/v1/stations/5484.09/history?day
 
 | Given / When | Then / 最低证据 | 责任 |
 | --- | --- | --- |
-| 样例/真实当前库存，打开实时地图 | 数量与 API 相同，光晕默认当前；切换未来只改光晕；站点透镜同时显示当前与预测 | #30/#26 |
+| 样例/真实当前库存，打开实时地图 | 数量与 API 相同，光晕默认当前；切换未来只改光晕；站点详情同时显示当前与预测 | #30/#26 |
 | 真实 2025-01 已发布，切换日期/小时及四档倍速 | 非零 OD 与查询一致；历史不显示今日库存/风险；到末小时暂停 | #30/#28 |
 | 查询站点历史 | profile/实际均可手算；sample_days 按活跃日；无数据不假填零 | #30/#26/#28 |
 | 当前有效且基线可用，生成一小时估计 | raw p、两项状态、目标时间与规则算例一致 | #29 |

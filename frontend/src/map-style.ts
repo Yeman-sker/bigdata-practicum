@@ -1,0 +1,149 @@
+import type { StyleSpecification } from "maplibre-gl";
+
+export const cityStyle: StyleSpecification = {
+  version: 8,
+  glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+  sources: {
+    openmaptiles: {
+      type: "vector",
+      url: "https://tiles.openfreemap.org/planet",
+      attribution:
+        '<a href="https://openfreemap.org/">OpenFreeMap</a> · <a href="https://openmaptiles.org/">OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a>',
+    },
+  },
+  light: {
+    anchor: "viewport",
+    color: "#ffffff",
+    intensity: 0.48,
+    position: [1.5, 160, 45],
+  },
+  layers: [
+    {
+      id: "land",
+      type: "background",
+      paint: { "background-color": "#15121e" },
+    },
+    {
+      id: "water",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "water",
+      paint: { "fill-color": "#08080f" },
+    },
+    {
+      id: "park",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "landuse",
+      filter: ["in", "class", "park", "cemetery"],
+      paint: { "fill-color": "#2d293d", "fill-opacity": 0.25 },
+    },
+    {
+      id: "footprints",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "building",
+      minzoom: 13,
+      paint: {
+        "fill-color": "#2d293d",
+        "fill-opacity": 0.5,
+        "fill-outline-color": "#79738b",
+      },
+    },
+    {
+      id: "streets",
+      type: "line",
+      source: "openmaptiles",
+      "source-layer": "transportation",
+      filter: ["!in", "class", "rail", "transit", "ferry", "aerialway"],
+      paint: {
+        "line-color": "#685779",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.25, 16, 2.5],
+        "line-opacity": 0.45,
+      },
+    },
+    {
+      id: "streets-major",
+      type: "line",
+      source: "openmaptiles",
+      "source-layer": "transportation",
+      filter: ["in", "class", "motorway", "trunk", "primary", "secondary"],
+      paint: {
+        "line-color": "#685779",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.6, 16, 3.5],
+        "line-opacity": 0.8,
+      },
+    },
+    {
+      id: "buildings",
+      type: "fill-extrusion",
+      source: "openmaptiles",
+      "source-layer": "building",
+      minzoom: 13,
+      filter: ["!=", ["get", "hide_3d"], true],
+      paint: {
+        "fill-extrusion-color": "#2d293d",
+        "fill-extrusion-height": ["coalesce", ["get", "render_height"], 8],
+        "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+        "fill-extrusion-opacity": 0.48,
+      },
+    },
+    {
+      id: "district-labels",
+      type: "symbol",
+      source: "openmaptiles",
+      "source-layer": "place",
+      filter: ["in", "class", "suburb", "neighbourhood", "quarter"],
+      layout: {
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 12,
+        "text-letter-spacing": 0.12,
+        "text-transform": "uppercase",
+      },
+      paint: {
+        "text-color": "#9d96b4",
+        "text-halo-color": "#15121e",
+        "text-halo-width": 2,
+      },
+    },
+    {
+      id: "street-labels",
+      type: "symbol",
+      source: "openmaptiles",
+      "source-layer": "transportation_name",
+      minzoom: 15,
+      layout: {
+        "symbol-placement": "line",
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 10,
+        "symbol-spacing": 400,
+      },
+      paint: {
+        "text-color": "#9d96b4",
+        "text-opacity": 0.65,
+        "text-halo-color": "#15121e",
+        "text-halo-width": 1,
+      },
+    },
+    {
+      id: "water-labels",
+      type: "symbol",
+      source: "openmaptiles",
+      "source-layer": "water_name",
+      filter: [
+        "in",
+        ["get", "name"],
+        ["literal", ["Hudson River", "East River", "Upper New York Bay"]],
+      ],
+      layout: {
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 13,
+        "text-letter-spacing": 0.18,
+      },
+      paint: { "text-color": "#9d96b4", "text-opacity": 0.7 },
+    },
+  ],
+};

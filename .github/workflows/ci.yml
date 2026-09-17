@@ -49,45 +49,22 @@ jobs:
           python -m pip install -r requirements-contracts.txt
           python -m unittest discover -s tests -p 'test_*.py' -v
 
-  backend:
-    name: Java Backend
+  frontend:
+    name: Frontend
     runs-on: ubuntu-latest
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: citibike_fixture_it
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-          cache-dependency-path: backend/pom.xml
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Load MySQL fixture
-        env:
-          MYSQL_PWD: root
+      - name: Test and build
         run: |
-          mysql --protocol=tcp --host=127.0.0.1 --port=3306 --user=root citibike_fixture_it < sql/serving.sql
-          mysql --protocol=tcp --host=127.0.0.1 --port=3306 --user=root citibike_fixture_it < fixtures/day2/seed.sql
-
-      - name: Run Maven tests
-        env:
-          CITIBIKE_MYSQL_IT: "true"
-          CITIBIKE_MYSQL_IT_URL: jdbc:mysql://127.0.0.1:3306/citibike_fixture_it?serverTimezone=UTC
-          CITIBIKE_MYSQL_IT_USERNAME: root
-          CITIBIKE_MYSQL_IT_PASSWORD: root
-        run: mvn -f backend/pom.xml --batch-mode test
+          npm --prefix frontend ci
+          npm --prefix frontend test
+          npm --prefix frontend run build
