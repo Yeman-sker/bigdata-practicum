@@ -10,6 +10,12 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:}
     hikari:
       connection-init-sql: "SET time_zone = '+00:00'"
+      connection-timeout: 10000
+      data-source-properties:
+        socketTimeout: 10000
+  jdbc:
+    template:
+      query-timeout: 10s
 
 citibike:
   api:

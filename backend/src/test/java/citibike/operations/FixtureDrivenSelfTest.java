@@ -73,7 +73,7 @@ public final class FixtureDrivenSelfTest {
         }
     }
 
-    private static void testBatches(List<Object> cases) {
+    private static void testBatches(List<Object> cases) throws Exception {
         assert cases.size() == 12;
         for (Object raw : cases) {
             Map<String,Object> c = castMap(raw); List<Object> records = castList(c.get("records"));
@@ -86,6 +86,12 @@ public final class FixtureDrivenSelfTest {
             Instant publishedAsOf = c.get("published_as_of_utc") == null ? null : Instant.parse(string(c.get("published_as_of_utc")));
             String metadataVersion = string(castMap(castMap(records.get(0)).get("headers")).get("metadata_version"));
             BatchConsumer gate = new BatchConsumer(ids, mode, published, publishedAt, metadataVersion);
+            java.util.concurrent.atomic.AtomicReference<Instant> durableAsOf =
+                    new java.util.concurrent.atomic.AtomicReference<>(publishedAsOf);
+            Map<String, Metadata> metadata = new HashMap<>();
+            ids.forEach(id -> metadata.put(id, new Metadata(id, id, 40.7, -74.0, 40)));
+            BatchProcessor processor = new BatchProcessor(gate,
+                    (risks, suggestions, release) -> durableAsOf.set(release.asOf()), metadataVersion);
             BatchResult last = null;
             for (Object x : records) {
                 Map<String,Object> r = castMap(x), h = castMap(r.get("headers"));
@@ -97,8 +103,9 @@ public final class FixtureDrivenSelfTest {
                     last = gate.acceptStation(new StationEvent(string(r.get("key")), headers(h), o), received);
                 } else {
                     Map<String,Object> v = castMap(r.get("value"));
-                    last = gate.acceptEnd(new SnapshotEnd(string(r.get("key")), headers(h), integer(v.get("station_count")),
-                            Instant.parse(string(v.get("snapshot_at_utc"))), Instant.parse(string(v.get("ingested_at_utc")))), received);
+                    last = processor.finish(new SnapshotEnd(string(r.get("key")), headers(h), integer(v.get("station_count")),
+                            Instant.parse(string(v.get("snapshot_at_utc"))), Instant.parse(string(v.get("ingested_at_utc")))),
+                            received, metadata, Map.of(), null, received);
                 }
             }
             if ("timeout".equals(c.get("name"))) last = gate.timeout(AS_OF.plusSeconds(integer(c.get("advance_wall_seconds"))));
@@ -108,7 +115,7 @@ public final class FixtureDrivenSelfTest {
             check(last != null && last.outcome() == wanted, c, "batch outcome");
             if (c.get("expected_as_of_utc") != null) {
                 Instant expectedAsOf = Instant.parse(string(c.get("expected_as_of_utc")));
-                check(expectedAsOf.equals(publishedAsOf), c, "failed batch preserves published as_of");
+                check(expectedAsOf.equals(durableAsOf.get()), c, "failed batch preserves published as_of");
             }
         }
     }
