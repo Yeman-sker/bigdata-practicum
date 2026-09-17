@@ -21,7 +21,7 @@ import tempfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -43,6 +43,10 @@ TOPIC = "bike.station.status.v1"
 CONTRACT_VERSION = "1.1"
 ORIGINS = frozenset({"GBFS_LIVE", "GBFS_REPLAY", "FIXTURE"})
 ID_RE = re.compile(r"^[0-9a-f]{64}$")
+UTC_TIMESTAMP_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$"
+)
+MAX_STATION_ID_LENGTH = 128
 MAX_STATIONS = 5_000
 
 
@@ -111,20 +115,49 @@ def snapshot_id(raw_status_bytes: bytes, metadata_version_value: str) -> str:
 def _required_provider_id(value: Any, context: str) -> str:
     if not isinstance(value, str) or not value or value.strip() != value:
         raise StreamError(f"{context}.station_id must be a non-empty trimmed string")
-    if len(value) > 128 or any(char.isspace() for char in value):
+    if len(value) > MAX_STATION_ID_LENGTH or any(char.isspace() for char in value):
         raise StreamError(
-            f"{context}.station_id must be at most 128 non-whitespace characters"
+            f"{context}.station_id must be at most "
+            f"{MAX_STATION_ID_LENGTH} non-whitespace characters"
         )
     return value
 
 
 def _canonical_id(provider_id: str) -> str:
     value = f"gbfs:{provider_id}"
-    if len(value) > 128:
+    if len(value) > MAX_STATION_ID_LENGTH:
         raise StreamError(
-            f"isolated station_id is longer than 128 characters: {provider_id}"
+            "isolated station_id is longer than "
+            f"{MAX_STATION_ID_LENGTH} characters: {provider_id}"
         )
     return value
+
+
+def _validate_station_id(value: Any) -> None:
+    """校验 replay 中的 canonical station_id，避免绕过映射边界。"""
+
+    if not isinstance(value, str) or not value:
+        raise StreamError("station_id must be a non-empty string")
+    if len(value) > MAX_STATION_ID_LENGTH or any(char.isspace() for char in value):
+        raise StreamError(
+            "station_id must be at most "
+            f"{MAX_STATION_ID_LENGTH} non-whitespace characters"
+        )
+
+
+def _validate_utc_timestamp(value: Any, field: str) -> None:
+    """校验契约要求的 RFC 3339 UTC 时间。"""
+
+    if not isinstance(value, str):
+        raise StreamError(f"{field} must be a timestamp string")
+    if not UTC_TIMESTAMP_RE.fullmatch(value):
+        raise StreamError(f"{field} must be an RFC 3339 UTC timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise StreamError(f"{field} must be an RFC 3339 timestamp") from error
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
+        raise StreamError(f"{field} must use UTC")
 
 
 def _metadata_time(feed: Mapping[str, Any], fallback: datetime | None = None) -> str:
@@ -445,6 +478,7 @@ def _validate_record(record: Mapping[str, Any]) -> None:
     if headers["data_origin"] not in ORIGINS:
         raise StreamError("unsupported data_origin")
     if headers["record_type"] == "station":
+        _validate_station_id(value.get("station_id"))
         if record["key"] != value.get("station_id"):
             raise StreamError("station Kafka key must equal canonical station_id")
         errors = validate_event(value)
@@ -462,8 +496,7 @@ def _validate_record(record: Mapping[str, Any]) -> None:
                 "snapshot_end.station_count must be a non-negative integer"
             )
         for field in ("snapshot_at_utc", "ingested_at_utc"):
-            if not isinstance(value.get(field), str):
-                raise StreamError(f"snapshot_end.{field} must be a timestamp string")
+            _validate_utc_timestamp(value.get(field), f"snapshot_end.{field}")
     else:
         raise StreamError(f"unsupported Kafka record_type: {headers['record_type']}")
 

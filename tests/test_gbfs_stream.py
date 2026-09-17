@@ -157,6 +157,45 @@ class GbfsStreamTest(unittest.TestCase):
         self.assertEqual(len(replayed), 1)
         self.assertEqual(replayed[0]["headers"]["data_origin"], "GBFS_REPLAY")
 
+    def test_replay_rejects_station_id_outside_contract(self):
+        records = [
+            json.loads(line)
+            for line in (FIXTURE / "events.ndjson").read_text().splitlines()
+        ]
+        station = records[0]
+        station_id = "x" * 129
+        station["key"] = station_id
+        station["value"]["station_id"] = station_id
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid-station-id.ndjson"
+            path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+            with self.assertRaisesRegex(StreamError, "at most 128"):
+                replay_records(path)
+
+    def test_replay_rejects_invalid_snapshot_end_timestamps(self):
+        information, status, _ = fixture_feeds()
+        status["data"]["stations"] = []
+        batch = build_batch(
+            information,
+            status,
+            b'{"data":{"stations":[]}}',
+            datetime(2025, 2, 5, 13, tzinfo=timezone.utc),
+            "FIXTURE",
+        )
+        for field, invalid_value in {
+            "snapshot_at_utc": "2025-02-05 13:00:00Z",
+            "ingested_at_utc": "2025-02-05T08:00:00-05:00",
+        }.items():
+            with self.subTest(field=field):
+                end = dict(batch.records[-1])
+                end["value"] = dict(end["value"])
+                end["value"][field] = invalid_value
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / f"invalid-{field}.ndjson"
+                    path.write_text(json.dumps(end) + "\n")
+                    with self.assertRaisesRegex(StreamError, "snapshot_end"):
+                        replay_records(path)
+
     def test_replay_requires_matching_metadata_file_and_logs_failure(self):
         producer = FakeProducer()
         with tempfile.TemporaryDirectory() as directory:
