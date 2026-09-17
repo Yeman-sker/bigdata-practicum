@@ -83,7 +83,9 @@ public final class FixtureDrivenSelfTest {
             String mode = "live".equals(c.get("backend_profile")) ? "live" : "recorded";
             String published = (String)c.get("published_snapshot_id");
             Instant publishedAt = c.get("published_snapshot_at_utc") == null ? null : Instant.parse(string(c.get("published_snapshot_at_utc")));
-            BatchConsumer gate = new BatchConsumer(ids, mode, published, publishedAt);
+            Instant publishedAsOf = c.get("published_as_of_utc") == null ? null : Instant.parse(string(c.get("published_as_of_utc")));
+            String metadataVersion = string(castMap(castMap(records.get(0)).get("headers")).get("metadata_version"));
+            BatchConsumer gate = new BatchConsumer(ids, mode, published, publishedAt, metadataVersion);
             BatchResult last = null;
             for (Object x : records) {
                 Map<String,Object> r = castMap(x), h = castMap(r.get("headers"));
@@ -104,6 +106,10 @@ public final class FixtureDrivenSelfTest {
             BatchOutcome wanted = "PUBLISH".equals(expected) ? BatchOutcome.PUBLISH : "IGNORE_DUPLICATE".equals(expected)
                     ? BatchOutcome.IGNORE_DUPLICATE : BatchOutcome.REJECT_KEEP_PREVIOUS;
             check(last != null && last.outcome() == wanted, c, "batch outcome");
+            if (c.get("expected_as_of_utc") != null) {
+                Instant expectedAsOf = Instant.parse(string(c.get("expected_as_of_utc")));
+                check(expectedAsOf.equals(publishedAsOf), c, "failed batch preserves published as_of");
+            }
         }
     }
 

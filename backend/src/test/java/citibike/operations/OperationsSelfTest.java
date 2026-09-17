@@ -60,7 +60,7 @@ public final class OperationsSelfTest {
         retryGate.acceptStation(new StationEvent("s", h, o), AS_OF);
         BatchProcessor processor = new BatchProcessor(retryGate, (risks, suggestions, release) -> {
             attempted[0] = true; throw new Exception("simulated transaction failure");
-        });
+        }, mv);
         try {
             processor.finish(new SnapshotEnd("__snapshot_end__", eh, 1, o.snapshotAt(), AS_OF), AS_OF,
                     Map.of("s", new Metadata("s", "S", 40.7, -74.0, 10)), Map.of(), "dataset", AS_OF);
@@ -68,6 +68,16 @@ public final class OperationsSelfTest {
         } catch (Exception expected) { assert attempted[0]; }
         assert retryGate.acceptEnd(new SnapshotEnd("__snapshot_end__", eh, 1, o.snapshotAt(), AS_OF), AS_OF).outcome()
                 == BatchOutcome.PUBLISH;
+        BatchConsumer mismatchGate = new BatchConsumer(Set.of("s"), "recorded");
+        mismatchGate.acceptStation(new StationEvent("s", h, o), AS_OF);
+        BatchProcessor mismatchProcessor = new BatchProcessor(mismatchGate, (risks, suggestions, release) -> {
+            throw new AssertionError("metadata mismatch reached publisher");
+        }, id);
+        try {
+            assert mismatchProcessor.finish(new SnapshotEnd("__snapshot_end__", eh, 1, o.snapshotAt(), AS_OF), AS_OF,
+                    Map.of("s", new Metadata("s", "S", 40.7, -74.0, 10)), Map.of(), "dataset", AS_OF).reason()
+                    .equals("METADATA_VERSION_MISMATCH");
+        } catch (Exception unexpected) { throw new AssertionError(unexpected); }
         String emptyId = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
         Headers emptyHeaders = new Headers("1.1", "snapshot_end", emptyId, mv, "FIXTURE");
         assert new BatchConsumer(Set.of(), "recorded").acceptEnd(new SnapshotEnd("__snapshot_end__", emptyHeaders, 0,

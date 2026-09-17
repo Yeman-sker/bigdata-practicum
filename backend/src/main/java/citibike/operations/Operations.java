@@ -45,10 +45,10 @@ public final class Operations {
             if (asOf.compareTo(expires) >= 0) return invalid(o, m, Status.STALE_DATA, "STALE_OBSERVATION", expires);
             if (Boolean.FALSE.equals(o.installed()) || Boolean.FALSE.equals(o.renting()) || Boolean.FALSE.equals(o.returning()))
                 return invalid(o, m, Status.SERVICE_UNAVAILABLE, "SERVICE_FLAGS", expires);
-            if (o.installed() == null || o.renting() == null || o.returning() == null)
-                return invalid(o, m, Status.INSUFFICIENT_DATA, "MISSING_INVENTORY", expires);
             if (o.bikes() != null && o.bikes() < 0 || o.docks() != null && o.docks() < 0)
                 return invalid(o, m, Status.INVALID_DATA, "NEGATIVE_INVENTORY", expires);
+            if (o.installed() == null || o.renting() == null || o.returning() == null)
+                return invalid(o, m, Status.INSUFFICIENT_DATA, "MISSING_INVENTORY", expires);
             if (o.bikes() == null || o.docks() == null)
                 return invalid(o, m, Status.INSUFFICIENT_DATA, "MISSING_INVENTORY", expires);
             int serviceable = o.bikes() + o.docks();
@@ -133,7 +133,7 @@ public final class Operations {
 
     /** Apply request-time expiry to a row loaded from ADS. */
     public static Risk forRead(Risk risk, Instant asOf) {
-        if (asOf.isBefore(risk.expiresAt()) || risk.currentStatus() == Status.INVALID_DATA) return risk;
+        if (asOf.isBefore(risk.expiresAt())) return risk;
         return new Risk(risk.stationId(), risk.metadata(), risk.observation(), Status.STALE_DATA,
                 "STALE_OBSERVATION", Status.STALE_DATA, "STALE_OBSERVATION", null, null, null,
                 null, null, null, null, risk.expiresAt());
@@ -187,6 +187,7 @@ public final class Operations {
         private static final String END_KEY = "__snapshot_end__";
         private static final Duration MAX_BATCH_AGE = Duration.ofSeconds(120);
         private final Set<String> metadataStationIds;
+        private final String expectedMetadataVersion;
         private final Map<String, StationEvent> stations = new LinkedHashMap<>();
         private String snapshotId;
         private Headers batchHeaders;
@@ -196,26 +197,41 @@ public final class Operations {
         private final String mode;
 
         public BatchConsumer(Set<String> metadataStationIds) {
-            this(metadataStationIds, "any", null, null);
+            this(metadataStationIds, "any", null, null, null);
         }
         public BatchConsumer(Set<String> metadataStationIds, String mode) {
-            this(metadataStationIds, mode, null, null);
+            this(metadataStationIds, mode, null, null, null);
         }
         public BatchConsumer(Set<String> metadataStationIds, String mode, String lastPublishedSnapshotId,
                              Instant lastPublishedSnapshotAt) {
+            this(metadataStationIds, mode, lastPublishedSnapshotId, lastPublishedSnapshotAt, null);
+        }
+        public BatchConsumer(Set<String> metadataStationIds, String mode, String lastPublishedSnapshotId,
+                             Instant lastPublishedSnapshotAt, String expectedMetadataVersion) {
             this.metadataStationIds = Set.copyOf(metadataStationIds);
             if (!Set.of("any", "live", "recorded").contains(mode)) throw new IllegalArgumentException("mode");
+            if (expectedMetadataVersion != null && !expectedMetadataVersion.matches("[0-9a-f]{64}"))
+                throw new IllegalArgumentException("expectedMetadataVersion");
             this.mode = mode;
             this.skippingSnapshotId = null;
             this.lastPublishedSnapshotAt = lastPublishedSnapshotAt;
             this.lastPublishedSnapshotId = lastPublishedSnapshotId;
+            this.expectedMetadataVersion = expectedMetadataVersion;
         }
         private String lastPublishedSnapshotId;
 
         public BatchResult acceptStation(StationEvent event, Instant receivedAt) {
-            if (!validHeaders(event.headers(), "station") || !allowedOrigin(event.headers().dataOrigin()) || !originAllowedForMode(event.headers().dataOrigin()))
+            if (!validHeaders(event.headers(), "station") || !metadataVersionAllowed(event.headers()) ||
+                    !allowedOrigin(event.headers().dataOrigin()) || !originAllowedForMode(event.headers().dataOrigin()))
                 return reject(event.headers(), "INVALID_HEADERS_ORIGIN");
             if (!event.key().equals(event.observation().stationId())) return reject(event.headers(), "KEY_MISMATCH");
+            if (snapshotId != null && isTimedOut(receivedAt)) {
+                if (!snapshotId.equals(event.headers().snapshotId())) {
+                    clearRejected();
+                    return new BatchResult(BatchOutcome.UNCONSUMED, event.headers().snapshotId(), "PREVIOUS_BATCH_TIMEOUT", List.of(event));
+                }
+                return reject(event.headers(), "BATCH_TIMEOUT");
+            }
             if (snapshotId == null && skippingSnapshotId == null) {
                 if (event.headers().snapshotId().equals(lastPublishedSnapshotId)) {
                     skippingSnapshotId = event.headers().snapshotId(); batchHeaders = event.headers();
@@ -244,8 +260,16 @@ public final class Operations {
         }
 
         public BatchResult acceptEnd(SnapshotEnd end, Instant receivedAt) {
-            if (!validHeaders(end.headers(), "snapshot_end") || !allowedOrigin(end.headers().dataOrigin()) || !originAllowedForMode(end.headers().dataOrigin()))
+            if (!validHeaders(end.headers(), "snapshot_end") || !metadataVersionAllowed(end.headers()) ||
+                    !allowedOrigin(end.headers().dataOrigin()) || !originAllowedForMode(end.headers().dataOrigin()))
                 return reject(end.headers(), "INVALID_HEADERS_ORIGIN");
+            if (snapshotId != null && isTimedOut(receivedAt)) {
+                if (!snapshotId.equals(end.headers().snapshotId())) {
+                    clearRejected();
+                    return new BatchResult(BatchOutcome.UNCONSUMED, end.headers().snapshotId(), "PREVIOUS_BATCH_TIMEOUT", List.of());
+                }
+                return reject(end.headers(), "BATCH_TIMEOUT");
+            }
             if (snapshotId == null && skippingSnapshotId == null && END_KEY.equals(end.key()) && end.stationCount() == 0) {
                 if (end.headers().snapshotId().equals(lastPublishedSnapshotId))
                     return new BatchResult(BatchOutcome.IGNORE_DUPLICATE, end.headers().snapshotId(), "ALREADY_PUBLISHED", List.of());
@@ -256,7 +280,12 @@ public final class Operations {
                     String duplicate = skippingSnapshotId; clearRejected();
                     return new BatchResult(BatchOutcome.IGNORE_DUPLICATE, duplicate, "ALREADY_PUBLISHED", List.of());
                 }
-                return reject(end.headers(), "MIXED_BATCH");
+                clearRejected();
+                return new BatchResult(BatchOutcome.UNCONSUMED, end.headers().snapshotId(), "DUPLICATE_END_EXPECTED", List.of());
+            }
+            if (snapshotId != null && !snapshotId.equals(end.headers().snapshotId())) {
+                clearRejected();
+                return new BatchResult(BatchOutcome.UNCONSUMED, end.headers().snapshotId(), "PREVIOUS_BATCH_REJECTED", List.of());
             }
             if (snapshotId == null || !sameBatch(end.headers()) || !END_KEY.equals(end.key()))
                 return reject(end.headers(), "INCOMPLETE_OR_MIXED_BATCH");
@@ -288,6 +317,12 @@ public final class Operations {
         private boolean sameBatch(Headers h) { return batchHeaders.snapshotId().equals(h.snapshotId()) &&
                 batchHeaders.metadataVersion().equals(h.metadataVersion()) && batchHeaders.dataOrigin().equals(h.dataOrigin()) &&
                 batchHeaders.contractVersion().equals(h.contractVersion()); }
+        private boolean metadataVersionAllowed(Headers h) {
+            return expectedMetadataVersion == null || expectedMetadataVersion.equals(h.metadataVersion());
+        }
+        private boolean isTimedOut(Instant receivedAt) {
+            return receivedAt != null && startedAt != null && !receivedAt.isBefore(startedAt.plus(MAX_BATCH_AGE));
+        }
         private static boolean validHeaders(Headers h, String type) { return h != null && "1.1".equals(h.contractVersion()) &&
                 type.equals(h.recordType()) && h.snapshotId() != null && h.snapshotId().matches("[0-9a-f]{64}") &&
                 h.metadataVersion() != null && h.metadataVersion().matches("[0-9a-f]{64}"); }
@@ -313,9 +348,13 @@ public final class Operations {
         private final BatchConsumer consumer;
         private final RiskCalculator calculator = new RiskCalculator();
         private final AtomicPublisher publisher;
+        private final String metadataVersion;
 
-        public BatchProcessor(BatchConsumer consumer, AtomicPublisher publisher) {
+        public BatchProcessor(BatchConsumer consumer, AtomicPublisher publisher, String metadataVersion) {
             this.consumer = Objects.requireNonNull(consumer); this.publisher = Objects.requireNonNull(publisher);
+            if (metadataVersion == null || !metadataVersion.matches("[0-9a-f]{64}"))
+                throw new IllegalArgumentException("metadataVersion");
+            this.metadataVersion = metadataVersion;
         }
 
         /**
@@ -325,22 +364,32 @@ public final class Operations {
         public BatchResult finish(SnapshotEnd end, Instant asOf, Map<String, Metadata> metadata,
                                   Map<String, Map<DayHour, Profile>> profiles,
                                   String baselineDatasetId, Instant publishedAt) throws Exception {
+            if (!metadataVersion.equals(end.headers().metadataVersion())) {
+                consumer.clearRejected();
+                return new BatchResult(BatchOutcome.REJECT_KEEP_PREVIOUS, end.headers().snapshotId(),
+                        "METADATA_VERSION_MISMATCH", List.of());
+            }
             BatchResult checked = consumer.acceptEnd(end, asOf);
             if (checked.outcome() != BatchOutcome.PUBLISH) return checked;
             List<Risk> risks = new ArrayList<>();
+            Instant calculationAsOf = recorded(end.headers().dataOrigin()) ? end.ingestedAt() : asOf;
             for (StationEvent event : checked.stations()) {
                 Metadata m = metadata.get(event.observation().stationId());
                 if (m == null) throw new IllegalArgumentException("missing metadata for " + event.observation().stationId());
                 risks.add(calculator.calculate(event.observation(), m,
-                        profiles.getOrDefault(event.observation().stationId(), Map.of()), asOf, baselineDatasetId));
+                        profiles.getOrDefault(event.observation().stationId(), Map.of()), calculationAsOf, baselineDatasetId));
             }
             List<Suggestion> suggestions = rebalance(end.headers().snapshotId(), risks, publishedAt);
             Release release = new Release(end.headers().snapshotId(), end.headers().metadataVersion(), baselineDatasetId,
-                    end.snapshotAt(), end.ingestedAt(), asOf, publishedAt, end.headers().dataOrigin(),
-                    "FIXTURE".equals(end.headers().dataOrigin()) || "GBFS_REPLAY".equals(end.headers().dataOrigin()) ? "recorded" : "wall");
+                    end.snapshotAt(), end.ingestedAt(), calculationAsOf, publishedAt, end.headers().dataOrigin(),
+                    recorded(end.headers().dataOrigin()) ? "recorded" : "wall");
             publisher.publish(List.copyOf(risks), suggestions, release);
             consumer.markPublished(end.snapshotAt());
             return new BatchResult(BatchOutcome.PUBLISH, release.snapshotId(), null, checked.stations());
+        }
+
+        private static boolean recorded(String origin) {
+            return "FIXTURE".equals(origin) || "GBFS_REPLAY".equals(origin);
         }
     }
 }
