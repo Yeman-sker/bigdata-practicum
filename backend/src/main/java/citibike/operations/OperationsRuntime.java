@@ -141,7 +141,6 @@ public final class OperationsRuntime implements SmartLifecycle {
         running = false;
         kafka.wakeup();
         if (thread != null) {
-            thread.interrupt();
             try {
                 thread.join(15000);
             } catch (InterruptedException interrupted) {

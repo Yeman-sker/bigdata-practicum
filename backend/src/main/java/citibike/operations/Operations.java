@@ -51,7 +51,7 @@ public final class Operations {
                 return invalid(o, m, Status.INSUFFICIENT_DATA, "MISSING_INVENTORY", expires);
             if (o.bikes() == null || o.docks() == null)
                 return invalid(o, m, Status.INSUFFICIENT_DATA, "MISSING_INVENTORY", expires);
-            int serviceable = o.bikes() + o.docks();
+            long serviceable = (long) o.bikes() + o.docks();
             if (serviceable == 0) return invalid(o, m, Status.INSUFFICIENT_DATA, "ZERO_SERVICEABLE_CAPACITY", expires);
             Status current = classify((double) o.bikes() / serviceable);
             Profile p = profiles == null ? null : profiles.get(dayHour(o.snapshotAt()));
@@ -101,12 +101,12 @@ public final class Operations {
         Map<String, Integer> sourceBikes = new HashMap<>();
         Map<String, Integer> targetDocks = new HashMap<>();
         Map<String, Integer> targetSafe = new HashMap<>();
-        for (Risk r : sources) { int s = Math.max(0, (int)Math.floor(r.projectedBikes() - .70 * r.metadata().capacity()));
-            int safe = Math.max(0, r.observation().bikes() - (int)Math.ceil(.30 * serviceable(r)));
+        for (Risk r : sources) { int s = Math.max(0, (int)Math.floor(r.projectedBikes() - 7L * r.metadata().capacity() / 10.0));
+            int safe = (int)Math.max(0, r.observation().bikes() - (3 * serviceable(r) + 9) / 10);
             supplies.put(r.stationId(), s); sourceSafe.put(r.stationId(), safe); sourceBikes.put(r.stationId(), r.observation().bikes()); }
         for (Risk r : targets) { needs.put(r.stationId(), need(r));
             targetDocks.put(r.stationId(), r.observation().docks());
-            targetSafe.put(r.stationId(), Math.max(0, (int)Math.floor(.70 * serviceable(r)) - r.observation().bikes())); }
+            targetSafe.put(r.stationId(), (int)Math.max(0, 7 * serviceable(r) / 10 - r.observation().bikes())); }
         List<Suggestion> out = new ArrayList<>();
         for (Risk target : targets) {
             List<Risk> ordered = sources.stream().sorted(Comparator.comparingDouble((Risk s) -> distance(s.metadata(), target.metadata()))
@@ -155,8 +155,8 @@ public final class Operations {
                 && risk.currentStatus() != Status.INVALID_DATA && risk.currentStatus() != Status.INSUFFICIENT_DATA;
     }
 
-    private static int serviceable(Risk r) { return r.observation().bikes() + r.observation().docks(); }
-    private static int need(Risk r) { return Math.max(0, (int)Math.ceil(.30 * r.metadata().capacity() - r.projectedBikes())); }
+    private static long serviceable(Risk r) { return (long) r.observation().bikes() + r.observation().docks(); }
+    private static int need(Risk r) { return Math.max(0, (int)Math.ceil(3L * r.metadata().capacity() / 10.0 - r.projectedBikes())); }
     private static boolean feasible(Risk r) { return r.metadata() != null && r.metadata().capacity() != null && r.metadata().capacity() > 0
             && r.metadata().lat() != null && r.metadata().lon() != null && r.observation().bikes() != null
             && r.observation().docks() != null && r.observation().bikes() >= 0 && r.observation().docks() >= 0

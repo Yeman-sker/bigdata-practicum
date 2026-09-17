@@ -13,6 +13,31 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class OperationsTest {
     @Test
+    void inventorySumDoesNotOverflow() {
+        Instant now = Instant.parse("2025-02-05T13:00:00Z");
+        Risk risk = new RiskCalculator().calculate(
+                new Observation("s", now, now, 1_500_000_000, 1_500_000_000, true, true, true),
+                new Metadata("s", "S", 40.7, -74.0, 40), Map.of(), now, null);
+        assertEquals(Status.HEALTHY, risk.currentStatus());
+        assertEquals(0.5, risk.fillRatio());
+    }
+
+    @Test
+    void dispatchUsesExactIntegerSafetyLimits() {
+        Instant now = Instant.parse("2025-02-05T13:00:00Z");
+        RiskCalculator calculator = new RiskCalculator();
+        Risk source = calculator.calculate(new Observation("source", now, now, 70, 30, true, true, true),
+                new Metadata("source", "S", 40.7, -74.001, 100),
+                Map.of(new DayHour(3, 8), new Profile(30, 0, 30, 2)), now, "dataset");
+        Risk target = calculator.calculate(new Observation("target", now, now, 62, 28, true, true, true),
+                new Metadata("target", "T", 40.7, -74.0, 90),
+                Map.of(new DayHour(3, 8), new Profile(0, 62, -62, 2)), now, "dataset");
+        var suggestions = rebalance("snapshot", java.util.List.of(source, target), now);
+        assertEquals(1, suggestions.size());
+        assertEquals(1, suggestions.get(0).moveBikes());
+    }
+
+    @Test
     void completeBatchSurvivesDelayedPublicationRetryWithoutAdvancingRecordedClock() throws Exception {
         Instant now = Instant.parse("2025-02-05T13:00:02Z");
         String id = "a".repeat(64), version = "b".repeat(64);

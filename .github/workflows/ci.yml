@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:8.0.46
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: citibike_fixture_it
@@ -85,6 +85,17 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+      kafka:
+        image: apache/kafka:3.9.2
+        ports:
+          - 9092:9092
+        env:
+          KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+        options: >-
+          --health-cmd="/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"
+          --health-interval=10s
+          --health-timeout=10s
+          --health-retries=20
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -101,6 +112,7 @@ jobs:
         env:
           MYSQL_PWD: root
         run: |
+          mysql --protocol=tcp --host=127.0.0.1 --port=3306 --user=root -e 'CREATE DATABASE citibike_operations_it CHARACTER SET utf8mb4 COLLATE utf8mb4_bin; CREATE DATABASE citibike_kafka_it CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;'
           mysql --default-character-set=utf8mb4 --protocol=tcp --host=127.0.0.1 --port=3306 --user=root citibike_fixture_it < sql/serving.sql
           mysql --default-character-set=utf8mb4 --protocol=tcp --host=127.0.0.1 --port=3306 --user=root citibike_fixture_it < fixtures/day2/seed.sql
 
@@ -110,5 +122,14 @@ jobs:
           CITIBIKE_MYSQL_IT_URL: jdbc:mysql://127.0.0.1:3306/citibike_fixture_it?serverTimezone=UTC
           CITIBIKE_MYSQL_IT_USERNAME: root
           CITIBIKE_MYSQL_IT_PASSWORD: root
+          CITIBIKE_OPERATIONS_IT: "true"
+          CITIBIKE_OPERATIONS_IT_URL: jdbc:mysql://127.0.0.1:3306/citibike_operations_it?serverTimezone=UTC
+          CITIBIKE_OPERATIONS_IT_USERNAME: root
+          CITIBIKE_OPERATIONS_IT_PASSWORD: root
+          CITIBIKE_KAFKA_IT: "true"
+          CITIBIKE_KAFKA_IT_BOOTSTRAP: localhost:9092
+          CITIBIKE_KAFKA_IT_URL: jdbc:mysql://127.0.0.1:3306/citibike_kafka_it?serverTimezone=UTC
+          CITIBIKE_KAFKA_IT_USERNAME: root
+          CITIBIKE_KAFKA_IT_PASSWORD: root
         run: |
           mvn -f backend/pom.xml --batch-mode test
