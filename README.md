@@ -107,7 +107,7 @@ source ~/use-jdk17.sh
 
 ## 3. 项目目录与 Agent Skill 索引
 
-下列目录均已落盘；标注“占位”的目录目前只含 `.gitkeep`，用于明确并行开发边界，尚不能构建或启动应用。目录责任见 [架构与模块边界](docs/architecture.md#目录与冲突边界)。
+下列目录均已落盘；仍标注“占位”的目录目前只含 `.gitkeep`，用于明确并行开发边界，尚不能构建或启动对应应用。backend 的 API 工程已由 #26 提供，operations 与 frontend 仍按各自 Issue 交付。目录责任见 [架构与模块边界](docs/architecture.md#目录与冲突边界)。
 
 ```text
 bigdata-practicum/
@@ -119,15 +119,16 @@ bigdata-practicum/
 │   ├── gbfs.py
 │   ├── gbfs_fixture.py
 │   └── spark.py
-├── backend/                          # 一个 Spring Boot / Maven 工程，待初始化
+├── backend/                          # 一个 Spring Boot / Maven 工程，#26 API 已实现
+│   ├── pom.xml
 │   └── src/
 │       ├── main/
 │       │   ├── java/citibike/         # 共享 Java 根包，应用入口由 #26 交付
-│       │   │   ├── api/               # 占位：#26 HTTP 查询
+│       │   │   ├── api/               # #26 只读 HTTP 查询
 │       │   │   └── operations/        # 占位：#29 规则、消费与实时发布
-│       │   └── resources/            # 占位：#26 公共应用配置
+│       │   └── resources/            # #26 公共应用配置
 │       └── test/java/citibike/
-│           ├── api/                  # 占位：#26 API 测试
+│           ├── api/                  # #26 API 测试
 │           └── operations/           # 占位：#29 规则与消费测试
 ├── frontend/                         # #30 Yeman-sker：UI 设计与完整前端
 │   ├── src/                          # React / TypeScript、MapLibre、交互与模型自检
