@@ -1,0 +1,200 @@
+import json
+import tempfile
+import unittest
+from datetime import datetime, timezone
+from pathlib import Path
+
+from citibike.gbfs_stream import (
+    StreamError,
+    build_batch,
+    build_canonical_metadata,
+    replay_records,
+    run_once,
+    send_batch,
+)
+
+
+FIXTURE = Path(__file__).parents[1] / "fixtures" / "day2"
+
+
+class FakeProducer:
+    def __init__(self, fail_on_call=None):
+        self.calls = []
+        self.fail_on_call = fail_on_call
+
+    def send_records(self, records):
+        self.calls.append(records)
+        if self.fail_on_call == len(self.calls):
+            raise RuntimeError("broker unavailable")
+
+
+def fixture_feeds():
+    information = json.loads((FIXTURE / "station_information.json").read_text())
+    status_bytes = (FIXTURE / "station_status.json").read_bytes()
+    status = json.loads(status_bytes)
+    return information, status, status_bytes
+
+
+class GbfsStreamTest(unittest.TestCase):
+    def test_fixture_batch_matches_canonical_hash_contract(self):
+        information, status, status_bytes = fixture_feeds()
+        batch = build_batch(
+            information,
+            status,
+            status_bytes,
+            datetime(2025, 2, 5, 13, 0, 2, tzinfo=timezone.utc),
+            "FIXTURE",
+        )
+        self.assertEqual(
+            batch.metadata_version,
+            "84fb15f78a673f21687fce423e223a2970f7276903398e6e0c19c502ab1ea41b",
+        )
+        self.assertEqual(
+            batch.snapshot_id,
+            "144dc6c63f679f72b02b9ada5129d5393976fdb04be00534eda8ebe73c3fb3c3",
+        )
+        self.assertEqual(
+            [record["key"] for record in batch.records],
+            ["4199.12", "5484.09", "__snapshot_end__"],
+        )
+        self.assertEqual(batch.records[-1]["value"]["station_count"], 2)
+        self.assertTrue(
+            all(
+                record["headers"]["data_origin"] == "FIXTURE"
+                for record in batch.records
+            )
+        )
+
+    def test_mapping_isolates_duplicate_and_missing_short_names(self):
+        information, status, _ = fixture_feeds()
+        information["data"]["stations"][0]["short_name"] = "same"
+        information["data"]["stations"][1]["short_name"] = "same"
+        information["data"]["stations"][1]["capacity"] = 0
+        status["data"]["stations"].append(
+            {
+                "station_id": "missing-provider",
+                "num_bikes_available": -1,
+                "num_docks_available": 0,
+                "num_bikes_disabled": 0,
+                "num_docks_disabled": 0,
+                "is_installed": 1,
+                "is_renting": 1,
+                "is_returning": 1,
+                "last_reported": status["last_updated"],
+                "vehicle_types_available": [],
+            }
+        )
+        metadata, mapping, warnings = build_canonical_metadata(information, status)
+        self.assertEqual(
+            mapping["00000000-0000-4000-8000-000000000001"],
+            "gbfs:00000000-0000-4000-8000-000000000001",
+        )
+        self.assertEqual(
+            next(
+                row
+                for row in metadata
+                if row["provider_station_id"] == "missing-provider"
+            )["mapping_reason"],
+            "MISSING_METADATA",
+        )
+        self.assertEqual(
+            next(
+                row
+                for row in metadata
+                if row["provider_station_id"] == "missing-provider"
+            )["capacity"],
+            None,
+        )
+        self.assertTrue(any(item["type"] == "missing_metadata" for item in warnings))
+
+    def test_station_end_is_not_sent_after_station_failure(self):
+        information, status, status_bytes = fixture_feeds()
+        batch = build_batch(
+            information, status, status_bytes, datetime.now(timezone.utc)
+        )
+        producer = FakeProducer(fail_on_call=1)
+        with self.assertRaisesRegex(RuntimeError, "broker unavailable"):
+            send_batch(producer, batch)
+        self.assertEqual(len(producer.calls), 1)
+        self.assertEqual(len(producer.calls[0]), 2)
+
+    def test_replay_rewrites_origin_but_preserves_payload_and_ids(self):
+        records = replay_records(FIXTURE / "events.ndjson")
+        self.assertEqual(records[0]["headers"]["data_origin"], "GBFS_REPLAY")
+        self.assertEqual(records[0]["value"]["snapshot_at_utc"], "2025-02-05T13:00:00Z")
+        self.assertEqual(records[-1]["value"]["station_count"], 2)
+
+        live = json.loads((FIXTURE / "events.ndjson").read_text().splitlines()[0])
+        live["headers"]["data_origin"] = "GBFS_LIVE"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "live.ndjson"
+            path.write_text(json.dumps(live) + "\n")
+            with self.assertRaisesRegex(StreamError, "exactly one final"):
+                replay_records(path)
+
+    def test_run_once_records_and_skips_identical_published_source(self):
+        information, status, status_bytes = fixture_feeds()
+        feeds = {
+            "discovery": {
+                "version": "2.3",
+                "data": {
+                    "en": {
+                        "feeds": [
+                            {"name": "station_information", "url": "info"},
+                            {"name": "station_status", "url": "status"},
+                            {"name": "vehicle_types", "url": "types"},
+                        ]
+                    }
+                },
+            },
+            "info": information,
+            "status": status,
+            "types": {
+                "version": "2.3",
+                "data": {
+                    "vehicle_types": [
+                        {
+                            "vehicle_type_id": "fixture-classic",
+                            "form_factor": "bicycle",
+                            "propulsion_type": "human",
+                        }
+                    ]
+                },
+            },
+        }
+
+        def fetcher(url, timeout):
+            return feeds[url]
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            first = run_once(
+                output,
+                "unused",
+                "topic",
+                "discovery",
+                producer=FakeProducer(),
+                fetcher=fetcher,
+            )
+            second_producer = FakeProducer()
+            second = run_once(
+                output,
+                "unused",
+                "topic",
+                "discovery",
+                producer=second_producer,
+                fetcher=fetcher,
+            )
+            self.assertEqual(first["status"], "PUBLISHED")
+            self.assertEqual(second["status"], "SKIPPED_DUPLICATE")
+            self.assertEqual(second_producer.calls, [])
+            self.assertTrue(
+                (output / "metadata" / f"{first['metadata_version']}.json").exists()
+            )
+            self.assertEqual(
+                status_bytes, (FIXTURE / "station_status.json").read_bytes()
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()
