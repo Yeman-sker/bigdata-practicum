@@ -25,6 +25,7 @@ git diff --check
 | --- | --- |
 | DATA_DIR | 必填绝对目录，例如 /tmp/citibike-v11；raw、metadata、日志、证据，不放 Git |
 | KAFKA_BOOTSTRAP_SERVERS | localhost:9092；topic bike.station.status.v1，单分区 |
+| KAFKA_TOPIC | 默认 bike.station.status.v1；隔离验收可指定独立 topic，仍要求单分区 |
 | SPRING_KAFKA_CONSUMER_GROUP_ID | live 固定 citibike-live-v1；recorded 每次独立演练使用新组名，重启同一次演练沿用原组 |
 | SPRING_DATASOURCE_URL | jdbc:mysql://localhost:3306/citibike；Hive metastore 使用不同数据库 |
 | SPRING_DATASOURCE_USERNAME / SPRING_DATASOURCE_PASSWORD | 本机服务账号环境变量，不写进 fixture/日志/仓库 |
@@ -57,6 +58,10 @@ fixture 联调只需 MySQL 样例库、backend 和 frontend。三种 backend 启
 | fixture | 禁用 consumer；读取已装载 seed 的独立库 | 从 live_release.as_of_utc 恢复并冻结 |
 | live | 固定消费组；只接纳 GBFS_LIVE；新组 earliest，关闭自动提交 | 当前 UTC |
 | recorded | 演练专用库/消费组；只接纳 GBFS_REPLAY 或 FIXTURE；按下文设起点 | 从 live_release 恢复，成功发布下一完整批时才推进 |
+
+实时消费者与 API 在同一 Spring JVM 中运行，实际实现、复跑命令和证据见 [operations 交接](operations/README.md)。live/recorded 要求绝对路径 `DATA_DIR`，读取 `DATA_DIR/gbfs/metadata/<metadata_version>.json`；recorded 必须显式提供独立的 `SPRING_KAFKA_CONSUMER_GROUP_ID`。每批重新核对 metadata 文件原始字节的 SHA-256。
+
+当前按单消费者约定使用 Kafka 手动分区分配，关闭自动提交，MySQL 成功后再提交该批结束位置。CLI 可能显示消费组 “has no active members”，仍可用 committed offset / log-end / lag 检查进度；这不是消费者已停止的判断依据。禁止并行启动第二个 writer，重置 offset 前须停止应用。分配行为见 [KafkaConsumer 官方说明](https://kafka.apache.org/36/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html)。
 
 Flume 在日志目录存在后启动，其失败不伪装成业务数据失败。停止顺序为 frontend → collector → backend → Flume → Kafka/Hive/Hadoop；只停止本次任务启动的进程。
 
