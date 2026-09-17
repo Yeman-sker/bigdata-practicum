@@ -139,6 +139,19 @@ class GbfsStreamTest(unittest.TestCase):
             with self.assertRaisesRegex(StreamError, "exactly one final"):
                 replay_records(path)
 
+    def test_replay_rejects_mixed_station_timestamps(self):
+        records = [
+            json.loads(line)
+            for line in (FIXTURE / "events.ndjson").read_text().splitlines()
+        ]
+        records[1]["value"]["snapshot_at_utc"] = "2025-02-05T14:00:00Z"
+        records[1]["value"]["snapshot_at_local"] = "2025-02-05T09:00:00-05:00"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "mixed-times.ndjson"
+            path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+            with self.assertRaisesRegex(StreamError, "station record 2"):
+                replay_records(path)
+
     def test_zero_station_batch_is_valid_replay_input(self):
         information, status, _ = fixture_feeds()
         status["data"]["stations"] = []
@@ -224,6 +237,21 @@ class GbfsStreamTest(unittest.TestCase):
             metadata_file=FIXTURE / "metadata.json",
         )
         self.assertEqual(result["status"], "PUBLISHED")
+
+    def test_replay_dry_run_does_not_write_published_log(self):
+        producer = FakeProducer()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            result = run_replay(
+                FIXTURE / "events.ndjson",
+                producer,
+                output,
+                FIXTURE / "metadata.json",
+                dry_run=True,
+            )
+            self.assertEqual(result["status"], "DRY_RUN")
+            self.assertEqual(len(producer.calls), 2)
+            self.assertFalse((output / "collection_log.json").exists())
 
     def test_invalid_feed_preserves_raw_and_failure_log(self):
         information, status, _ = fixture_feeds()
@@ -346,6 +374,138 @@ class GbfsStreamTest(unittest.TestCase):
                 status_bytes, (FIXTURE / "station_status.json").read_bytes()
             )
 
+    def test_failed_send_retries_persisted_batch_before_collecting_next(self):
+        information, status, status_bytes = fixture_feeds()
+        ingested_at = datetime(2025, 2, 5, 13, 0, 2, tzinfo=timezone.utc)
+        batch = build_batch(information, status, status_bytes, ingested_at)
+        collection = (
+            batch,
+            {
+                "discovery": b"{}",
+                "station_information": json.dumps(information).encode(),
+                "station_status": status_bytes,
+                "vehicle_types": b"{}",
+            },
+            {},
+            {"discovery": {}, "discovery_bytes": b"{}"},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            first_producer = FakeProducer(fail_on_call=2)
+            with (
+                patch("citibike.gbfs_stream.collect_batch", return_value=collection),
+                self.assertRaisesRegex(RuntimeError, "broker unavailable"),
+            ):
+                run_once(
+                    output,
+                    "unused",
+                    "topic",
+                    producer=first_producer,
+                )
+            failed_log = json.loads((output / "collection_log.json").read_text())
+            failed = failed_log["snapshots"][-1]
+            self.assertEqual(failed["status"], "FAILED_SEND")
+            self.assertTrue(
+                (output / failed["snapshot_directory"] / "events.ndjson").exists()
+            )
+
+            retry_producer = FakeProducer()
+            with patch(
+                "citibike.gbfs_stream.collect_batch",
+                side_effect=AssertionError("must retry the persisted batch first"),
+            ):
+                retried = run_once(
+                    output,
+                    "unused",
+                    "topic",
+                    producer=retry_producer,
+                )
+            self.assertEqual(retried["status"], "PUBLISHED")
+            self.assertEqual(retry_producer.calls, first_producer.calls)
+            self.assertEqual(retried["ingested_at_utc"], failed["ingested_at_utc"])
+
+    def test_dry_run_does_not_poison_publish_deduplication(self):
+        information, status, status_bytes = fixture_feeds()
+        batch = build_batch(
+            information,
+            status,
+            status_bytes,
+            datetime(2025, 2, 5, 13, 0, 2, tzinfo=timezone.utc),
+        )
+        collection = (
+            batch,
+            {
+                "discovery": b"{}",
+                "station_information": json.dumps(information).encode(),
+                "station_status": status_bytes,
+                "vehicle_types": b"{}",
+            },
+            {},
+            {"discovery": {}, "discovery_bytes": b"{}"},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with patch("citibike.gbfs_stream.collect_batch", return_value=collection):
+                dry = run_once(
+                    output,
+                    "unused",
+                    "topic",
+                    producer=FakeProducer(),
+                    dry_run=True,
+                )
+                real_producer = FakeProducer()
+                real = run_once(
+                    output,
+                    "unused",
+                    "topic",
+                    producer=real_producer,
+                )
+            self.assertEqual(dry["status"], "DRY_RUN")
+            self.assertEqual(real["status"], "PUBLISHED")
+            self.assertEqual(len(real_producer.calls), 2)
+
+    def test_conflict_is_counted_as_failed_conflict(self):
+        information, status, status_bytes = fixture_feeds()
+        ingested_at = datetime(2025, 2, 5, 13, 0, 2, tzinfo=timezone.utc)
+        first_batch = build_batch(information, status, status_bytes, ingested_at)
+        conflicting_status_bytes = status_bytes + b"\n"
+        second_batch = build_batch(
+            information, status, conflicting_status_bytes, ingested_at
+        )
+        base = (
+            {
+                "discovery": b"{}",
+                "station_information": json.dumps(information).encode(),
+                "station_status": status_bytes,
+                "vehicle_types": b"{}",
+            },
+            {},
+            {"discovery": {}, "discovery_bytes": b"{}"},
+        )
+        second = (
+            second_batch,
+            {**base[0], "station_status": conflicting_status_bytes},
+            base[1],
+            base[2],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with patch(
+                "citibike.gbfs_stream.collect_batch",
+                side_effect=[(first_batch, *base), second],
+            ):
+                self.assertEqual(
+                    run_once(output, "unused", "topic", producer=FakeProducer())[
+                        "status"
+                    ],
+                    "PUBLISHED",
+                )
+                conflict = run_once(output, "unused", "topic", producer=FakeProducer())
+            self.assertEqual(conflict["status"], "REJECTED_CONFLICT")
+            self.assertEqual(conflict["failure_count"], 1)
+            self.assertEqual(conflict["conflict_count"], 1)
+            self.assertEqual(conflict["failed_batch_count"], 1)
+
     def test_continuous_mode_retries_after_expected_failure(self):
         args = parse_args(
             [
@@ -363,7 +523,7 @@ class GbfsStreamTest(unittest.TestCase):
         calls = []
         sleeps = []
 
-        def fake_run_once(*run_args):
+        def fake_run_once(*run_args, **run_kwargs):
             calls.append(run_args)
             if len(calls) == 1:
                 raise StreamError("temporary source failure")

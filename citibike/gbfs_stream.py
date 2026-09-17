@@ -533,15 +533,15 @@ def validate_batch_records(records: list[dict[str, Any]]) -> None:
     end = ends[0]
     if end["value"]["station_count"] != len(stations):
         raise StreamError("snapshot_end.station_count does not match station records")
-    if stations:
-        first_station = stations[0]["value"]
-        if end["value"]["snapshot_at_utc"] != first_station["snapshot_at_utc"]:
+    for index, station in enumerate(stations, start=1):
+        station_value = station["value"]
+        if end["value"]["snapshot_at_utc"] != station_value["snapshot_at_utc"]:
             raise StreamError(
-                "snapshot_end.snapshot_at_utc does not match station records"
+                f"snapshot_end.snapshot_at_utc does not match station record {index}"
             )
-        if end["value"]["ingested_at_utc"] != first_station["ingested_at_utc"]:
+        if end["value"]["ingested_at_utc"] != station_value["ingested_at_utc"]:
             raise StreamError(
-                "snapshot_end.ingested_at_utc does not match station records"
+                f"snapshot_end.ingested_at_utc does not match station record {index}"
             )
 
 
@@ -699,6 +699,9 @@ def write_batch_files(
     snapshot_root.mkdir(parents=True, exist_ok=True)
     final_dir = snapshot_root / f"{stamp}-{batch.snapshot_id[:12]}"
     if final_dir.exists():
+        events_path = final_dir / "events.ndjson"
+        if not events_path.exists():
+            _atomic_write(events_path, _records_ndjson(batch.records))
         return final_dir
     with tempfile.TemporaryDirectory(
         prefix=f".{stamp}.", dir=snapshot_root
@@ -706,11 +709,16 @@ def write_batch_files(
         temporary_dir = Path(temporary)
         for name, content in feeds.items():
             (temporary_dir / f"{name}.json").write_bytes(content)
+        _atomic_write(temporary_dir / "events.ndjson", _records_ndjson(batch.records))
         (temporary_dir / "station_status_event_v1.sample.json").write_bytes(
             _json_bytes(batch.events[:5])
         )
         os.replace(temporary_dir, final_dir)
     return final_dir
+
+
+def _records_ndjson(records: list[dict[str, Any]]) -> bytes:
+    return b"".join((_json_value(record) + "\n").encode("utf-8") for record in records)
 
 
 def _load_log(path: Path) -> dict[str, Any]:
@@ -729,6 +737,90 @@ def _append_log(path: Path, base: Mapping[str, Any], record: Mapping[str, Any]) 
     snapshots = list(base.get("snapshots", []))
     snapshots.append(dict(record))
     _atomic_write(path, _json_bytes({**base, "snapshots": snapshots}))
+
+
+def _initialise_collection_log(log_path: Path, discovery_url: str) -> dict[str, Any]:
+    log = _load_log(log_path)
+    log.setdefault("discovery_url", discovery_url)
+    log.setdefault("tracked_station_ids", [])
+    log.setdefault("source_version", GBFS_VERSION)
+    return log
+
+
+def _pending_send(log: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """找出尚未解决的失败发送，阻止下一批越过它。"""
+
+    resolved: set[str] = set()
+    for item in reversed(log.get("snapshots", [])):
+        if not isinstance(item, Mapping):
+            continue
+        snapshot = item.get("snapshot_id")
+        status = item.get("status")
+        if not isinstance(snapshot, str):
+            continue
+        if status in {"PUBLISHED", "SKIPPED_DUPLICATE", "REJECTED_CONFLICT"}:
+            resolved.add(snapshot)
+        elif status == "FAILED_SEND" and snapshot not in resolved:
+            return item
+    return None
+
+
+def _load_persisted_batch(
+    output_dir: Path, log_record: Mapping[str, Any]
+) -> tuple[Batch, Path, str]:
+    snapshot_directory = log_record.get("snapshot_directory")
+    metadata_version_value = log_record.get("metadata_version")
+    expected_raw_hash = log_record.get("status_raw_sha256")
+    if not all(
+        isinstance(value, str)
+        for value in (snapshot_directory, metadata_version_value, expected_raw_hash)
+    ):
+        raise StreamError("FAILED_SEND log does not identify a persisted batch")
+    snapshot_dir = output_dir / snapshot_directory
+    events_path = snapshot_dir / "events.ndjson"
+    metadata_path = output_dir / "metadata" / f"{metadata_version_value}.json"
+    raw_status_path = snapshot_dir / "station_status.json"
+    try:
+        records = [
+            json.loads(line)
+            for line in events_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        metadata_bytes = metadata_path.read_bytes()
+        raw_status_bytes = raw_status_path.read_bytes()
+    except (OSError, json.JSONDecodeError) as error:
+        raise StreamError(f"cannot load persisted failed batch: {error}") from error
+    if hashlib.sha256(raw_status_bytes).hexdigest() != expected_raw_hash:
+        raise StreamError(
+            "persisted station_status hash does not match FAILED_SEND log"
+        )
+    if metadata_version(metadata_bytes) != metadata_version_value:
+        raise StreamError("persisted metadata hash does not match FAILED_SEND log")
+    metadata = json.loads(metadata_bytes)
+    if not isinstance(metadata, list):
+        raise StreamError("persisted metadata must be an array")
+    if not all(isinstance(record, dict) for record in records):
+        raise StreamError("persisted events must contain JSON records")
+    validate_batch_records(records)
+    first = records[0]
+    if first["headers"]["snapshot_id"] != log_record.get("snapshot_id"):
+        raise StreamError("persisted snapshot_id does not match FAILED_SEND log")
+    end = records[-1]["value"]
+    batch = Batch(
+        metadata=metadata,
+        metadata_bytes=metadata_bytes,
+        metadata_version=metadata_version_value,
+        events=[record["value"] for record in records[:-1]],
+        records=records,
+        snapshot_id=first["headers"]["snapshot_id"],
+        snapshot_at_utc=end["snapshot_at_utc"],
+        ingested_at_utc=end["ingested_at_utc"],
+        station_count=end["station_count"],
+        provider_last_updated=log_record.get("provider_last_updated"),
+        mapping_warnings=list(log_record.get("mapping_warnings", [])),
+        quality_warnings=list(log_record.get("quality_warnings", [])),
+    )
+    return batch, snapshot_dir, expected_raw_hash
 
 
 def _write_collection_failure(output_dir: Path, error: CollectionError) -> Path:
@@ -841,27 +933,52 @@ def run_once(
     producer: Producer | None = None,
     fetcher: Callable[[str, float], Any] = fetch_json_bytes,
     data_origin: str = "GBFS_LIVE",
+    dry_run: bool = False,
 ) -> dict[str, Any]:
+    log_path = output_dir / "collection_log.json"
+    log = _initialise_collection_log(log_path, discovery_url)
+    pending = _pending_send(log)
+    if pending is not None:
+        batch: Batch | None = None
+        try:
+            batch, snapshot_dir, raw_hash = _load_persisted_batch(output_dir, pending)
+            send_batch(producer or KafkaCliProducer(bootstrap_servers, topic), batch)
+        except Exception as error:
+            if batch is not None:
+                _append_log(
+                    log_path,
+                    log,
+                    _batch_log(
+                        batch,
+                        snapshot_dir,
+                        output_dir,
+                        raw_hash,
+                        "FAILED_SEND",
+                        str(error),
+                    ),
+                )
+            raise
+        record = _batch_log(
+            batch,
+            snapshot_dir,
+            output_dir,
+            raw_hash,
+            "DRY_RUN" if dry_run else "PUBLISHED",
+            None,
+        )
+        if not dry_run:
+            _append_log(log_path, log, record)
+        return record
     try:
         batch, raw, feed_urls, discovery_info = collect_batch(
             discovery_url, locale, timeout, fetcher
         )
     except CollectionError as error:
-        log_path = output_dir / "collection_log.json"
-        log = _load_log(log_path)
-        log.setdefault("discovery_url", discovery_url)
-        log.setdefault("tracked_station_ids", [])
-        log.setdefault("source_version", GBFS_VERSION)
         _append_log(log_path, log, _collection_failure_log(output_dir, error))
         raise
     if data_origin != "GBFS_LIVE":
         batch = _with_origin(batch, data_origin)
     snapshot_dir = write_batch_files(output_dir, raw, batch)
-    log_path = output_dir / "collection_log.json"
-    log = _load_log(log_path)
-    log.setdefault("discovery_url", discovery_url)
-    log.setdefault("tracked_station_ids", [])
-    log.setdefault("source_version", GBFS_VERSION)
     _atomic_write(output_dir / "discovery.json", discovery_info["discovery_bytes"])
     _atomic_write(
         output_dir / "feed_manifest.json",
@@ -875,6 +992,9 @@ def run_once(
         ),
     )
     raw_hash = hashlib.sha256(raw["station_status"]).hexdigest()
+    if dry_run:
+        send_batch(producer or _DryRunProducer(), batch)
+        return _batch_log(batch, snapshot_dir, output_dir, raw_hash, "DRY_RUN", None)
     previous = [item for item in log["snapshots"] if isinstance(item, Mapping)]
     source_time = batch.provider_last_updated
     same_source = [
@@ -887,6 +1007,7 @@ def run_once(
         state = "SKIPPED_DUPLICATE"
     elif any(item.get("status") == "PUBLISHED" for item in same_source):
         state = "REJECTED_CONFLICT"
+        state_error = "same provider timestamp has different raw content"
     else:
         try:
             send_batch(producer or KafkaCliProducer(bootstrap_servers, topic), batch)
@@ -901,7 +1022,10 @@ def run_once(
             )
             raise
         state = "PUBLISHED"
-    record = _batch_log(batch, snapshot_dir, output_dir, raw_hash, state, None)
+        state_error = None
+    if state == "SKIPPED_DUPLICATE":
+        state_error = None
+    record = _batch_log(batch, snapshot_dir, output_dir, raw_hash, state, state_error)
     _append_log(log_path, log, record)
     return record
 
@@ -939,7 +1063,15 @@ def _batch_log(
         "ingested_at_utc": batch.ingested_at_utc,
         "station_count": batch.station_count,
         "status_raw_sha256": raw_hash,
-        "failure_count": 1 if status.startswith("FAILED") else 0,
+        "failure_count": int(
+            status.startswith("FAILED") or status == "REJECTED_CONFLICT"
+        ),
+        "duplicate_count": int(status == "SKIPPED_DUPLICATE"),
+        "conflict_count": int(status == "REJECTED_CONFLICT"),
+        "complete_batch_count": int(status in {"PUBLISHED", "SKIPPED_DUPLICATE"}),
+        "failed_batch_count": int(
+            status.startswith("FAILED") or status == "REJECTED_CONFLICT"
+        ),
         "mapping_success_count": sum(
             row.get("mapping_status") == "SHORT_NAME" for row in batch.metadata
         ),
@@ -959,6 +1091,7 @@ def run_replay(
     producer: Producer,
     output_dir: Path | None = None,
     metadata_file: Path | None = None,
+    dry_run: bool = False,
 ) -> dict[str, Any]:
     records: list[dict[str, Any]] = []
     try:
@@ -1000,14 +1133,14 @@ def run_replay(
             )
         raise
     result = {
-        "status": "PUBLISHED",
+        "status": "DRY_RUN" if dry_run else "PUBLISHED",
         "data_origin": "GBFS_REPLAY",
         "snapshot_id": records[0]["headers"]["snapshot_id"],
         "metadata_version": records[0]["headers"]["metadata_version"],
         "station_count": records[-1]["value"]["station_count"],
         "replay_file": str(path),
     }
-    if output_dir is not None:
+    if output_dir is not None and not dry_run:
         _append_log(
             output_dir / "collection_log.json",
             _load_log(output_dir / "collection_log.json"),
@@ -1091,6 +1224,7 @@ def run(args: argparse.Namespace) -> None:
                     producer,
                     Path(args.output_dir) if args.output_dir else None,
                     args.metadata_file,
+                    args.dry_run,
                 ),
                 ensure_ascii=False,
             )
@@ -1108,6 +1242,7 @@ def run(args: argparse.Namespace) -> None:
                 args.locale,
                 args.timeout,
                 producer,
+                dry_run=args.dry_run,
             )
         except (OSError, StreamError, KafkaSendError, ValueError) as error:
             if args.snapshots != 0:
