@@ -65,6 +65,43 @@ python3 -m citibike.gbfs \
 缺失或为 `null`。本次采集中的 `capacity` 都有值，但 validator 和下游
 契约仍允许该字段为 `null`。
 
+## canonical metadata 与 Kafka 批次
+
+Issue #27 的正式入口为 `citibike.gbfs_stream`。它先从 discovery 动态取得
+三个 feed，使用同一次 `station_information` 的唯一 `short_name` 映射
+canonical `station_id`；缺失或冲突的映射使用 `gbfs:<provider_station_id>`
+隔离，并在 metadata 中记录原因。status 中没有 metadata 的站点也会补入
+`MISSING_METADATA` 占位行，不能猜测历史身份。
+
+```bash
+DATA_DIR=/tmp/citibike-issue-27
+python3 -m citibike.gbfs_stream \
+  --output-dir "$DATA_DIR/gbfs" \
+  --bootstrap-servers "${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}" \
+  --interval-seconds 60
+```
+
+采集器先以临时文件原子写入 `metadata/<metadata_version>.json` 和
+`snapshots/<time>-<snapshot_prefix>/`，再顺序发送 station 记录；所有 station
+得到 broker 确认后才发送 key 为 `__snapshot_end__` 的结束记录。批次失败时保留
+raw 和失败日志，不发送虚假的完整结束记录。`collection_log.json` 记录源时间、
+raw hash、映射成功/隔离计数、映射/质量告警、批次状态和 snapshot/metadata hash。
+
+录制库存使用同一封装，且不允许把实时来源冒充录制来源：
+
+```bash
+python3 -m citibike.gbfs_stream \
+  --replay "$DATA_DIR/events.ndjson" \
+  --output-dir "$DATA_DIR/gbfs" \
+  --metadata-file "$DATA_DIR/gbfs/metadata/<metadata_version>.json" \
+  --bootstrap-servers "${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}"
+```
+
+replay 会保留 snapshot、metadata、源时间和事件 value，仅将来源 header
+规范为 `GBFS_REPLAY`；输入必须包含完整批次，0 站批次可以只包含
+`snapshot_end`。
+完整 raw 与运行证据放在 `DATA_DIR`，不提交 Git。
+
 ## 校验 normalized fixture
 
 ```bash

@@ -64,13 +64,13 @@ Flume 在日志目录存在后启动，其失败不伪装成业务数据失败�
 
 ## 实现任务必须提供的入口
 
-以下命令是交付约定，当前文档 PR 不实现这些程序。各主负责人完成时将实际运行环境、输出与 PR 链接记入自己的 Issue；若确需改入口，更新本表与对应 Issue，不能保留失效命令。
+以下命令是各工作流的交付入口。各主负责人完成时将实际运行环境、输出与 PR 链接记入自己的 Issue；若确需改入口，更新本表与对应 Issue，不能保留失效命令。
 
 | 负责人 | 目标入口 | 必须观察到 |
 | --- | --- | --- |
 | #28 | `PYTHONPATH=. spark-submit --master 'local[2]' citibike/offline.py --hive-table citibike_ods.ods_trip_raw --raw-root /raw/citibike/trips --source-month 2025-01 --manifest "$DATA_DIR/historical/manifest.json" --metadata "$METADATA_FILE" --output-root /warehouse --evidence "$DATA_DIR/offline.json"` | 从 RAW 保留记录位置、与 ODS 核对；DWD/DIM/DWS Parquet、Hive 分区、dataset_id、对账与失败状态 |
 | #28 | `python3 -m citibike.serving_export --dataset-id "$DATASET_ID" --hdfs-root /warehouse --password-file "$MYSQL_PASSWORD_FILE" --evidence "$DATA_DIR/export.json"` | 读取 SPRING_DATASOURCE_URL/USERNAME；Sqoop staging 校验、事务发布和相同 dataset_id |
-| #27 | `python3 -m citibike.gbfs_stream --output-dir "$DATA_DIR/gbfs" --bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS" --interval-seconds 60` | 复用 gbfs.py；metadata 版本文件、raw、station/end Kafka 记录、批次日志 |
+| #27 | `python3 -m citibike.gbfs_stream --output-dir "$DATA_DIR/gbfs" --bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS" --interval-seconds 60` | 已实现：复用 gbfs.py；metadata 版本文件、raw、station/end Kafka 记录、批次日志 |
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=fixture` | 读取样例 MySQL；禁用 Kafka consumer；按已存 recorded 时钟查询 |
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=live` | 同 JVM 启用 consumer/规则与三个 HTTP API，墙钟判新鲜度 |
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=recorded` | 独立演练库/组的录制库存；消费、原子发布和录制时钟，不伪装成实时 |
@@ -89,7 +89,7 @@ kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --top
 kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic bike.station.status.v1
 ```
 
-#27 还必须交付 `python3 -m citibike.gbfs_stream --replay PATH --bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS"`：读取与 events.ndjson 相同的 key/headers/value 封装，保留源时间，把 data_origin 标为 GBFS_REPLAY。每次独立重放按以下顺序执行：
+#27 还必须交付 `python3 -m citibike.gbfs_stream --replay PATH --output-dir "$DATA_DIR/gbfs" --metadata-file "$DATA_DIR/gbfs/metadata/<metadata_version>.json" --bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS"`：读取与 events.ndjson 相同的 key/headers/value 封装，保留源时间，把 data_origin 标为 GBFS_REPLAY。每次独立重放按以下顺序执行：
 
 1. 停止该实例的实时 producer 和 backend；使用独立演练库。可装载 seed 提供历史基线，但发送事件前只在该演练库用一次事务清空两张 ADS 与 live_release，避免相同 snapshot_id 被判为已经发布；metadata 文件按其 hash 名放到该库实例的 DATA_DIR。
 2. 选择从未使用的新消费组，例如 `citibike-replay-20260915-a`，设置 SPRING_KAFKA_CONSUMER_GROUP_ID；保留 live 组和业务库。**在发送任何录制记录之前**，用 Kafka 原生命令为这个无活动消费者的新组设置起点：
