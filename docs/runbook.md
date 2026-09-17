@@ -89,7 +89,7 @@ kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --top
 kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic bike.station.status.v1
 ```
 
-#27 还必须交付 `python3 -m citibike.gbfs_stream --replay PATH --bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS"`：读取与 events.ndjson 相同的 key/headers/value 封装，保留源时间，把 data_origin 标为 GBFS_REPLAY。每次独立重放按以下顺序执行：
+#27 还必须交付 `python3 -m citibike.gbfs_stream --replay PATH --output-dir "$DATA_DIR/gbfs" --metadata-file "$DATA_DIR/gbfs/metadata/<metadata_version>.json" --bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS"`：读取与 events.ndjson 相同的 key/headers/value 封装，保留源时间，把 data_origin 标为 GBFS_REPLAY。每次独立重放按以下顺序执行：
 
 1. 停止该实例的实时 producer 和 backend；使用独立演练库。可装载 seed 提供历史基线，但发送事件前只在该演练库用一次事务清空两张 ADS 与 live_release，避免相同 snapshot_id 被判为已经发布；metadata 文件按其 hash 名放到该库实例的 DATA_DIR。
 2. 选择从未使用的新消费组，例如 `citibike-replay-20260915-a`，设置 SPRING_KAFKA_CONSUMER_GROUP_ID；保留 live 组和业务库。**在发送任何录制记录之前**，用 Kafka 原生命令为这个无活动消费者的新组设置起点：

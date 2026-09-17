@@ -18,11 +18,14 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Protocol
 
+from .contracts import GBFS_FEEDS, GBFS_VERSION
 from .gbfs import (
     DEFAULT_DISCOVERY_URL,
     _feed_rows,
@@ -35,7 +38,6 @@ from .gbfs import (
     validate_event,
     validate_target_feeds,
 )
-from .contracts import GBFS_VERSION
 
 TOPIC = "bike.station.status.v1"
 CONTRACT_VERSION = "1.1"
@@ -50,6 +52,20 @@ class Producer(Protocol):
 
 class StreamError(ValueError):
     """输入、映射或批次契约错误。"""
+
+
+class CollectionError(StreamError):
+    """采集阶段失败，同时携带已取得的 raw 证据。"""
+
+    def __init__(
+        self,
+        message: str,
+        raw: Mapping[str, bytes],
+        feed_urls: Mapping[str, str],
+    ) -> None:
+        super().__init__(message)
+        self.raw = dict(raw)
+        self.feed_urls = dict(feed_urls)
 
 
 class KafkaSendError(RuntimeError):
@@ -222,9 +238,23 @@ def build_canonical_metadata(
         if not normalized_short_name:
             canonical = _canonical_id(provider_id)
             status, reason = "ISOLATED", "MISSING_SHORT_NAME"
+            warnings.append(
+                {
+                    "type": "isolated_mapping",
+                    "provider_station_id": provider_id,
+                    "mapping_reason": reason,
+                }
+            )
         elif len(owners) != 1:
             canonical = _canonical_id(provider_id)
             status, reason = "ISOLATED", "DUPLICATE_SHORT_NAME"
+            warnings.append(
+                {
+                    "type": "isolated_mapping",
+                    "provider_station_id": provider_id,
+                    "mapping_reason": reason,
+                }
+            )
         else:
             canonical = normalized_short_name
             if len(canonical) > 128 or any(char.isspace() for char in canonical):
@@ -446,8 +476,6 @@ def validate_batch_records(records: list[dict[str, Any]]) -> None:
     for record in records:
         _validate_record(record)
     first_headers = records[0]["headers"]
-    if first_headers["record_type"] != "station":
-        raise StreamError("snapshot_end cannot be the first record")
     for record in records:
         headers = record["headers"]
         for field in (
@@ -472,11 +500,16 @@ def validate_batch_records(records: list[dict[str, Any]]) -> None:
     end = ends[0]
     if end["value"]["station_count"] != len(stations):
         raise StreamError("snapshot_end.station_count does not match station records")
-    first_station = stations[0]["value"]
-    if end["value"]["snapshot_at_utc"] != first_station["snapshot_at_utc"]:
-        raise StreamError("snapshot_end.snapshot_at_utc does not match station records")
-    if end["value"]["ingested_at_utc"] != first_station["ingested_at_utc"]:
-        raise StreamError("snapshot_end.ingested_at_utc does not match station records")
+    if stations:
+        first_station = stations[0]["value"]
+        if end["value"]["snapshot_at_utc"] != first_station["snapshot_at_utc"]:
+            raise StreamError(
+                "snapshot_end.snapshot_at_utc does not match station records"
+            )
+        if end["value"]["ingested_at_utc"] != first_station["ingested_at_utc"]:
+            raise StreamError(
+                "snapshot_end.ingested_at_utc does not match station records"
+            )
 
 
 def replay_records(path: Path) -> list[dict[str, Any]]:
@@ -525,9 +558,9 @@ def _headers_line(record: Mapping[str, Any]) -> bytes:
             "data_origin",
         )
     )
-    return (f"{header_text}\t{record['key']}\t{_json_value(record['value'])}\n").encode(
-        "utf-8"
-    )
+    return (
+        f"{header_text}\t{record['key']}\t{_json_value(record['value'])}\n"
+    ).encode()
 
 
 class KafkaCliProducer:
@@ -665,6 +698,46 @@ def _append_log(path: Path, base: Mapping[str, Any], record: Mapping[str, Any]) 
     _atomic_write(path, _json_bytes({**base, "snapshots": snapshots}))
 
 
+def _write_collection_failure(output_dir: Path, error: CollectionError) -> Path:
+    """保留采集失败时已经取得的 raw，并返回失败证据目录。"""
+
+    raw_digest = hashlib.sha256(
+        b"\n".join(error.raw[name] for name in sorted(error.raw))
+    ).hexdigest()[:12]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    final_dir = output_dir / "failures" / f"{stamp}-{raw_digest or 'no-raw'}"
+    if final_dir.exists():
+        return final_dir
+    final_dir.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=f".{stamp}-", dir=final_dir.parent
+    ) as temporary:
+        temporary_dir = Path(temporary)
+        for name, content in error.raw.items():
+            (temporary_dir / f"{name}.json").write_bytes(content)
+        _atomic_write(
+            temporary_dir / "feed_manifest.json",
+            _json_bytes({"feeds": error.feed_urls, "raw_files": sorted(error.raw)}),
+        )
+        os.replace(temporary_dir, final_dir)
+    return final_dir
+
+
+def _collection_failure_log(output_dir: Path, error: CollectionError) -> dict[str, Any]:
+    failure_dir = _write_collection_failure(output_dir, error)
+    return {
+        "status": "FAILED_COLLECTION",
+        "data_origin": "GBFS_LIVE",
+        "failure_count": 1,
+        "error": str(error),
+        "failure_directory": str(failure_dir.relative_to(output_dir)),
+        "raw_files": sorted(error.raw),
+        "fetched_feed_count": len(error.raw),
+        "expected_feed_count": len(GBFS_FEEDS) + 1,
+        "feed_urls": error.feed_urls,
+    }
+
+
 def _fetch_with_bytes(
     fetcher: Callable[[str, float], Any], url: str, timeout: float
 ) -> tuple[dict[str, Any], bytes]:
@@ -687,24 +760,29 @@ def collect_batch(
     timeout: float,
     fetcher: Callable[[str, float], Any] = fetch_json_bytes,
 ) -> tuple[Batch, dict[str, bytes], dict[str, str], dict[str, Any]]:
-    discovery, discovery_bytes = _fetch_with_bytes(fetcher, discovery_url, timeout)
-    if discovery.get("version") != GBFS_VERSION:
-        raise StreamError(f"discovery.version must be {GBFS_VERSION!r}")
-    feed_urls = discover_feed_urls(discovery, locale)
-    fetched: dict[str, dict[str, Any]] = {}
-    raw: dict[str, bytes] = {"discovery": discovery_bytes}
-    for name, url in feed_urls.items():
-        fetched[name], raw[name] = _fetch_with_bytes(fetcher, url, timeout)
-    feed_errors = validate_target_feeds(fetched)
-    if feed_errors:
-        raise StreamError(f"GBFS feed validation failed: {feed_errors}")
-    ingested_at = datetime.now(timezone.utc)
-    batch = build_batch(
-        fetched["station_information"],
-        fetched["station_status"],
-        raw["station_status"],
-        ingested_at,
-    )
+    raw: dict[str, bytes] = {}
+    feed_urls: dict[str, str] = {}
+    try:
+        discovery, discovery_bytes = _fetch_with_bytes(fetcher, discovery_url, timeout)
+        raw["discovery"] = discovery_bytes
+        if discovery.get("version") != GBFS_VERSION:
+            raise StreamError(f"discovery.version must be {GBFS_VERSION!r}")
+        feed_urls = discover_feed_urls(discovery, locale)
+        fetched: dict[str, dict[str, Any]] = {}
+        for name, url in feed_urls.items():
+            fetched[name], raw[name] = _fetch_with_bytes(fetcher, url, timeout)
+        feed_errors = validate_target_feeds(fetched)
+        if feed_errors:
+            raise StreamError(f"GBFS feed validation failed: {feed_errors}")
+        ingested_at = datetime.now(timezone.utc)
+        batch = build_batch(
+            fetched["station_information"],
+            fetched["station_status"],
+            raw["station_status"],
+            ingested_at,
+        )
+    except Exception as error:
+        raise CollectionError(str(error), raw, feed_urls) from error
     return (
         batch,
         raw,
@@ -731,9 +809,18 @@ def run_once(
     fetcher: Callable[[str, float], Any] = fetch_json_bytes,
     data_origin: str = "GBFS_LIVE",
 ) -> dict[str, Any]:
-    batch, raw, feed_urls, discovery_info = collect_batch(
-        discovery_url, locale, timeout, fetcher
-    )
+    try:
+        batch, raw, feed_urls, discovery_info = collect_batch(
+            discovery_url, locale, timeout, fetcher
+        )
+    except CollectionError as error:
+        log_path = output_dir / "collection_log.json"
+        log = _load_log(log_path)
+        log.setdefault("discovery_url", discovery_url)
+        log.setdefault("tracked_station_ids", [])
+        log.setdefault("source_version", GBFS_VERSION)
+        _append_log(log_path, log, _collection_failure_log(output_dir, error))
+        raise
     if data_origin != "GBFS_LIVE":
         batch = _with_origin(batch, data_origin)
     snapshot_dir = write_batch_files(output_dir, raw, batch)
@@ -819,6 +906,13 @@ def _batch_log(
         "ingested_at_utc": batch.ingested_at_utc,
         "station_count": batch.station_count,
         "status_raw_sha256": raw_hash,
+        "failure_count": 1 if status.startswith("FAILED") else 0,
+        "mapping_success_count": sum(
+            row.get("mapping_status") == "SHORT_NAME" for row in batch.metadata
+        ),
+        "mapping_isolated_count": sum(
+            row.get("mapping_status") == "ISOLATED" for row in batch.metadata
+        ),
         "mapping_warnings": batch.mapping_warnings,
         "quality_warnings": batch.quality_warnings,
     }
@@ -833,8 +927,11 @@ def run_replay(
     output_dir: Path | None = None,
     metadata_file: Path | None = None,
 ) -> dict[str, Any]:
-    records = replay_records(path)
-    if metadata_file is not None:
+    records: list[dict[str, Any]] = []
+    try:
+        if metadata_file is None:
+            raise StreamError("metadata_file is required for replay")
+        records = replay_records(path)
         try:
             actual_metadata = hashlib.sha256(metadata_file.read_bytes()).hexdigest()
         except OSError as error:
@@ -844,8 +941,31 @@ def run_replay(
             raise StreamError(
                 f"metadata hash mismatch: expected {expected_metadata}, got {actual_metadata}"
             )
-    producer.send_records(records[:-1])
-    producer.send_records(records[-1:])
+        producer.send_records(records[:-1])
+        producer.send_records(records[-1:])
+    except Exception as error:
+        if output_dir is not None:
+            result: dict[str, Any] = {
+                "status": "FAILED_REPLAY",
+                "data_origin": "GBFS_REPLAY",
+                "failure_count": 1,
+                "error": str(error),
+                "replay_file": str(path),
+            }
+            if records:
+                result.update(
+                    {
+                        "snapshot_id": records[0]["headers"]["snapshot_id"],
+                        "metadata_version": records[0]["headers"]["metadata_version"],
+                        "station_count": records[-1]["value"]["station_count"],
+                    }
+                )
+            _append_log(
+                output_dir / "collection_log.json",
+                _load_log(output_dir / "collection_log.json"),
+                result,
+            )
+        raise
     result = {
         "status": "PUBLISHED",
         "data_origin": "GBFS_REPLAY",
@@ -907,8 +1027,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         raise SystemExit("--interval-seconds cannot be negative")
     if args.replay is None and not args.output_dir:
         raise SystemExit("--output-dir is required for live collection")
+    if args.replay is not None and not args.output_dir:
+        raise SystemExit("--output-dir is required with --replay")
     if args.replay is not None and args.snapshots:
         raise SystemExit("--snapshots cannot be used with --replay")
+    if args.replay is not None and args.metadata_file is None:
+        raise SystemExit("--metadata-file is required with --replay")
     return args
 
 
@@ -942,20 +1066,25 @@ def run(args: argparse.Namespace) -> None:
     output_dir = Path(args.output_dir)
     count = 0
     while args.snapshots == 0 or count < args.snapshots:
-        result = run_once(
-            output_dir,
-            args.bootstrap_servers,
-            args.topic,
-            args.discovery_url,
-            args.locale,
-            args.timeout,
-            producer,
-        )
+        try:
+            result = run_once(
+                output_dir,
+                args.bootstrap_servers,
+                args.topic,
+                args.discovery_url,
+                args.locale,
+                args.timeout,
+                producer,
+            )
+        except (OSError, StreamError, KafkaSendError, ValueError) as error:
+            if args.snapshots != 0:
+                raise
+            print(f"gbfs stream: {error}", file=sys.stderr)
+            time.sleep(args.interval_seconds)
+            continue
         print(json.dumps(result, ensure_ascii=False))
         count += 1
         if args.snapshots == 0 or count < args.snapshots:
-            import time
-
             time.sleep(args.interval_seconds)
 
 

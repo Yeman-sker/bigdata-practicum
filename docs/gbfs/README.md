@@ -85,19 +85,21 @@ python3 -m citibike.gbfs_stream \
 `snapshots/<time>-<snapshot_prefix>/`，再顺序发送 station 记录；所有 station
 得到 broker 确认后才发送 key 为 `__snapshot_end__` 的结束记录。批次失败时保留
 raw 和失败日志，不发送虚假的完整结束记录。`collection_log.json` 记录源时间、
-raw hash、映射/质量告警、批次状态和 snapshot/metadata hash。
+raw hash、映射成功/隔离计数、映射/质量告警、批次状态和 snapshot/metadata hash。
 
 录制库存使用同一封装，且不允许把实时来源冒充录制来源：
 
 ```bash
 python3 -m citibike.gbfs_stream \
   --replay "$DATA_DIR/events.ndjson" \
+  --output-dir "$DATA_DIR/gbfs" \
   --metadata-file "$DATA_DIR/gbfs/metadata/<metadata_version>.json" \
   --bootstrap-servers "${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}"
 ```
 
 replay 会保留 snapshot、metadata、源时间和事件 value，仅将来源 header
-规范为 `GBFS_REPLAY`；输入必须包含完整的 station + `snapshot_end` 批次。
+规范为 `GBFS_REPLAY`；输入必须包含完整批次，0 站批次可以只包含
+`snapshot_end`。
 完整 raw 与运行证据放在 `DATA_DIR`，不提交 Git。
 
 ## 校验 normalized fixture

@@ -3,16 +3,20 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from citibike.gbfs_stream import (
+    CollectionError,
     StreamError,
     build_batch,
     build_canonical_metadata,
+    parse_args,
     replay_records,
+    run,
     run_once,
+    run_replay,
     send_batch,
 )
-
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "day2"
 
@@ -105,6 +109,9 @@ class GbfsStreamTest(unittest.TestCase):
             )["capacity"],
             None,
         )
+        self.assertEqual(
+            sum(item["type"] == "isolated_mapping" for item in warnings), 2
+        )
         self.assertTrue(any(item["type"] == "missing_metadata" for item in warnings))
 
     def test_station_end_is_not_sent_after_station_failure(self):
@@ -131,6 +138,108 @@ class GbfsStreamTest(unittest.TestCase):
             path.write_text(json.dumps(live) + "\n")
             with self.assertRaisesRegex(StreamError, "exactly one final"):
                 replay_records(path)
+
+    def test_zero_station_batch_is_valid_replay_input(self):
+        information, status, _ = fixture_feeds()
+        status["data"]["stations"] = []
+        batch = build_batch(
+            information,
+            status,
+            b'{"data":{"stations":[]}}',
+            datetime(2025, 2, 5, 13, tzinfo=timezone.utc),
+            "FIXTURE",
+        )
+        self.assertEqual(batch.station_count, 0)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "empty.ndjson"
+            path.write_text(json.dumps(batch.records[-1]) + "\n")
+            replayed = replay_records(path)
+        self.assertEqual(len(replayed), 1)
+        self.assertEqual(replayed[0]["headers"]["data_origin"], "GBFS_REPLAY")
+
+    def test_replay_requires_matching_metadata_file_and_logs_failure(self):
+        producer = FakeProducer()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with self.assertRaisesRegex(StreamError, "metadata_file is required"):
+                run_replay(FIXTURE / "events.ndjson", producer, output)
+            failure = json.loads((output / "collection_log.json").read_text())
+            self.assertEqual(failure["snapshots"][-1]["status"], "FAILED_REPLAY")
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with self.assertRaisesRegex(RuntimeError, "broker unavailable"):
+                run_replay(
+                    FIXTURE / "events.ndjson",
+                    FakeProducer(fail_on_call=1),
+                    output,
+                    FIXTURE / "metadata.json",
+                )
+            failure = json.loads((output / "collection_log.json").read_text())
+            self.assertEqual(failure["snapshots"][-1]["status"], "FAILED_REPLAY")
+
+        producer = FakeProducer()
+        result = run_replay(
+            FIXTURE / "events.ndjson",
+            producer,
+            metadata_file=FIXTURE / "metadata.json",
+        )
+        self.assertEqual(result["status"], "PUBLISHED")
+
+    def test_invalid_feed_preserves_raw_and_failure_log(self):
+        information, status, _ = fixture_feeds()
+        feeds = {
+            "discovery": {
+                "version": "2.3",
+                "data": {
+                    "en": {
+                        "feeds": [
+                            {"name": "station_information", "url": "info"},
+                            {"name": "station_status", "url": "status"},
+                            {"name": "vehicle_types", "url": "types"},
+                        ]
+                    }
+                },
+            },
+            "info": information,
+            "status": status,
+            "types": {"version": "2.2", "data": {"vehicle_types": []}},
+        }
+
+        def fetcher(url, timeout):
+            return feeds[url]
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with self.assertRaises(CollectionError):
+                run_once(
+                    output,
+                    "unused",
+                    "topic",
+                    "discovery",
+                    producer=FakeProducer(),
+                    fetcher=fetcher,
+                )
+            log = json.loads((output / "collection_log.json").read_text())
+            record = log["snapshots"][-1]
+            self.assertEqual(record["status"], "FAILED_COLLECTION")
+            self.assertEqual(record["failure_count"], 1)
+            self.assertEqual(record["fetched_feed_count"], 4)
+            failure_dir = output / record["failure_directory"]
+            self.assertTrue((failure_dir / "station_status.json").exists())
+
+    def test_replay_parser_requires_metadata_file(self):
+        with self.assertRaisesRegex(SystemExit, "metadata-file is required"):
+            parse_args(
+                [
+                    "--replay",
+                    str(FIXTURE / "events.ndjson"),
+                    "--bootstrap-servers",
+                    "localhost:9092",
+                    "--output-dir",
+                    "/tmp/gbfs-stream-test",
+                ]
+            )
 
     def test_run_once_records_and_skips_identical_published_source(self):
         information, status, status_bytes = fixture_feeds()
@@ -188,12 +297,51 @@ class GbfsStreamTest(unittest.TestCase):
             self.assertEqual(first["status"], "PUBLISHED")
             self.assertEqual(second["status"], "SKIPPED_DUPLICATE")
             self.assertEqual(second_producer.calls, [])
+            log = json.loads((output / "collection_log.json").read_text())
+            self.assertEqual(log["snapshots"][0]["mapping_success_count"], 2)
+            self.assertEqual(log["snapshots"][0]["mapping_isolated_count"], 0)
             self.assertTrue(
                 (output / "metadata" / f"{first['metadata_version']}.json").exists()
             )
             self.assertEqual(
                 status_bytes, (FIXTURE / "station_status.json").read_bytes()
             )
+
+    def test_continuous_mode_retries_after_expected_failure(self):
+        args = parse_args(
+            [
+                "--bootstrap-servers",
+                "localhost:9092",
+                "--output-dir",
+                "/tmp/gbfs-stream-test",
+                "--snapshots",
+                "0",
+                "--interval-seconds",
+                "1",
+                "--dry-run",
+            ]
+        )
+        calls = []
+        sleeps = []
+
+        def fake_run_once(*run_args):
+            calls.append(run_args)
+            if len(calls) == 1:
+                raise StreamError("temporary source failure")
+            return {"status": "PUBLISHED"}
+
+        def fake_sleep(seconds):
+            sleeps.append(seconds)
+            args.snapshots = 1
+
+        with (
+            patch("citibike.gbfs_stream.run_once", side_effect=fake_run_once),
+            patch("citibike.gbfs_stream.time.sleep", side_effect=fake_sleep),
+        ):
+            run(args)
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(sleeps, [1.0])
 
 
 if __name__ == "__main__":
