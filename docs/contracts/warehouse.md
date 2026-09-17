@@ -25,7 +25,7 @@ Day 1 manifest 保持历史证据原样；重跑将新 manifest 写 DATA_DIR，i
 
 ## DWD：全部物理记录可追踪
 
-`citibike_dw.dwd_trip_v1` 为 Parquet external table，分区 source_year/source_month，根 /warehouse/dwd/dwd_trip_v1。每行一条通过 source gate 的物理 CSV 记录；定位键 `(ingest_batch_id, source_file, source_row_number)`，source_row_number 从首条数据记录 1 起，不是文件物理行号。
+`citibike_dw.dwd_trip_v1` 为 Parquet external table，分区 source_year/source_month，物理根为 `/warehouse/releases/<dataset_id>/dwd/dwd_trip_v1`，稳定表名由离线注册步骤指向已完成 release。每行一条通过 source gate 的物理 CSV 记录；定位键 `(ingest_batch_id, source_file, source_row_number)`，source_row_number 从首条数据记录 1 起，不是文件物理行号。
 
 Day 1 的 ODS 只有 13 列和月份分区，`citibike.spark` 的读取结果没有稳定文件记录序号，不能直接充当 DWD 来源定位。#28 从 manifest 对应 RAW CSV 的读取边界保留文件名与原记录顺序，再做转换/去重；ODS 继续用于 schema、分区与行数核对，不修改旧表或重新下载。本地 fixture 输入显式使用 file:/// 绝对 URI，HDFS 输入使用对应 /raw 路径，避免默认文件系统误解本地路径。单行 CSV 可按每个文件的输入字节偏移排序后编号，header 不计数；跨行 CSV 必须先用 CSV 解析器逐记录编号，不能按换行数编号。禁止在 shuffle 后用任意 row_number/monotonically_increasing_id 伪造源序号。分区数变化后的定位键与去重胜者必须相同；[Spark zipWithIndex](https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.RDD.zipWithIndex.html) 只继承输入分区/记录顺序，不自动恢复文件顺序。
 
@@ -62,7 +62,7 @@ Day 1 的 ODS 只有 13 列和月份分区，`citibike.spark` 的读取结果没
 - 一个站点在某日有至少一次有效流入或流出，该日为活跃日，为它补齐 0..23 的 24 行；没有活动的站点日不补。子类型只按出发端计数，未知类型不计入已知子项。
 - profile 用当前接纳数据中该站点、该星期的所有活跃日期，含当天零小时；sample_days 为这些 distinct 日期数，各小时一致。median 为排序后的中值，偶数时取中间两项均值；不采用近似 percentile。
 - OD 按出发日期/小时归桶，仅非零，包含自环；自环计流入和流出，地图可画站点脉冲，不能丢失计数。
-- Hive flow/OD 按 service_date 分区；profile 与 DIM 全量小表。所有新表 Parquet external，路径见 DDL，不删除 RAW。
+- Hive flow/OD 按 service_date 分区；profile 与 DIM 全量小表。所有新表 Parquet external，路径见 release evidence 与参数化 DDL，不删除 RAW。
 
 全体已接纳有效行有 `sum(inbound)=sum(outbound)=sum(OD.ride_count)=有效去重 Trip 数`。单小时 inbound 不必等于出发小时 OD；跨日和跨月同理。不得只筛“2025-01”业务日期后声称与整个 202501 文件行数守恒。availability 从已发布 flow 的 distinct service_date/hour 得到；边缘日期可能只有样本覆盖，页面称“已入库历史”，不宣称完整运营日。
 
@@ -85,10 +85,11 @@ MySQL 数据库 `citibike` 与 Hive metastore 数据库分开。所有服务表 
 
 ### 离线发布步骤
 
-1. Spark 计算全部表，写新 HDFS 输出目录并校验完整计数；导出为 UTF-8 TSV，null 编码 `\\N`。名称等字符串中的 tab/CR/LF 在服务导出时替换为空格，HDFS 事实保留原值。
-2. 清空本次专用 `<table>_load` staging 表，通过 Sqoop `export --export-dir ... --table <table>_load --input-fields-terminated-by '\t' --input-null-string '\\N' --input-null-non-string '\\N' --num-mappers 1` 写入；schema、列顺序与正式表一致，明确 --columns。失败不碰正式表。
-3. 校验每张 staging 行数、dataset_id、主键唯一性、流量守恒、profile 日期数和 OD 非零。单个 export 成功不代表多表整体发布成功。
-4. 单个 MySQL 事务中 DELETE 四张正式表、INSERT SELECT 对应 load 表、更新 historical_release，COMMIT；失败 ROLLBACK。禁止在事务中 TRUNCATE/DDL，禁止 API 读 load 表。
+1. Spark 在 `/warehouse/.building/<dataset_id>-<attempt>/` 计算全部表、导出文件和 `release.json`，校验完整计数后以一次同文件系统、禁止覆盖的目录 rename 提交到 `/warehouse/releases/<dataset_id>/`。中途失败不修改任何已提交 release；同 dataset_id 重试校验并复用原证据。仅支持具备该 rename 语义的 HDFS/local filesystem。
+2. 服务导出为不加引号、不转义的 UTF-8 TSV；名称等字符串中的 tab/CR/LF 替换为空格，quote/backslash 保持字面值，HDFS Parquet 事实不改。每个 release 选择与所有非 null 字段均不相等的确定性 null token，并写入 evidence，避免合法字面 `\\N` 与 SQL null 冲突。
+3. 清空本次专用 `<table>_load` staging 表，通过 Sqoop `export --export-dir <evidence path> --table <table>_load --input-fields-terminated-by '\t' --input-null-string <evidence token> --input-null-non-string <evidence token> --num-mappers 1` 写入；schema、列顺序与正式表一致，明确 --columns。失败不碰正式表。
+4. 校验每张 staging 行数、dataset_id、主键唯一性；流入、流出、OD 总数分别等于 evidence 的有效 Trip 数；flow 每个活跃站点日严格含 0..23 小时；profile 键和 sample_days 与 flow 日期严格一致；OD 严格为正。单个 export 成功不代表多表整体发布成功。
+5. 单个 MySQL 事务中 DELETE 四张正式表、INSERT SELECT 对应 load 表、更新 historical_release，COMMIT；失败 ROLLBACK。禁止在事务中 TRUNCATE/DDL，禁止 API 读 load 表。事务提交后若确认查询失败，状态为未知，不能虚报 `published=false`。
 
 Day 3 先用 expected.json 的四张服务表做最小 TSV→Sqoop→staging→事务发布试跑，提前验证驱动、权限、null 与列顺序；随后换成实际 Spark 输出。该试跑只证明导出通道，不能作为 ETL 通过证据。同一库一次只运行一个 export；重试先清空本次 staging，保留正式发布。
 
