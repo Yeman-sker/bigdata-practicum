@@ -67,8 +67,30 @@ CREATE TABLE IF NOT EXISTS ads_rebalance_suggestion (
   distance_meters INT NOT NULL, priority INT NOT NULL UNIQUE CHECK (priority > 0),
   generated_at_utc DATETIME(6) NOT NULL, expires_at_utc DATETIME(6) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
--- Sqoop writes only these staging tables. Multi-table publication uses DML in one transaction.
-CREATE TABLE IF NOT EXISTS dim_station_v1_load LIKE dim_station_v1;
-CREATE TABLE IF NOT EXISTS dws_station_hourly_flow_v1_load LIKE dws_station_hourly_flow_v1;
-CREATE TABLE IF NOT EXISTS dws_station_hour_profile_v1_load LIKE dws_station_hour_profile_v1;
-CREATE TABLE IF NOT EXISTS dws_station_od_hourly_v1_load LIKE dws_station_od_hourly_v1;
+-- Sqoop writes only these disposable staging tables.  They intentionally have
+-- no keys or CHECK constraints: validation must detect duplicate/bad input
+-- before the single publication transaction touches the constrained tables.
+CREATE TABLE IF NOT EXISTS dim_station_v1_load (
+  station_id VARCHAR(128) NOT NULL, station_name VARCHAR(512) NULL,
+  lat DOUBLE NULL, lon DOUBLE NULL, capacity INT NULL, region_id VARCHAR(128) NULL,
+  is_current BOOLEAN NOT NULL, metadata_source VARCHAR(16) NOT NULL,
+  metadata_updated_at DATETIME(6) NOT NULL, dataset_id CHAR(64) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE IF NOT EXISTS dws_station_hourly_flow_v1_load (
+  station_id VARCHAR(128) NOT NULL, service_date DATE NOT NULL, hour TINYINT NOT NULL,
+  inbound_rides BIGINT NOT NULL, outbound_rides BIGINT NOT NULL,
+  net_flow BIGINT NOT NULL, total_activity BIGINT NOT NULL,
+  electric_outbound BIGINT NOT NULL, classic_outbound BIGINT NOT NULL,
+  member_outbound BIGINT NOT NULL, casual_outbound BIGINT NOT NULL,
+  dataset_id CHAR(64) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE IF NOT EXISTS dws_station_hour_profile_v1_load (
+  station_id VARCHAR(128) NOT NULL, day_of_week TINYINT NOT NULL, hour TINYINT NOT NULL,
+  avg_inbound DOUBLE NOT NULL, avg_outbound DOUBLE NOT NULL, avg_net_flow DOUBLE NOT NULL,
+  median_net_flow DOUBLE NOT NULL, sample_days BIGINT NOT NULL, dataset_id CHAR(64) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE IF NOT EXISTS dws_station_od_hourly_v1_load (
+  service_date DATE NOT NULL, hour TINYINT NOT NULL,
+  from_station_id VARCHAR(128) NOT NULL, to_station_id VARCHAR(128) NOT NULL,
+  ride_count BIGINT NOT NULL, dataset_id CHAR(64) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
