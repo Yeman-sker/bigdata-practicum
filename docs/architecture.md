@@ -31,7 +31,7 @@ flowchart LR
 | export | Sqoop 1.4.7 / JDK 8 | 历史薄表导出 MySQL staging，校验后事务发布 |
 | collector | Python 3 | 每 60 秒采集，保留 raw，生成 metadata 文件与 Kafka 记录 |
 | backend | Spring Boot 3.2.x+ / JDK 17 | 同进程分别运行消费/规则/写入与只读 HTTP；fixture 模式禁用消费 |
-| frontend | Vite + React + TypeScript | 一个页面，fixture 与 HTTP 共用响应结构 |
+| frontend | Vite + React + TypeScript + MapLibre | 棱镜空间地图与右侧操作面板，fixture 与 HTTP 共用响应结构 |
 | Flume | 1.11.0 / JDK 8 | collector/backend 日志汇聚 HDFS /logs/citibike；课程集成证据，不承载业务数据 |
 
 [runbook](runbook.md) 区分现有命令和约定的待实现入口。本次文档交付不表示这些业务程序已存在。
@@ -54,7 +54,7 @@ GBFS metadata 以不可变文件 `$DATA_DIR/gbfs/metadata/<metadata_version>.jso
 
 ## 目录与冲突边界
 
-落盘目录树以 [README](../README.md#3-项目目录与-agent-skill-索引) 为入口。后端统一使用 Java 根包 `citibike`，应用入口放在该包下，`api` 与 `operations` 为其子包；测试在 `backend/src/test/java/citibike/` 下按同名子包组织。当前只用 `.gitkeep` 预留目录，工程依赖和业务代码仍由首个实现 PR 交付。
+落盘目录树以 [README](../README.md#3-项目目录与-agent-skill-索引) 为入口。后端统一使用 Java 根包 `citibike`，应用入口放在该包下，`api` 与 `operations` 为其子包；测试在 `backend/src/test/java/citibike/` 下按同名子包组织。后端目录仍由 `.gitkeep` 占位，工程与业务实现由 #26、#29 交付。前端已有 Vite 工程、依赖锁文件、模型检查和构建入口。
 
 | 目录/文件 | 主维护人 | 规则 |
 | --- | --- | --- |

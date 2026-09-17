@@ -10,7 +10,7 @@
 | [#27](https://github.com/Yeman-sker/bigdata-practicum/issues/27) GBFS/Kafka | OGATA-LINA | canonical 适配、raw/metadata、完整批次发送、录制事件发送与真实采集证据 | 复用 collector/validator；原 API 和 Maven 入口移交 #26，不再跨两条开发流 |
 | [#28](https://github.com/Yeman-sker/bigdata-practicum/issues/28) 离线数据与服务表 | Hu-tong123 | source/RAW/ODS/DWD/DIM、flow/profile/OD、Sqoop/MySQL 发布、DDL 与对账 | 复用已验证 source、landing、Spark 读取 PoC |
 | [#29](https://github.com/Yeman-sker/bigdata-practicum/issues/29) 规则与实时发布 | 1giaowoligiaogiao | `citibike.operations` 包：当前/预测、整数调度、Kafka 消费、事务发布与到期判定 | 与 #26 共用一个 Java 工程/进程 |
-| [#30](https://github.com/Yeman-sker/bigdata-practicum/issues/30) UI / 前端与集成 | Yeman-sker | UI 设计、Vite/React、地图/回放/站点透镜/风险/调度、前端 CI 与浏览器验收；协调合并和最终集成 | 在同一前端原型迭代 UI；各组提供自己的证据，组长汇总；协调 Flume 日志证据 |
+| [#30](https://github.com/Yeman-sker/bigdata-practicum/issues/30) UI / 前端与集成 | Yeman-sker | UI 设计、Vite/React、地图/回放/站点详情/风险/调度、前端 CI 与浏览器验收；协调合并和最终集成 | 在同一前端原型迭代 UI；各组提供自己的证据，组长汇总；协调 Flume 日志证据 |
 | [#31](https://github.com/Yeman-sker/bigdata-practicum/issues/31) 文档基线 | Yeman-sker | 组织文档评审与基线记录；各领域负责人维护自己的契约 | 文档签收不等于实现完成 |
 
 这是组长的任务安排，不预先代替组员签收。UI 设计归 Yeman-sker；API、采集、离线、规则按既定字段与样例开工，不等待视觉定稿。
@@ -21,7 +21,7 @@
 | --- | --- | --- | --- | --- | --- |
 | Day 1 | 已有 source 成果 | 已有 GBFS 成果 | 已有落地/读取基础 | 已有契约/验证基础 | 复用已合并证据，不重复计为新实现 |
 | Day 2 | 核对 HTTP/表和后端入口 | 核对身份/事件 | 核对表和样例 | 核对规则算例 | 确定 UI 方向；文档基线与文件责任 |
-| Day 3 | 第一小时独立提交可测试 backend/Java CI；随后 seed 查询 | canonical/metadata；复用 collector 验证 station/end 发送 | 20 分钟交接；fixture DWD/聚合；先试通小样本 Sqoop 再接 ETL | JDK 17 纯规则/到期算例；接 Maven；随后建议 | UI 原型：全屏地图/视角拨盘/站点透镜；fixture 可交互、前端 CI；优先合后端入口并确定集成环境 |
+| Day 3 | 第一小时独立提交可测试 backend/Java CI；随后 seed 查询 | canonical/metadata；复用 collector 验证 station/end 发送 | 20 分钟交接；fixture DWD/聚合；先试通小样本 Sqoop 再接 ETL | JDK 17 纯规则/到期算例；接 Maven；随后建议 | UI 原型：棱镜空间三维地图/右侧操作面板/站点详情；fixture 可交互、前端 CI；优先合后端入口并确定集成环境 |
 | Day 4 | 三接口完整参数/空/错误；接真实历史表 | Kafka 完整批次与录制发送，交接 metadata 文件 | 真实 2025-01 DWD/DWS + Sqoop 发布 | consumer 完整/重复/失败批、原子写入 | 回放/曲线/异常 UI；接真实历史 API，演示样例及真实历史 |
 | Day 5 | 实时 ADS 查询、同批/过期/录制标识联调 | 三次真实采集与 Kafka 交接证据 | 对账、映射覆盖、修导出问题 | Kafka→规则→ADS 真链路与失效验证 | 接完整实时结果，五条 P0 首次真实集成；汇总 Flume 日志证据 |
 | Day 6 | API 错误/一致性回归 | 重放、失败发送与元数据恢复 | 重跑与事务回滚验证 | 规则/批次/过期回归 | 浏览器/可访问性回归、视觉收口；判定 P1 |

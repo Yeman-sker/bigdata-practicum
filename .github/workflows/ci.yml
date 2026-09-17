@@ -49,11 +49,68 @@ jobs:
           python -m pip install -r requirements-contracts.txt
           python -m unittest discover -s tests -p 'test_*.py' -v
 
-      - name: Compile and Run Java Operations Self-Checks
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test and build
         run: |
-          rm -rf /tmp/operations-classes
-          mkdir -p /tmp/operations-classes
-          javac --release 17 -Xlint:all -d /tmp/operations-classes \
-            $(find backend/src/main/java backend/src/test/java -name '*.java' -print)
-          java -ea -cp /tmp/operations-classes citibike.operations.OperationsSelfTest
-          java -ea -cp /tmp/operations-classes citibike.operations.FixtureDrivenSelfTest fixtures/day2/cases.json
+          npm --prefix frontend ci
+          npm --prefix frontend test
+          npm --prefix frontend run build
+
+  backend:
+    name: Java Backend
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: citibike_fixture_it
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Load MySQL fixture
+        env:
+          MYSQL_PWD: root
+        run: |
+          mysql --default-character-set=utf8mb4 --protocol=tcp --host=127.0.0.1 --port=3306 --user=root citibike_fixture_it < sql/serving.sql
+          mysql --default-character-set=utf8mb4 --protocol=tcp --host=127.0.0.1 --port=3306 --user=root citibike_fixture_it < fixtures/day2/seed.sql
+
+      - name: Run Maven tests
+        env:
+          CITIBIKE_MYSQL_IT: "true"
+          CITIBIKE_MYSQL_IT_URL: jdbc:mysql://127.0.0.1:3306/citibike_fixture_it?serverTimezone=UTC
+          CITIBIKE_MYSQL_IT_USERNAME: root
+          CITIBIKE_MYSQL_IT_PASSWORD: root
+        run: |
+          mvn -f backend/pom.xml --batch-mode test
+          java -ea -cp backend/target/classes:backend/target/test-classes citibike.operations.OperationsSelfTest
+          java -ea -cp backend/target/classes:backend/target/test-classes citibike.operations.FixtureDrivenSelfTest fixtures/day2/cases.json

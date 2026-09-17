@@ -1,9 +1,5 @@
 # 共享单车智能运营与调度大数据平台
 
-![城市骑行流动与供需调度的概念示意图](docs/concepts/city-bikes-concept.png)
-
-*项目概念图：用于表达车辆分布、流动与调度思路，不是 UI 设计稿或实际运行截图。*
-
 东华理工大学 2023 级数据科学与大数据技术专业生产实习项目。平台面向共享单车运营与调度人员，结合历史骑行记录和实时站点库存，识别站点供需规律、缺车/满桩风险，并给出可解释的调度建议。
 
 项目主题见 [Issue #3](https://github.com/Yeman-sker/bigdata-practicum/issues/3)。Day 2 v1.1 文档基线由 [ADR-0004](docs/adr/0004-parallel-development-baseline.md) 承接既有决策，任务与评审记录见 [Issue #4](https://github.com/Yeman-sker/bigdata-practicum/issues/4) 和 [#31](https://github.com/Yeman-sker/bigdata-practicum/issues/31)。
@@ -85,7 +81,7 @@ Source schema validator、字段映射和契约 fixtures 见
 | **数据交换** | Apache Sqoop | 1.4.7 | JDK 8 | RDBMS (MySQL) 与 Hadoop/Hive 批量数据迁移 |
 | **关系型数据库** | MySQL Community | 8.0.x | - | 业务数据存储与 Hive Metastore 元数据库 |
 | **服务层框架** | Spring Boot | 3.2.x+ | JDK 17 | 后端数据服务与 API 暴露 (提供 RESTful 接口) |
-| **前端应用** | Vite + React + TypeScript | v1 | - | 地图大屏、回放、风险与调度展示；图表库可替换 |
+| **前端应用** | Vite + React + TypeScript | v1 | - | 三维城市地图、粒子、回放、风险与调度展示 |
 
 ---
 
@@ -111,7 +107,7 @@ source ~/use-jdk17.sh
 
 ## 3. 项目目录与 Agent Skill 索引
 
-下列目录均已落盘；标注“占位”的目录目前只含 `.gitkeep`，用于明确并行开发边界，尚不能构建或启动应用。目录责任见 [架构与模块边界](docs/architecture.md#目录与冲突边界)。
+下列目录均已落盘；仍标注“占位”的目录目前只含 `.gitkeep`，用于明确并行开发边界，尚不能构建或启动对应应用。backend 的 API 工程已由 #26 提供，operations 与 frontend 仍按各自 Issue 交付。目录责任见 [架构与模块边界](docs/architecture.md#目录与冲突边界)。
 
 ```text
 bigdata-practicum/
@@ -123,19 +119,22 @@ bigdata-practicum/
 │   ├── gbfs.py
 │   ├── gbfs_fixture.py
 │   └── spark.py
-├── backend/                          # 一个 Spring Boot / Maven 工程，待初始化
+├── backend/                          # 一个 Spring Boot / Maven 工程，#26 API 已实现
+│   ├── pom.xml
 │   └── src/
 │       ├── main/
 │       │   ├── java/citibike/         # 共享 Java 根包，应用入口由 #26 交付
-│       │   │   ├── api/               # 占位：#26 HTTP 查询
+│       │   │   ├── api/               # #26 只读 HTTP 查询
 │       │   │   └── operations/        # 占位：#29 规则、消费与实时发布
-│       │   └── resources/            # 占位：#26 公共应用配置
+│       │   └── resources/            # #26 公共应用配置
 │       └── test/java/citibike/
-│           ├── api/                  # 占位：#26 API 测试
+│           ├── api/                  # #26 API 测试
 │           └── operations/           # 占位：#29 规则与消费测试
 ├── frontend/                         # #30 Yeman-sker：UI 设计与完整前端
-│   ├── src/                          # 占位：React / TypeScript 页面、交互与样式
-│   └── public/                       # 占位：直接提供给浏览器的静态资源
+│   ├── src/                          # React / TypeScript、MapLibre、交互与模型自检
+│   ├── index.html                    # Vite 页面入口
+│   ├── package.json                  # 命令与锁定依赖
+│   └── vite.config.ts                # /api 代理与开发服务器配置
 ├── hive/                             # Hive 表定义与数据校验
 │   ├── ods/                          # 既有 RAW → ODS 表定义
 │   ├── queries/                      # 校验 SQL
@@ -150,8 +149,7 @@ bigdata-practicum/
 │   └── gbfs/                         # Day 1 GBFS 交接样例
 ├── docs/
 │   ├── product.md                    # 产品与 UI 行为
-│   ├── frontend-design.md            # #30 全屏地图交互与视觉规范
-│   ├── assets/frontend/              # 前端状态设计图
+│   ├── frontend-design.md            # #30 棱镜空间交互与视觉规范
 │   ├── architecture.md               # 进程、目录责任与交接
 │   ├── runbook.md                    # 现有/待实现入口与运行验收
 │   ├── contracts/                    # 字段、数仓、Kafka、规则和 OpenAPI
@@ -163,7 +161,6 @@ bigdata-practicum/
 │   ├── hdfs-hive/                    # Day 1 RAW / ODS 交接
 │   ├── spark/                        # Day 1 Spark 读取交接
 │   ├── concepts/                     # 项目概念图与既有预览
-│   │   └── city-bikes-concept.png     # README 首屏概念图
 │   ├── handbook/                     # 教师手册
 │   ├── notes/                        # 课堂笔记
 │   └── templates/                    # 实习日志与报告模板
@@ -177,6 +174,6 @@ bigdata-practicum/
 ```
 
 - #26 首个实现 PR 创建 `backend/pom.xml` 和 `citibike` 根包下的应用入口；`api` 与 `operations` 共用这个工程和进程，测试目录按包镜像组织。
-- #30 首个实现 PR 创建 `frontend/package.json`、锁文件和 Vite 配置；页面组件、样式和内部目录随实际 UI 切片补充。Java / 前端构建 CI 分别随两个工程首次实现进入。
+- #30 前端采用棱镜空间设计。`npm --prefix frontend ci` 安装锁定依赖，`npm --prefix frontend run dev` 启动。开发根地址显示共享 `live` 样例，`?fixture=...` 选择异常样例，`?api=1` 连接 `/api` 代理。生产构建未指定 fixture 时连接真实 API。`npm --prefix frontend test` 和 `npm --prefix frontend run build` 纳入 CI。
 - `citibike/` 继续承接 [runbook](docs/runbook.md) 中待实现的 Python 入口；真实数据、运行日志和证据放仓库外的 `$DATA_DIR`，共享样例统一放 `fixtures/`。
 - 首个真实文件进入占位目录时，删除该目录的 `.gitkeep`。构建输出 `backend/target/`、`frontend/node_modules/` 和 `frontend/dist/` 已加入忽略规则。
