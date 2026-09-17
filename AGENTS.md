@@ -13,8 +13,10 @@
 - 产品、模块或数据语义：从 [领域文档导航](docs/agents/domain.md) 选择相关文档，无需每次读取全仓库背景。
 - 发布或拆解团队任务：看 [Issue 约定](docs/agents/issue-tracker.md)。跨模块工作流使用详细模板，小型维护按实际范围说明目标和验证。
 - 环境部署或运行验收：看 [runbook](docs/runbook.md)；安装大数据组件时使用 `bigdata-env-setup`。
+- 实现或修改可见前端 UI/UX 后，使用 [ui-ux-browser-acceptance](.agents/skills/ui-ux-browser-acceptance/SKILL.md) 在真实浏览器中验收；纯设计文档改动不冒充已完成浏览器验收。
 - 实习日志：使用 `practicum-daily-log`。代码、样例、构建、日志、截图和中间文档统一放在执行环境的 `/tmp/practicum-daily-log/<task>/`（WSL 任务放 WSL 内）；仅用户明确要求保留的最终交付物可复制回仓库，复制前检查隐私和无关产物。默认保留临时目录供复核。
 
 ## 工具与运行边界
 
+- 浏览器和桌面 UI 操作直接使用 Codex Computer Use 的 `cua_repl`；本地 Web 应用优先使用 Codex 内置浏览器。禁止读取或调用 `gui-automation` skill，也不使用 ego-browser；除非用户另行明确要求，不以 Playwright 代替 Computer Use 验收。
 - 本地 fixture 测试可直接运行并修复本次改动造成的失败；真实集群、业务库和完整数据实验按任务范围执行，不能用 fixture 通过代替真实验收。

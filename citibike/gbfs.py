@@ -69,6 +69,13 @@ def posix_to_utc(value: Any) -> datetime:
 
 
 def fetch_json(url: str, timeout: float = 30.0) -> dict[str, Any]:
+    payload, _ = fetch_json_bytes(url, timeout)
+    return payload
+
+
+def fetch_json_bytes(url: str, timeout: float = 30.0) -> tuple[dict[str, Any], bytes]:
+    """读取 JSON，同时保留用于 snapshot_id 的原始响应字节。"""
+
     request = Request(
         url,
         headers={
@@ -77,10 +84,11 @@ def fetch_json(url: str, timeout: float = 30.0) -> dict[str, Any]:
         },
     )
     with urlopen(request, timeout=timeout) as response:
-        payload = json.load(response)
+        raw = response.read()
+    payload = json.loads(raw)
     if not isinstance(payload, dict):
         raise ValueError(f"GBFS response at {url} is not a JSON object")
-    return payload
+    return payload, raw
 
 
 def _feed_entries(discovery: Mapping[str, Any], locale: str) -> list[Mapping[str, Any]]:
@@ -122,8 +130,6 @@ def _nullable_int(record: Mapping[str, Any], field: str) -> int | None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{field} must be an integer or null")
-    if value < 0:
-        raise ValueError(f"{field} must not be negative")
     return value
 
 
@@ -178,15 +184,9 @@ def validate_station_information(feed: Mapping[str, Any]) -> list[str]:
         for field in ("lat", "lon"):
             if not _is_number(station.get(field)):
                 errors.append(f"{prefix}.{field} must be numeric")
-        if "capacity" in station and station["capacity"] is not None and (
-            isinstance(station["capacity"], bool)
-            or not isinstance(station["capacity"], int)
-        ):
-            errors.append(f"{prefix}.capacity must be an integer or null")
-        if "region_id" in station and station["region_id"] is not None and not isinstance(
-            station["region_id"], str
-        ):
-            errors.append(f"{prefix}.region_id must be a string or null")
+        # Optional metadata fields are retained in raw and normalised to null
+        # with a quality warning by gbfs_stream when their provider value is
+        # malformed.
     return errors
 
 
@@ -316,6 +316,21 @@ def station_status_quality_warnings(feed: Mapping[str, Any]) -> list[dict[str, A
                 "vehicle_types_available_total": vehicle_total,
                 "resolution": "num_bikes_available 是 station_status_event_v1 的权威总数",
             })
+        for field in (
+            "num_bikes_available",
+            "num_bikes_disabled",
+            "num_docks_available",
+            "num_docks_disabled",
+        ):
+            value = station.get(field)
+            if isinstance(value, int) and value < 0:
+                warnings.append({
+                    "type": "negative_inventory",
+                    "station_id": station.get("station_id"),
+                    "field": field,
+                    "value": value,
+                    "resolution": "保留原值，交由下游标记 INVALID_DATA",
+                })
     return warnings
 
 
