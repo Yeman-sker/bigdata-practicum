@@ -155,7 +155,10 @@ def _read_input(spark, input_path: str | None, hive_table: str | None, source_mo
 
 def _timestamp_expression(field: str, functions):
     return functions.coalesce(
-        *(functions.to_timestamp(functions.col(field), pattern) for pattern in SPARK_TIME_PATTERNS)
+        *(
+            functions.try_to_timestamp(functions.col(field), functions.lit(pattern))
+            for pattern in SPARK_TIME_PATTERNS
+        )
     )
 
 

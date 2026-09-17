@@ -41,20 +41,19 @@ SOURCE_ENUMS: Final[dict[str, frozenset[str]]] = {
     "member_casual": MEMBER_TYPES,
 }
 
-HISTORICAL_TIME_FORMATS: Final[tuple[str, ...]] = (
-    "%m/%d/%Y %H:%M:%S.%f",
-    "%m/%d/%Y %H:%M:%S",
-    "%Y-%m-%d %H:%M:%S.%f",
-    "%Y-%m-%d %H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S.%f",
-    "%Y-%m-%dT%H:%M:%S",
+HISTORICAL_TIME_FORMAT_PAIRS: Final[tuple[tuple[str, str], ...]] = (
+    ("%m/%d/%Y %H:%M:%S.%f", "MM/dd/yyyy HH:mm:ss.SSSSSS"),
+    ("%m/%d/%Y %H:%M:%S", "MM/dd/yyyy HH:mm:ss"),
+    ("%Y-%m-%d %H:%M:%S.%f", "yyyy-MM-dd HH:mm:ss.SSSSSS"),
+    ("%Y-%m-%d %H:%M:%S", "yyyy-MM-dd HH:mm:ss"),
+    ("%Y-%m-%dT%H:%M:%S.%f", "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"),
+    ("%Y-%m-%dT%H:%M:%S", "yyyy-MM-dd'T'HH:mm:ss"),
 )
-SPARK_TIME_PATTERNS: Final[tuple[str, ...]] = (
-    "yyyy-MM-dd HH:mm:ss.SSSSSS",
-    "yyyy-MM-dd HH:mm:ss.SSS",
-    "yyyy-MM-dd HH:mm:ss",
-    "MM/dd/yyyy HH:mm:ss.SSS",
-    "MM/dd/yyyy HH:mm:ss",
+HISTORICAL_TIME_FORMATS: Final[tuple[str, ...]] = tuple(
+    python_pattern for python_pattern, _ in HISTORICAL_TIME_FORMAT_PAIRS
+)
+SPARK_TIME_PATTERNS: Final[tuple[str, ...]] = tuple(
+    spark_pattern for _, spark_pattern in HISTORICAL_TIME_FORMAT_PAIRS
 )
 
 LOCAL_TIME_ZONE: Final[str] = "America/New_York"

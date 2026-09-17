@@ -19,7 +19,8 @@ class SparkTripIntegrationContractTests(unittest.TestCase):
         self.assertEqual(len(SOURCE_FIELDS), 13)
         self.assertEqual(SOURCE_FIELDS[5:8], ("start_station_id", "end_station_name", "end_station_id"))
         self.assertEqual(parse_source_month("2025-01"), (2025, 1))
-        self.assertIn("yyyy-MM-dd HH:mm:ss.SSS", SPARK_TIME_PATTERNS)
+        self.assertIn("MM/dd/yyyy HH:mm:ss.SSSSSS", SPARK_TIME_PATTERNS)
+        self.assertIn("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", SPARK_TIME_PATTERNS)
         with self.assertRaisesRegex(Exception, "YYYY-MM"):
             parse_source_month("2025/01")
 

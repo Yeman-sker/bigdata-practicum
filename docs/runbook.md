@@ -68,7 +68,7 @@ Flume 在日志目录存在后启动，其失败不伪装成业务数据失败�
 
 | 负责人 | 目标入口 | 必须观察到 |
 | --- | --- | --- |
-| #28 | `PYTHONPATH=. spark-submit --master 'local[2]' citibike/offline.py --hive-table citibike_ods.ods_trip_raw --raw-root /raw/citibike/trips --source-month 2025-01 --manifest "$DATA_DIR/historical/manifest.json" --metadata "$METADATA_FILE" --output-root /warehouse --evidence "$DATA_DIR/offline.json"` | 从 RAW 保留记录位置、与 ODS 核对；DWD/DIM/DWS Parquet、Hive 分区、dataset_id、对账与失败状态 |
+| #28 | `PYTHONPATH=. spark-submit --master 'local[2]' citibike/offline.py --hive-table citibike_ods.ods_trip_raw --raw-root /raw/citibike/trips --source-month 2025-01 --manifest "$DATA_DIR/historical/manifest.json" --metadata "$METADATA_FILE" --output-root /warehouse --register-warehouse --evidence "$DATA_DIR/offline.json"` | 从 RAW 保留记录位置、与 ODS 核对；一次提交不可变 DWD/DIM/DWS release，再收敛 Hive schema/分区；dataset_id、对账与失败状态 |
 | #28 | `python3 -m citibike.serving_export --dataset-id "$DATASET_ID" --hdfs-root /warehouse --offline-evidence "$DATA_DIR/offline.json" --password-file "$MYSQL_PASSWORD_FILE" --evidence "$DATA_DIR/export.json"` | 默认连接 localhost:3306/citibike、用户 citibike；Sqoop staging 校验、事务发布和相同 dataset_id |
 | #27 | `python3 -m citibike.gbfs_stream --output-dir "$DATA_DIR/gbfs" --bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS" --interval-seconds 60` | 已实现：复用 gbfs.py；metadata 版本文件、raw、station/end Kafka 记录、批次日志 |
 | #26/#29 | `mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=fixture` | 读取样例 MySQL；禁用 Kafka consumer；按已存 recorded 时钟查询 |
@@ -78,14 +78,9 @@ Flume 在日志目录存在后启动，其失败不伪装成业务数据失败�
 | #30 | `npm --prefix frontend run build` | TypeScript 与静态构建成功 |
 | #26/#29 | `mvn -f backend/pom.xml test` | HTTP 契约、规则算例、批次/事务边界测试通过 |
 
-offline 成功后先注册新 Parquet 分区，再发布服务表：
+offline 命令仅在整个不可变 release 已提交后注册 Hive external 表；注册中断可原命令重试，旧 release 物理文件不删除。五张 Hive alias 的变更可重试但不是跨表原子切换，API 的原子可见边界仍是后续 MySQL 事务。注册会重建表级 metadata；本仓库没有表级授权或统计定义，若部署另行添加，切换后须重新施加并验证。成功后发布服务表：
 
 ```bash
-hive -f hive/warehouse_v1.sql
-hive -e 'MSCK REPAIR TABLE citibike_dw.dwd_trip_v1;
-  MSCK REPAIR TABLE citibike_dw.dws_station_hourly_flow_v1;
-  MSCK REPAIR TABLE citibike_dw.dws_station_od_hourly_v1;'
-
 DATASET_ID=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["dataset_id"])' "$DATA_DIR/offline.json")
 python3 -m citibike.serving_export \
   --dataset-id "$DATASET_ID" \
@@ -98,7 +93,8 @@ python3 -m citibike.serving_export \
 连接不是默认值时显式传 `--connect`、`--host`、`--port`、`--database` 和
 `--username`，其中 JDBC 与 mysql client 必须指向同一库。`MYSQL_PASSWORD_FILE`
 是仅含密码的一行文件；命令会生成无尾换行的临时副本供 Sqoop 1.4.7 使用并在
-结束后删除，不把密码放进进程参数。课堂单节点仅在 YARN 容器不能访问隔离 MySQL
+结束后删除，不把密码放进进程参数。Sqoop 的 export 路径与 null token 均取自已校验的
+offline evidence，不从可变目录重新推算。课堂单节点仅在 YARN 容器不能访问隔离 MySQL
 时使用 `--local-mapreduce` 诊断；共享环境默认走 YARN。每次发布先清空无索引 load
 表，Sqoop 使用一个 mapper 和 JDBC batch；任一导出/校验失败都不会执行正式发布事务。
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -15,13 +16,17 @@ from pathlib import Path
 from typing import Any
 
 if __package__:
-    from .offline import SERVING_COLUMNS
+    from .offline import CONTRACT_VERSION, RELEASE_FORMAT, SERVING_COLUMNS, SERVING_FORMAT
 else:
-    from citibike.offline import SERVING_COLUMNS
+    from citibike.offline import CONTRACT_VERSION, RELEASE_FORMAT, SERVING_COLUMNS, SERVING_FORMAT
 
 
 class ExportError(RuntimeError):
     """Raised when staging or publication cannot be proven safe."""
+
+
+class PublicationUncertainError(ExportError):
+    """Raised when publication may have committed but cannot be confirmed."""
 
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
@@ -32,6 +37,7 @@ PRIMARY_KEYS = {
     "dws_station_hour_profile_v1": ("station_id", "day_of_week", "hour"),
     "dws_station_od_hourly_v1": ("service_date", "hour", "from_station_id", "to_station_id"),
 }
+DATASET_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _run(command: list[str], runner: Runner, *, env: dict[str, str] | None = None, stdin: str | None = None) -> str:
@@ -51,6 +57,50 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("status") != "PASS":
         raise ExportError("offline evidence is absent or not PASS")
     return value
+
+
+def _validate_release_evidence(
+    evidence: dict[str, Any], dataset: str, hdfs_root: str
+) -> dict[str, Any]:
+    if not DATASET_PATTERN.fullmatch(dataset):
+        raise ExportError("dataset id must be a lowercase SHA-256 digest")
+    if evidence.get("dataset_id") != dataset:
+        raise ExportError(f"dataset id does not match offline evidence: {dataset}")
+    if evidence.get("contract_version") != CONTRACT_VERSION:
+        raise ExportError("offline evidence has an unsupported contract version")
+    if evidence.get("release_format") != RELEASE_FORMAT:
+        raise ExportError("offline evidence is not an immutable release")
+    if evidence.get("serving_format") != SERVING_FORMAT:
+        raise ExportError("offline evidence has an unsupported serving format")
+    release_root = f"{hdfs_root.rstrip('/')}/releases/{dataset}"
+    if evidence.get("release_root") != release_root:
+        raise ExportError("offline evidence release root is outside --hdfs-root")
+    paths = evidence.get("paths")
+    if not isinstance(paths, dict):
+        raise ExportError("offline evidence paths must be an object")
+    for table in TABLES:
+        expected = f"{release_root}/serving_export/{table}"
+        if paths.get(f"export_{table}") != expected:
+            raise ExportError(f"offline evidence has an invalid export path for {table}")
+    counts = evidence.get("counts")
+    if not isinstance(counts, dict):
+        raise ExportError("offline evidence counts must be an object")
+    for name in ("valid", "dim", "flow", "profile", "od"):
+        value = counts.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ExportError(f"offline evidence count {name} must be a nonnegative integer")
+    token = evidence.get("tsv_null_token")
+    if (
+        not isinstance(token, str)
+        or re.fullmatch(rf"__CITIBIKE_NULL_{dataset}_\d+__", token) is None
+    ):
+        raise ExportError("offline evidence has an invalid TSV null token")
+    months = evidence.get("source_months")
+    if not isinstance(months, list) or not months or not all(isinstance(value, str) for value in months):
+        raise ExportError("offline evidence source_months must be a non-empty string list")
+    if not isinstance(evidence.get("published_at_utc"), str):
+        raise ExportError("offline evidence published_at_utc must be a string")
+    return evidence
 
 
 def _password(path: Path) -> str:
@@ -106,6 +156,7 @@ def validate_staging(
     dataset: str,
     expected_counts: dict[str, int],
     *,
+    expected_valid: int,
     mysql_bin: str,
     host: str,
     port: int,
@@ -114,6 +165,8 @@ def validate_staging(
     password: str,
     runner: Runner,
 ) -> dict[str, int]:
+    if isinstance(expected_valid, bool) or not isinstance(expected_valid, int) or expected_valid < 0:
+        raise ExportError("offline valid count must be a nonnegative integer")
     actual: dict[str, int] = {}
     for table in TABLES:
         load = f"{table}_load"
@@ -140,24 +193,54 @@ def validate_staging(
             )
         actual[table] = row_count
     conservation = _mysql(
-        "SELECT COALESCE(SUM(inbound_rides),0), COALESCE(SUM(outbound_rides),0) "
+        "SELECT COALESCE(SUM(inbound_rides),0), COALESCE(SUM(outbound_rides),0), "
+        "COALESCE(SUM(inbound_rides < 0 OR outbound_rides < 0 OR total_activity < 0 "
+        "OR electric_outbound < 0 OR classic_outbound < 0 OR member_outbound < 0 "
+        "OR casual_outbound < 0 OR net_flow <> inbound_rides - outbound_rides "
+        "OR total_activity <> inbound_rides + outbound_rides),0) "
         "FROM dws_station_hourly_flow_v1_load;\n"
         "SELECT COALESCE(SUM(ride_count),0), COALESCE(SUM(ride_count <= 0),0) "
         "FROM dws_station_od_hourly_v1_load;\n"
-        "SELECT COALESCE(SUM(sample_days <= 0),0) FROM dws_station_hour_profile_v1_load;\n",
+        "WITH expected_profile AS ("
+        "SELECT station_id, WEEKDAY(service_date) + 1 day_of_week, hour, "
+        "COUNT(DISTINCT service_date) sample_days "
+        "FROM dws_station_hourly_flow_v1_load "
+        "GROUP BY station_id, WEEKDAY(service_date) + 1, hour), "
+        "profile_mismatch AS ("
+        "SELECT e.station_id FROM expected_profile e "
+        "LEFT JOIN dws_station_hour_profile_v1_load p "
+        "ON p.station_id=e.station_id AND p.day_of_week=e.day_of_week AND p.hour=e.hour "
+        "WHERE p.station_id IS NULL OR p.sample_days IS NULL OR p.sample_days<>e.sample_days "
+        "UNION ALL SELECT p.station_id FROM dws_station_hour_profile_v1_load p "
+        "LEFT JOIN expected_profile e "
+        "ON p.station_id=e.station_id AND p.day_of_week=e.day_of_week AND p.hour=e.hour "
+        "WHERE e.station_id IS NULL OR p.sample_days<=0) "
+        "SELECT COUNT(*) FROM profile_mismatch;\n"
+        "SELECT COUNT(*) FROM ("
+        "SELECT station_id, service_date FROM dws_station_hourly_flow_v1_load "
+        "GROUP BY station_id, service_date "
+        "HAVING COUNT(*)<>24 OR COUNT(DISTINCT hour)<>24 OR MIN(hour)<>0 OR MAX(hour)<>23 "
+        "OR COALESCE(SUM(total_activity),0)<=0) invalid_active_days;\n",
         mysql_bin=mysql_bin, host=host, port=port, database=database,
         username=username, password=password, runner=runner,
     ).splitlines()
-    if len(conservation) != 3:
+    if len(conservation) != 4:
         raise ExportError(f"malformed conservation output: {conservation!r}")
-    inbound, outbound = _parse_ints(conservation[0], 2, "flow conservation")
+    inbound, outbound, invalid_flow = _parse_ints(conservation[0], 3, "flow conservation")
     od_rides, non_positive_od = _parse_ints(conservation[1], 2, "OD conservation")
     invalid_profile = _parse_ints(conservation[2], 1, "profile sample_days")[0]
-    if inbound != outbound or outbound != od_rides:
-        raise ExportError(f"staging conservation failed: inbound={inbound}, outbound={outbound}, od={od_rides}")
-    if non_positive_od or invalid_profile:
+    invalid_active_days = _parse_ints(conservation[3], 1, "flow active days")[0]
+    if inbound != expected_valid or outbound != expected_valid or od_rides != expected_valid:
         raise ExportError(
-            f"staging contains non-positive OD/profile values: od={non_positive_od}, profile={invalid_profile}"
+            "staging totals do not equal offline valid count: "
+            f"valid={expected_valid}, inbound={inbound}, outbound={outbound}, od={od_rides}"
+        )
+    if invalid_flow:
+        raise ExportError(f"staging contains {invalid_flow} invalid flow rows")
+    if non_positive_od or invalid_profile or invalid_active_days:
+        raise ExportError(
+            "staging contains invalid OD/profile/active-day values: "
+            f"od={non_positive_od}, profile={invalid_profile}, active_days={invalid_active_days}"
         )
     return actual
 
@@ -204,9 +287,7 @@ def export_release(
     local_mapreduce: bool = False,
     runner: Runner = subprocess.run,
 ) -> dict[str, Any]:
-    evidence = _read_json(offline_evidence)
-    if evidence.get("dataset_id") != dataset:
-        raise ExportError(f"dataset id does not match offline evidence: {dataset}")
+    evidence = _validate_release_evidence(_read_json(offline_evidence), dataset, hdfs_root)
     password = _password(password_file)
     if ddl_path is not None:
         try:
@@ -231,7 +312,7 @@ def export_release(
                 f"DELETE FROM `{table}_load`;\n", mysql_bin=mysql_bin, host=host, port=port,
                 database=database, username=username, password=password, runner=runner,
             )
-            export_dir = f"{hdfs_root.rstrip('/')}/serving_export/{dataset}/{table}"
+            export_dir = evidence["paths"][f"export_{table}"]
             sqoop_password_uri = temporary_password_file.as_uri()
             command = [sqoop_bin, "export"]
             if local_mapreduce:
@@ -246,8 +327,10 @@ def export_release(
                 "--connect", connect, "--username", username,
                 "--password-file", sqoop_password_uri, "--table", f"{table}_load",
                 "--export-dir", export_dir, "--columns", ",".join(SERVING_COLUMNS[table]),
-                "--input-fields-terminated-by", "\t", "--input-null-string", "\\\\N",
-                "--input-null-non-string", "\\\\N", "--num-mappers", "1", "--batch",
+                "--input-fields-terminated-by", "\t",
+                "--input-null-string", evidence["tsv_null_token"],
+                "--input-null-non-string", evidence["tsv_null_token"],
+                "--num-mappers", "1", "--batch",
             ])
             _run(command, runner)
     finally:
@@ -259,20 +342,28 @@ def export_release(
         "dws_station_od_hourly_v1": int(evidence["counts"]["od"]),
     }
     staged = validate_staging(
-        dataset, expected_counts, mysql_bin=mysql_bin, host=host, port=port,
+        dataset, expected_counts, expected_valid=evidence["counts"]["valid"],
+        mysql_bin=mysql_bin, host=host, port=port,
         database=database, username=username, password=password, runner=runner,
     )
-    _mysql(
-        publication_sql(dataset, evidence), mysql_bin=mysql_bin, host=host, port=port,
-        database=database, username=username, password=password, runner=runner,
-    )
-    published = _mysql(
-        "SELECT dataset_id FROM historical_release WHERE singleton = 1;\n",
-        mysql_bin=mysql_bin, host=host, port=port, database=database,
-        username=username, password=password, runner=runner,
-    )
+    try:
+        _mysql(
+            publication_sql(dataset, evidence), mysql_bin=mysql_bin, host=host, port=port,
+            database=database, username=username, password=password, runner=runner,
+        )
+        published = _mysql(
+            "SELECT dataset_id FROM historical_release WHERE singleton = 1;\n",
+            mysql_bin=mysql_bin, host=host, port=port, database=database,
+            username=username, password=password, runner=runner,
+        )
+    except ExportError as error:
+        raise PublicationUncertainError(
+            f"publication was submitted but could not be confirmed: {error}"
+        ) from error
     if published != dataset:
-        raise ExportError(f"publication verification returned {published!r}, expected {dataset}")
+        raise PublicationUncertainError(
+            f"publication verification returned {published!r}, expected {dataset}"
+        )
     return {"status": "PASS", "dataset_id": dataset, "staging_counts": staged, "published": True}
 
 
@@ -317,9 +408,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         _write_evidence(args.evidence, result)
         print(json.dumps(result, ensure_ascii=False, indent=2))
-    except Exception as error:  # noqa: BLE001  # CLI must always leave failure evidence.
+    except Exception as error:
         failure = {
-            "status": "FAIL", "dataset_id": args.dataset_id, "published": False,
+            "status": "FAIL", "dataset_id": args.dataset_id,
+            "published": None if isinstance(error, PublicationUncertainError) else False,
             "error_type": type(error).__name__, "error": str(error),
         }
         try:

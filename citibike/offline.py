@@ -13,7 +13,10 @@ import csv
 import hashlib
 import io
 import json
+import math
+import re
 import sys
+import uuid
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -30,6 +33,18 @@ else:
     )
 
 CONTRACT_VERSION = "1.1"
+RELEASE_FORMAT = "immutable-v1"
+SERVING_FORMAT = "tsv-unquoted-v1"
+UTC_TIMESTAMP_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$"
+)
+WAREHOUSE_TABLE_PATHS = {
+    "dwd_trip_v1": "dwd/dwd_trip_v1",
+    "dim_station_v1": "dim/dim_station_v1",
+    "dws_station_hourly_flow_v1": "dws/dws_station_hourly_flow_v1",
+    "dws_station_hour_profile_v1": "dws/dws_station_hour_profile_v1",
+    "dws_station_od_hourly_v1": "dws/dws_station_od_hourly_v1",
+}
 SERVING_COLUMNS = {
     "dim_station_v1": (
         "station_id", "station_name", "lat", "lon", "capacity", "region_id",
@@ -96,8 +111,8 @@ def load_manifest(path: Path, source_month: str) -> dict[str, Any]:
             f"manifest source_month {manifest.get('source_month')!r} != {source_month!r}"
         )
     zip_hash = manifest.get("zip_sha256")
-    if not isinstance(zip_hash, str) or len(zip_hash) != 64:
-        raise OfflineError("manifest zip_sha256 must be a 64-character digest")
+    if not isinstance(zip_hash, str) or re.fullmatch(r"[0-9a-f]{64}", zip_hash) is None:
+        raise OfflineError("manifest zip_sha256 must be a lowercase SHA-256 digest")
     entries = manifest.get("csv_files")
     if not isinstance(entries, list) or not entries:
         raise OfflineError("manifest csv_files must be a non-empty list")
@@ -128,18 +143,74 @@ def load_manifest(path: Path, source_month: str) -> dict[str, Any]:
 def load_metadata(path: Path) -> list[dict[str, Any]]:
     rows = _load_json(path, list, "metadata")
     ids: set[str] = set()
+    provider_ids: set[str] = set()
+    normalized: list[dict[str, Any]] = []
     for index, row in enumerate(rows):
         if not isinstance(row, dict):
             raise OfflineError(f"metadata row {index} must be an object")
+        provider_id = row.get("provider_station_id")
         station_id = row.get("station_id")
-        if not isinstance(station_id, str) or not station_id.strip():
-            raise OfflineError(f"metadata row {index} has no station_id")
+        for name, value in (("provider_station_id", provider_id), ("station_id", station_id)):
+            if (
+                not isinstance(value, str)
+                or not value
+                or value.strip() != value
+                or len(value) > 128
+                or any(character.isspace() for character in value)
+            ):
+                raise OfflineError(f"metadata row {index} has invalid {name}")
         if station_id in ids:
             raise OfflineError(f"duplicate metadata station_id: {station_id}")
+        if provider_id in provider_ids:
+            raise OfflineError(f"duplicate metadata provider_station_id: {provider_id}")
         if row.get("is_current") is not True or row.get("metadata_source") != "GBFS":
             raise OfflineError(f"metadata station {station_id} is not a current GBFS row")
+        mapping_status = row.get("mapping_status")
+        mapping_reason = row.get("mapping_reason")
+        if mapping_status == "SHORT_NAME":
+            if mapping_reason is not None:
+                raise OfflineError(f"metadata station {station_id} has an invalid mapping_reason")
+        elif mapping_status == "ISOLATED":
+            if (
+                mapping_reason
+                not in {"MISSING_SHORT_NAME", "DUPLICATE_SHORT_NAME", "MISSING_METADATA"}
+                or station_id != f"gbfs:{provider_id}"
+            ):
+                raise OfflineError(f"metadata station {station_id} has an invalid isolated mapping")
+        else:
+            raise OfflineError(f"metadata station {station_id} has an invalid mapping_status")
+        for name, limit in (("station_name", 512), ("region_id", 128)):
+            value = row.get(name)
+            if value is not None and (
+                not isinstance(value, str)
+                or not value
+                or value.strip() != value
+                or len(value) > limit
+            ):
+                raise OfflineError(f"metadata station {station_id} has invalid {name}")
+        for name, lower, upper in (("lat", -90, 90), ("lon", -180, 180)):
+            value = row.get(name)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or not lower <= value <= upper
+            ):
+                raise OfflineError(f"metadata station {station_id} has invalid {name}")
+        capacity = row.get("capacity")
+        if capacity is not None and (
+            isinstance(capacity, bool)
+            or not isinstance(capacity, int)
+            or not 0 < capacity <= 2_147_483_647
+        ):
+            raise OfflineError(f"metadata station {station_id} has invalid capacity")
+        updated_at = _parse_utc_timestamp(
+            row.get("metadata_updated_at"), f"metadata station {station_id} metadata_updated_at"
+        )
         ids.add(station_id)
-    return rows
+        provider_ids.add(provider_id)
+        normalized.append({**row, "metadata_updated_at": updated_at})
+    return normalized
 
 
 def _join_uri(root: str, source_month: str, filename: str) -> str:
@@ -176,7 +247,7 @@ def preflight_local_files(raw_root: str, source_month: str, manifest: dict[str, 
 
 def _parse_csv_line(line: str) -> tuple[str, ...]:
     try:
-        rows = list(csv.reader(io.StringIO(line)))
+        rows = list(csv.reader(io.StringIO(line), strict=True))
     except csv.Error as error:
         raise OfflineError(f"malformed CSV record: {error}") from error
     if len(rows) != 1 or len(rows[0]) != len(SOURCE_FIELDS):
@@ -188,8 +259,6 @@ def _parse_csv_line(line: str) -> tuple[str, ...]:
 
 
 def _read_manifest_rdd(spark, raw_root: str, source_month: str, manifest: dict[str, Any]):
-    """Return source tuples plus stable filename/1-based record number."""
-
     from pyspark import StorageLevel
 
     sc = spark.sparkContext
@@ -225,11 +294,13 @@ def _read_manifest_rdd(spark, raw_root: str, source_month: str, manifest: dict[s
 
 
 def _timestamp_expr(F, column: str):
-    return F.coalesce(*(F.to_timestamp(column, pattern) for pattern in SPARK_TIME_PATTERNS))
+    return F.coalesce(
+        *(F.try_to_timestamp(column, F.lit(pattern)) for pattern in SPARK_TIME_PATTERNS)
+    )
 
 
 def _safe_coordinate(F, name: str):
-    parsed = F.col(name).cast("double")
+    parsed = F.expr(f"try_cast(`{name}` AS DOUBLE)")
     lower, upper = (-90.0, 90.0) if name.endswith("lat") else (-180.0, 180.0)
     return F.when(parsed.between(lower, upper) & ~F.isnan(parsed), parsed)
 
@@ -392,7 +463,7 @@ def build_frames(
         T.StructField("capacity", T.IntegerType(), True), T.StructField("region_id", T.StringType(), True),
         T.StructField("is_current", T.BooleanType(), False),
         T.StructField("metadata_source", T.StringType(), False),
-        T.StructField("metadata_updated_at", T.StringType(), False),
+        T.StructField("metadata_updated_at", T.TimestampType(), False),
     ])
     metadata_values = [
         tuple(row.get(name) for name in (
@@ -400,11 +471,7 @@ def build_frames(
             "is_current", "metadata_source", "metadata_updated_at",
         )) for row in metadata_rows
     ]
-    metadata = spark.createDataFrame(metadata_values, metadata_schema).withColumn(
-        "metadata_updated_at", F.to_timestamp("metadata_updated_at")
-    )
-    # DIM covers every non-empty DWD endpoint, including duplicate or otherwise
-    # invalid trips; DWS alone is restricted to valid station trips.
+    metadata = spark.createDataFrame(metadata_values, metadata_schema)
     start_candidates = dwd.where(F.col("start_station_id").isNotNull()).select(
         F.col("start_station_id").alias("station_id"), F.col("start_station_name").alias("station_name"),
         F.col("start_lat").alias("lat"), F.col("start_lng").alias("lon"),
@@ -503,28 +570,154 @@ def _sanitise_for_tsv(frame, columns: tuple[str, ...]):
     return frame.select(*expressions)
 
 
-def write_outputs(frames: dict[str, Any], output_root: str) -> dict[str, str]:
+def _release_paths(output_root: str, dataset: str) -> tuple[str, dict[str, str]]:
+    release_root = f"{output_root.rstrip('/')}/releases/{dataset}"
+    paths = {
+        table: f"{release_root}/{relative}"
+        for table, relative in WAREHOUSE_TABLE_PATHS.items()
+    }
+    paths.update({
+        f"export_{table}": f"{release_root}/serving_export/{table}"
+        for table in SERVING_COLUMNS
+    })
+    return release_root, paths
+
+
+def _read_hadoop_json(spark, uri: str) -> dict[str, Any]:
+    from py4j.protocol import Py4JJavaError
+
+    jvm = spark._jvm
+    path = jvm.org.apache.hadoop.fs.Path(uri)
+    stream = path.getFileSystem(spark._jsc.hadoopConfiguration()).open(path)
+    scanner = jvm.java.util.Scanner(stream, "UTF-8").useDelimiter("\\A")
+    try:
+        payload = scanner.next()
+    except Py4JJavaError as error:
+        raise OfflineError(f"cannot read committed release descriptor {uri}: {error}") from error
+    finally:
+        scanner.close()
+    try:
+        value = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise OfflineError(f"invalid committed release descriptor {uri}: {error}") from error
+    if not isinstance(value, dict):
+        raise OfflineError(f"committed release descriptor {uri} must be an object")
+    return value
+
+
+def _write_hadoop_json(spark, uri: str, value: dict[str, Any]) -> None:
+    payload = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    jvm = spark._jvm
+    path = jvm.org.apache.hadoop.fs.Path(uri)
+    stream = path.getFileSystem(spark._jsc.hadoopConfiguration()).create(path, False)
+    try:
+        stream.write(bytearray(payload))
+    finally:
+        stream.close()
+
+
+def _validate_committed_release(
+    value: dict[str, Any], expected: dict[str, Any], release_root: str, paths: dict[str, str]
+) -> dict[str, Any]:
+    for name in ("contract_version", "dataset_id", "metadata_version", "source_months", "ingest_batch_ids"):
+        if value.get(name) != expected.get(name):
+            raise OfflineError(f"committed release {name} does not match this build")
+    if value.get("status") != "PASS" or value.get("release_format") != RELEASE_FORMAT:
+        raise OfflineError("committed release is not a supported PASS release")
+    if value.get("serving_format") != SERVING_FORMAT:
+        raise OfflineError("committed release has an unsupported serving format")
+    if value.get("release_root") != release_root or value.get("paths") != paths:
+        raise OfflineError("committed release paths do not match its dataset directory")
+    actual_counts = value.get("counts")
+    expected_counts = expected.get("counts")
+    if not isinstance(actual_counts, dict) or not isinstance(expected_counts, dict):
+        raise OfflineError("committed release counts must be objects")
+    if (
+        {name: count for name, count in actual_counts.items() if name != "ods"}
+        != {name: count for name, count in expected_counts.items() if name != "ods"}
+    ):
+        raise OfflineError("committed release counts do not match this build")
+    token = value.get("tsv_null_token")
+    token_pattern = rf"__CITIBIKE_NULL_{re.escape(str(expected['dataset_id']))}_\d+__"
+    if not isinstance(token, str) or re.fullmatch(token_pattern, token) is None:
+        raise OfflineError("committed release has an invalid TSV null token")
+    return value
+
+
+def _choose_null_token(formatted: dict[str, Any], dataset: str) -> str:
     from pyspark.sql import functions as F
 
+    suffix = 0
+    while True:
+        token = f"__CITIBIKE_NULL_{dataset}_{suffix}__"
+        collision = False
+        for table, frame in formatted.items():
+            matches = F.lit(False)
+            for name in SERVING_COLUMNS[table]:
+                matches = matches | (
+                    F.col(name).isNotNull() & (F.col(name).cast("string") == token)
+                )
+            if frame.where(matches).limit(1).count():
+                collision = True
+                break
+        if not collision:
+            return token
+        suffix += 1
+
+
+def write_outputs(
+    frames: dict[str, Any], output_root: str, *, evidence: dict[str, Any]
+) -> dict[str, Any]:
+    from py4j.protocol import Py4JJavaError
+    from pyspark.sql import functions as F
+
+    parsed_root = urlparse(output_root)
+    if parsed_root.path in {"", "/"}:
+        raise OfflineError("output root must be a dedicated directory, not a filesystem root")
     root = output_root.rstrip("/")
     dataset = frames["dataset_id"]
-    paths = {
-        "dwd_trip_v1": f"{root}/dwd/dwd_trip_v1",
-        "dim_station_v1": f"{root}/dim/dim_station_v1",
-        "dws_station_hourly_flow_v1": f"{root}/dws/dws_station_hourly_flow_v1",
-        "dws_station_hour_profile_v1": f"{root}/dws/dws_station_hour_profile_v1",
-        "dws_station_od_hourly_v1": f"{root}/dws/dws_station_od_hourly_v1",
+    release_root, paths = _release_paths(root, dataset)
+    spark = frames["dim_station_v1"].sparkSession
+    jvm = spark._jvm
+    configuration = spark._jsc.hadoopConfiguration()
+    final_path = jvm.org.apache.hadoop.fs.Path(release_root)
+    filesystem = final_path.getFileSystem(configuration)
+    scheme = str(filesystem.getUri().getScheme())
+    if scheme not in {"file", "hdfs"}:
+        raise OfflineError(f"immutable release commit does not support {scheme!r} filesystems")
+    descriptor_uri = f"{release_root}/release.json"
+    if filesystem.exists(final_path):
+        return _validate_committed_release(
+            _read_hadoop_json(spark, descriptor_uri), evidence, release_root, paths
+        )
+
+    attempt_root = f"{root}/.building/{dataset}-{uuid.uuid4().hex}"
+    attempt_path = jvm.org.apache.hadoop.fs.Path(attempt_root)
+    filesystem.mkdirs(attempt_path.getParent())
+    filesystem.mkdirs(final_path.getParent())
+    attempt_paths = {
+        table: f"{attempt_root}/{relative}"
+        for table, relative in WAREHOUSE_TABLE_PATHS.items()
     }
     versioned = {
         table: frames[table].withColumn("dataset_id", F.lit(dataset))
         for table in SERVING_COLUMNS
     }
-    frames["dwd_trip_v1"].write.mode("overwrite").partitionBy("source_year", "source_month").parquet(paths["dwd_trip_v1"])
-    versioned["dim_station_v1"].write.mode("overwrite").parquet(paths["dim_station_v1"])
-    versioned["dws_station_hourly_flow_v1"].write.mode("overwrite").partitionBy("service_date").parquet(paths["dws_station_hourly_flow_v1"])
-    versioned["dws_station_hour_profile_v1"].write.mode("overwrite").parquet(paths["dws_station_hour_profile_v1"])
-    versioned["dws_station_od_hourly_v1"].write.mode("overwrite").partitionBy("service_date").parquet(paths["dws_station_od_hourly_v1"])
-    spark = frames["dim_station_v1"].sparkSession
+    frames["dwd_trip_v1"].write.mode("errorifexists").partitionBy(
+        "source_year", "source_month"
+    ).parquet(attempt_paths["dwd_trip_v1"])
+    versioned["dim_station_v1"].write.mode("errorifexists").parquet(
+        attempt_paths["dim_station_v1"]
+    )
+    versioned["dws_station_hourly_flow_v1"].write.mode("errorifexists").partitionBy(
+        "service_date"
+    ).parquet(attempt_paths["dws_station_hourly_flow_v1"])
+    versioned["dws_station_hour_profile_v1"].write.mode("errorifexists").parquet(
+        attempt_paths["dws_station_hour_profile_v1"]
+    )
+    versioned["dws_station_od_hourly_v1"].write.mode("errorifexists").partitionBy(
+        "service_date"
+    ).parquet(attempt_paths["dws_station_od_hourly_v1"])
     previous_timezone = spark.conf.get("spark.sql.session.timeZone")
     spark.conf.set("spark.sql.session.timeZone", "UTC")
     serving_sort_keys = {
@@ -536,29 +729,73 @@ def write_outputs(frames: dict[str, Any], output_root: str) -> dict[str, str]:
         ),
     }
     try:
+        formatted = {
+            table: _sanitise_for_tsv(versioned[table], columns)
+            for table, columns in SERVING_COLUMNS.items()
+        }
+        null_token = _choose_null_token(formatted, dataset)
         for table, columns in SERVING_COLUMNS.items():
-            service = versioned[table]
-            export_path = f"{root}/serving_export/{dataset}/{table}"
-            (_sanitise_for_tsv(service, columns).orderBy(*serving_sort_keys[table])
-             .coalesce(1).write.mode("overwrite")
-             .option("sep", "\t").option("nullValue", "\\N").option("emptyValue", "")
-             .csv(export_path))
-            paths[f"export_{table}"] = export_path
+            fields = [
+                F.coalesce(F.col(name).cast("string"), F.lit(null_token))
+                for name in columns
+            ]
+            export_path = f"{attempt_root}/serving_export/{table}"
+            (
+                formatted[table]
+                .orderBy(*serving_sort_keys[table])
+                .select(F.concat_ws("\t", *fields).alias("value"))
+                .coalesce(1)
+                .write.mode("errorifexists")
+                .text(export_path)
+            )
     finally:
         spark.conf.set("spark.sql.session.timeZone", previous_timezone)
-    return paths
+
+    committed = {
+        **evidence,
+        "status": "PASS",
+        "release_format": RELEASE_FORMAT,
+        "serving_format": SERVING_FORMAT,
+        "release_root": release_root,
+        "tsv_null_token": null_token,
+        "paths": paths,
+    }
+    _write_hadoop_json(spark, f"{attempt_root}/release.json", committed)
+    file_context = jvm.org.apache.hadoop.fs.FileContext.getFileContext(
+        filesystem.getUri(), configuration
+    )
+    rename_options = spark.sparkContext._gateway.new_array(
+        jvm.org.apache.hadoop.fs.Options.Rename, 1
+    )
+    rename_options[0] = jvm.org.apache.hadoop.fs.Options.Rename.NONE
+    try:
+        file_context.rename(attempt_path, final_path, rename_options)
+    except Py4JJavaError as error:
+        if not filesystem.exists(final_path):
+            raise OfflineError(f"cannot commit immutable release {release_root}: {error}") from error
+    return _validate_committed_release(
+        _read_hadoop_json(spark, descriptor_uri), evidence, release_root, paths
+    )
 
 
-def _iso_utc(value: str | None) -> str:
-    if value is None:
-        return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+def _parse_utc_timestamp(value: Any, label: str) -> datetime:
+    if not isinstance(value, str) or not UTC_TIMESTAMP_PATTERN.fullmatch(value):
+        raise OfflineError(f"{label} must be an RFC 3339 UTC timestamp")
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
         raise OfflineError(f"invalid UTC timestamp {value!r}") from error
     if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
         raise OfflineError(f"timestamp must include UTC offset: {value!r}")
-    return parsed.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return parsed.astimezone(timezone.utc)
+
+
+def _iso_utc(value: str | None) -> str:
+    if value is None:
+        return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return _parse_utc_timestamp(value, "timestamp").isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )
 
 
 def _write_evidence(path: Path, evidence: dict[str, Any]) -> None:
@@ -566,6 +803,46 @@ def _write_evidence(path: Path, evidence: dict[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+def _register_warehouse(spark, release_root: str, ddl_path: Path) -> None:
+    tables = tuple(WAREHOUSE_TABLE_PATHS)
+    existing: list[str] = []
+    for table in tables:
+        qualified = f"citibike_dw.{table}"
+        if not spark.catalog.tableExists(qualified):
+            continue
+        details = spark.sql(f"DESCRIBE FORMATTED {qualified}").collect()
+        properties = {
+            str(row[0]).strip().lstrip("#").strip(): str(row[1]).strip()
+            for row in details
+            if row[0] is not None and row[1] is not None
+        }
+        rendered = "\n".join("\t".join(str(value) for value in row) for row in details).lower()
+        if properties.get("Type", "").upper() != "EXTERNAL" or "parquet" not in rendered:
+            raise OfflineError(f"refusing to replace unexpected warehouse table {qualified}")
+        existing.append(qualified)
+
+    for qualified in existing:
+        spark.sql(
+            f"ALTER TABLE {qualified} SET TBLPROPERTIES ('external.table.purge'='false')"
+        )
+    if any(character in release_root for character in "'\r\n;"):
+        raise OfflineError("release root contains characters unsafe for Hive DDL")
+    try:
+        ddl = ddl_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise OfflineError(f"cannot read warehouse DDL {ddl_path}: {error}") from error
+    marker = "${hiveconf:release_root}"
+    if marker not in ddl:
+        raise OfflineError(f"warehouse DDL {ddl_path} has no release_root placeholder")
+    ddl = ddl.replace(marker, release_root)
+    sql = "\n".join(line for line in ddl.splitlines() if not line.lstrip().startswith("--"))
+    for statement in sql.split(";"):
+        if statement.strip():
+            spark.sql(statement)
+    for table in ("dwd_trip_v1", "dws_station_hourly_flow_v1", "dws_station_od_hourly_v1"):
+        spark.sql(f"MSCK REPAIR TABLE citibike_dw.{table}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -578,12 +855,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--hive-table", help="ODS table used only for source/ODS reconciliation")
     parser.add_argument("--built-at", help="UTC build time; deterministic fixture hook")
-    parser.add_argument("--published-at", help="UTC release time; defaults to completion time")
+    parser.add_argument("--published-at", help="UTC release time; defaults to current UTC")
+    parser.add_argument(
+        "--register-warehouse",
+        action="store_true",
+        help="rebuild the external Hive aliases at the committed immutable release",
+    )
+    parser.add_argument(
+        "--warehouse-ddl", type=Path, default=Path("hive/warehouse_v1.sql")
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    committed_release: dict[str, Any] | None = None
     try:
         parsed_root = urlparse(args.raw_root)
         if not parsed_root.scheme and not args.raw_root.startswith("/"):
@@ -597,7 +883,7 @@ def main(argv: list[str] | None = None) -> int:
         from pyspark.sql import functions as F
 
         builder = SparkSession.builder.appName("citibike-offline-v1")
-        if args.hive_table:
+        if args.hive_table or args.register_warehouse:
             builder = builder.enableHiveSupport()
         spark = builder.getOrCreate()
         spark.conf.set("spark.sql.session.timeZone", "America/New_York")
@@ -628,26 +914,38 @@ def main(argv: list[str] | None = None) -> int:
                 manifest=manifest, metadata_rows=metadata_rows,
                 metadata_version=metadata_version, built_at_utc=built_at,
             )
-            paths = write_outputs(frames, args.output_root)
             dates = frames["dws_station_hourly_flow_v1"].agg(
                 F.min("service_date").alias("minimum"), F.max("service_date").alias("maximum")
             ).first()
             published_at = _iso_utc(args.published_at)
-            evidence = {
+            pending_evidence = {
                 "status": "PASS", "contract_version": CONTRACT_VERSION,
                 "dataset_id": frames["dataset_id"], "metadata_version": metadata_version,
                 "source_months": [args.source_month], "ingest_batch_ids": [manifest["zip_sha256"]],
                 "built_at_utc": built_at, "published_at_utc": published_at,
                 "min_service_date": dates["minimum"].isoformat() if dates["minimum"] else None,
                 "max_service_date": dates["maximum"].isoformat() if dates["maximum"] else None,
-                "counts": {**frames["quality"], "ods": ods_count}, "paths": paths,
+                "counts": {**frames["quality"], "ods": ods_count},
             }
-            _write_evidence(args.evidence, evidence)
-            print(json.dumps(evidence, ensure_ascii=False, indent=2))
+            committed_release = write_outputs(
+                frames, args.output_root, evidence=pending_evidence
+            )
+            if args.register_warehouse:
+                _register_warehouse(
+                    spark, committed_release["release_root"], args.warehouse_ddl
+                )
+            _write_evidence(args.evidence, committed_release)
+            print(json.dumps(committed_release, ensure_ascii=False, indent=2))
         finally:
             spark.stop()
-    except Exception as error:  # noqa: BLE001  # CLI must preserve Spark/HDFS failure evidence.
+    except Exception as error:
         failure = {"status": "FAIL", "error_type": type(error).__name__, "error": str(error)}
+        if committed_release is not None:
+            failure.update({
+                "dataset_id": committed_release["dataset_id"],
+                "release_committed": True,
+                "release_root": committed_release["release_root"],
+            })
         try:
             _write_evidence(args.evidence, failure)
         except OSError:

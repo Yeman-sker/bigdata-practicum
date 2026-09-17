@@ -67,9 +67,6 @@ CREATE TABLE IF NOT EXISTS ads_rebalance_suggestion (
   distance_meters INT NOT NULL, priority INT NOT NULL UNIQUE CHECK (priority > 0),
   generated_at_utc DATETIME(6) NOT NULL, expires_at_utc DATETIME(6) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
--- Sqoop writes only these disposable staging tables.  They intentionally have
--- no keys or CHECK constraints: validation must detect duplicate/bad input
--- before the single publication transaction touches the constrained tables.
 CREATE TABLE IF NOT EXISTS dim_station_v1_load (
   station_id VARCHAR(128) NOT NULL, station_name VARCHAR(512) NULL,
   lat DOUBLE NULL, lon DOUBLE NULL, capacity INT NULL, region_id VARCHAR(128) NULL,
