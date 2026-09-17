@@ -54,7 +54,7 @@ GBFS metadata 以不可变文件 `$DATA_DIR/gbfs/metadata/<metadata_version>.jso
 
 ## 目录与冲突边界
 
-落盘目录树以 [README](../README.md#3-项目目录与-agent-skill-索引) 为入口。后端统一使用 Java 根包 `citibike`，应用入口放在该包下，`api` 与 `operations` 为其子包；测试在 `backend/src/test/java/citibike/` 下按同名子包组织。当前只用 `.gitkeep` 预留目录，工程依赖和业务代码仍由首个实现 PR 交付。
+落盘目录树以 [README](../README.md#3-项目目录与-agent-skill-索引) 为入口。后端统一使用 Java 根包 `citibike`，应用入口放在该包下，`api` 与 `operations` 为其子包；测试在 `backend/src/test/java/citibike/` 下按同名子包组织。#26 已交付唯一 Maven 工程、API、公共配置和 API 测试；`operations` 仍由 #29 补齐。
 
 | 目录/文件 | 主维护人 | 规则 |
 | --- | --- | --- |
