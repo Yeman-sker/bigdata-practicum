@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS dws_station_hourly_flow_v1 (
   electric_outbound BIGINT NOT NULL, classic_outbound BIGINT NOT NULL,
   member_outbound BIGINT NOT NULL, casual_outbound BIGINT NOT NULL,
   dataset_id CHAR(64) NOT NULL,
-  PRIMARY KEY (station_id, service_date, hour), KEY availability (service_date, hour)
+  PRIMARY KEY (station_id, service_date, hour), KEY availability (service_date, hour),
+  KEY historical_lookup (dataset_id, service_date, hour)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 CREATE TABLE IF NOT EXISTS dws_station_hour_profile_v1 (
   station_id VARCHAR(128) NOT NULL, day_of_week TINYINT NOT NULL CHECK (day_of_week BETWEEN 1 AND 7),

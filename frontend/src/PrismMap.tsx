@@ -4,7 +4,9 @@ import type { Map as CityMap, Marker } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { cityStyle } from "./map-style";
-import { particleOffsets } from "./model.mjs";
+import { particleOffsets, matchesRisk } from "./model.mjs";
+import { visibleRoutes } from "./scene";
+import type { RiskFilter, FlowFilter } from "./scene";
 import type { Scene, SceneRoute, SceneStation } from "./scene";
 
 maplibregl.setWorkerUrl(workerUrl);
@@ -13,6 +15,8 @@ type Point = { x: number; y: number };
 type Coordinate = [number, number];
 type Props = {
   scene: Scene | null;
+  riskFilter: RiskFilter;
+  flowFilter: FlowFilter;
   selectedStationId: string | null;
   selectedSuggestionId: string | null;
   onSelectStation: (id: string) => void;
@@ -89,8 +93,9 @@ export function PrismMap(props: Props) {
     let dirty = true;
     let width = host.clientWidth;
     let height = host.clientHeight;
-    let fittedKey = "";
+    let fitted = false;
     let lastSelectedId: string | null = null;
+    let lastSuggestionId: string | null = null;
     let highlightedStations = new Set<string>();
     let roads: Coordinate[][] = [];
     let buildingPoints: Coordinate[] = [];
@@ -193,13 +198,15 @@ export function PrismMap(props: Props) {
         highlightedStations.add(selectedRoute.to);
       }
       for (const [id, entry] of markers) {
-        if (!stations.get(id)?.coordinate) {
+        const station = stations.get(id);
+        if (!station?.coordinate || (scene?.kind !== "replay" && !matchesRisk(station.status, currentRef.current.riskFilter) && !highlightedStations.has(id))) {
           entry.marker.remove();
           markers.delete(id);
         }
       }
       for (const station of stations.values()) {
         if (!station.coordinate) continue;
+        if (scene?.kind !== "replay" && !matchesRisk(station.status, currentRef.current.riskFilter) && !highlightedStations.has(station.id)) continue;
         let entry = markers.get(station.id);
         if (!entry) {
           const button = document.createElement("button");
@@ -245,12 +252,8 @@ export function PrismMap(props: Props) {
         if (entry.button.firstChild)
           entry.button.firstChild.textContent = `${station.name} · ${statusNames[station.status] ?? station.status}`;
       }
-      const key = [...stations.values()]
-        .filter((station) => station.coordinate)
-        .map((station) => `${station.id}:${station.coordinate}`)
-        .join("|");
-      if (key && key !== fittedKey) {
-        fittedKey = key;
+      if (!fitted && [...stations.values()].some((station) => station.coordinate)) {
+        fitted = true;
         home();
       }
       const selected = selectedStationId
@@ -266,10 +269,20 @@ export function PrismMap(props: Props) {
         ) {
           map.easeTo({
             center: selected.coordinate,
+            offset: [width > 720 ? -160 : 0, -20],
             duration: currentRef.current.motion ? 500 : 0,
           });
         }
       }
+      if (selectedRoute && selectedSuggestionId !== lastSuggestionId) {
+        const endpoints = [stations.get(selectedRoute.from)?.coordinate, stations.get(selectedRoute.to)?.coordinate].filter((p): p is Coordinate => Boolean(p));
+        if (endpoints.some((coordinate) => { const p = map.project(coordinate); return p.x < 85 || p.x > width - (width > 720 ? 380 : 40) || p.y < 110 || p.y > height - 160; })) {
+          const bounds = new maplibregl.LngLatBounds();
+          endpoints.forEach((p) => bounds.extend(p));
+          map.fitBounds(bounds, { maxZoom: 16, padding: { top: 110, bottom: 160, left: 85, right: width > 720 ? 380 : 40 }, duration: currentRef.current.motion ? 500 : 0 });
+        }
+      }
+      lastSuggestionId = selectedSuggestionId;
       lastSelectedId = selectedStationId;
       dirty = true;
       schedule();
@@ -366,11 +379,12 @@ export function PrismMap(props: Props) {
                 p.x > -80 && p.x < width + 80 && p.y > -80 && p.y < height + 80,
             ),
         );
-      const { scene } = currentRef.current;
+      const { scene, riskFilter, flowFilter, selectedStationId } = currentRef.current;
       projectedStations = [...(scene?.stations.values() ?? [])].flatMap(
         (station) => {
           const anchor = station.coordinate;
           if (!anchor) return [];
+          if (scene?.kind !== "replay" && !matchesRisk(station.status, riskFilter) && !highlightedStations.has(station.id)) return [];
           const particles = particleOffsets(
             station.id,
             station.inventory ?? 0,
@@ -383,8 +397,7 @@ export function PrismMap(props: Props) {
           return [{ station, point: map.project(anchor), particles }];
         },
       );
-      const routes =
-        scene?.kind === "live" ? scene.dispatches : (scene?.flows ?? []);
+      const routes = visibleRoutes(scene, flowFilter, selectedStationId);
       paths = routes.flatMap((route) => {
         const from = scene?.stations.get(route.from)?.coordinate;
         const to = scene?.stations.get(route.to)?.coordinate;
@@ -667,6 +680,8 @@ export function PrismMap(props: Props) {
     () => refreshRef.current(),
     [
       props.scene,
+      props.riskFilter,
+      props.flowFilter,
       props.selectedStationId,
       props.selectedSuggestionId,
       motion,

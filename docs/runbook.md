@@ -1,6 +1,6 @@
 # 运行与验收手册
 
-版本：Day 2 v1.1。执行者是对应 Issue 的负责人，组长汇总端到端证据。本文提供可立即执行的契约检查，以及 #26–#30 必须交付的运行入口；后者在实现 PR 合并前不能当作已实现或已验证。
+版本：Day 2 v1.1。执行者是对应 Issue 的负责人，组长汇总端到端证据。#26–#30 的实现 PR 已合并；实现可运行不等于完整验收通过。真实历史、GBFS、API、Sqoop 和 Flume 的结果见 [2026-09-21 集成记录](integration/2026-09-21.md)，后续回放索引修复、视觉恢复与验收边界见 [优化交付记录](integration/2026-09-21-follow-up.md)。UI 全量验收和成员交叉签收仍待完成。
 
 ## 现在即可执行：文档与样例
 
@@ -44,6 +44,14 @@ git diff --check
 mysql -u root -p -e 'CREATE DATABASE IF NOT EXISTS citibike CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;'
 mysql -u root -p citibike < sql/serving.sql
 ```
+
+已有业务库升级时，`CREATE TABLE IF NOT EXISTS` 不会补齐新索引。真实全月数据需要按版本、日期、小时读取的覆盖索引，执行一次可重复的增量迁移：
+
+```bash
+mysql -u root -p citibike < sql/migrate-historical-lookup.sql
+```
+
+迁移仅新增 `dws_station_hourly_flow_v1.historical_lookup(dataset_id, service_date, hour)`，不删除数据或修改发布指针。相同定义重复执行为空操作；同名不同定义会报错，需要人工核对，不能自动覆盖。建索引仍消耗 I/O，并可能等待 metadata lock，正式环境应选择维护窗口。完成后用 `SHOW INDEX FROM dws_station_hourly_flow_v1` 核实列顺序，并复跑 availability、回放 API 和既有发布对账。不通过加大超时掩盖扫描问题；测量需区分冷缓存、热缓存和并发场景。
 
 库账号由环境负责人配置。只在独立的样例库装载 `fixtures/day2/seed.sql`，例如创建 citibike_fixture 后执行同一 DDL/seed，再令 backend 数据源指向它。seed 使用 INSERT，重复装载会因主键冲突明确失败，不覆盖已有真实业务数据。
 

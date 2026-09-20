@@ -8,7 +8,8 @@ import {
 } from "react";
 import { parseMap, parseAvailability, parseHistory } from "./parse";
 import { PrismMap } from "./PrismMap";
-import { buildScene, replayReady } from "./scene";
+import { buildScene, replayReady, routeSummary } from "./scene";
+import type { RiskFilter, FlowFilter } from "./scene";
 import type {
   Mode,
   View,
@@ -19,6 +20,10 @@ import type {
 } from "./domain";
 import examplesJson from "../../fixtures/day2/http-examples.json";
 import {
+  availableSelection,
+  hourAtIndex,
+  latestRequestGate,
+  matchesRisk,
   canDispatchStation,
   canDrawForecast,
   canDrawInventory,
@@ -27,7 +32,6 @@ import {
   isTraversalStatus,
   nextAvailableHour,
   playbackDelay,
-  sameReplaySelection,
   sortStations,
   stableHash,
 } from "./model.mjs";
@@ -527,6 +531,16 @@ export default function App() {
   const [panel, setPanel] = useState<Panel>(null);
   const [query, setQuery] = useState("");
   const [searchIndex, setSearchIndex] = useState(0);
+  const [riskFilter, setRiskFilter] = useState<RiskFilter>("all");
+  const [flowFilter, setFlowFilter] = useState<FlowFilter>("all");
+  const [flowPage, setFlowPage] = useState(0);
+  const [dispatchPage, setDispatchPage] = useState(0);
+  const [previewHour, setPreviewHour] = useState<number | null>(null);
+  const draggingHourRef = useRef(false);
+  const searchIdentityRef = useRef<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const savedScrollRef = useRef({ list: 0, content: 0 });
   const [selectedStationId, setSelectedStationId] = useState<string | null>(
     null,
   );
@@ -549,7 +563,7 @@ export default function App() {
 
   const mapRef = useRef<MapResponse | null>(null);
   const mapAbortRef = useRef<AbortController | null>(null);
-  const mapRequestRef = useRef(0);
+  const requestGateRef = useRef(latestRequestGate());
   const modeRequestRef = useRef(0);
   const historyAbortRef = useRef<AbortController | null>(null);
   const replayCacheRef = useRef(new Map<string, MapResponse>());
@@ -580,15 +594,14 @@ export default function App() {
       selection?: { serviceDate: string; hour: number },
       refresh = false,
     ) => {
-      const request = ++mapRequestRef.current;
-      mapAbortRef.current?.abort();
-      const controller = new AbortController();
-      mapAbortRef.current = controller;
+      const request = requestGateRef.current.start();
       const previous = mapRef.current;
       const keepsMap = previous?.mode === targetMode;
       if (!keepsMap) setLoading(true);
       setRefreshing(keepsMap);
       setTransientMessage(null);
+      setRefreshError(null);
+      setFatalError(null);
       try {
         const cacheKey =
           targetMode === "replay" && selection
@@ -600,9 +613,9 @@ export default function App() {
             : undefined;
         const response =
           cached ??
-          (await getMap(targetMode, controller.signal, selection, refresh));
+          (await getMap(targetMode, request.signal, selection, refresh));
         assertMapSelection(response, targetMode, selection);
-        if (request !== mapRequestRef.current) return;
+        if (!request.isCurrent()) return;
         if (cacheKey) replayCacheRef.current.set(cacheKey, response);
         mapRef.current = response;
         mapReceivedAtRef.current = performance.now();
@@ -627,50 +640,26 @@ export default function App() {
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError")
           return;
-        if (request !== mapRequestRef.current) return;
+        if (!request.isCurrent()) return;
         const failure =
           error instanceof ApiFailure
             ? error
             : new ApiFailure(0, "NETWORK_ERROR", "network failure");
         if (previous && previous.mode === targetMode) {
           if (targetMode === "replay") setPlaying(false);
-          const changedReplaySelection =
-            targetMode === "replay" &&
-            selection &&
-            !sameReplaySelection(previous, selection);
-          if (targetMode === "replay" && selection) {
-            setServiceDate(previous.service_date);
-            setHour(previous.hour ?? 0);
-            if (changedReplaySelection) setSelectedStationId(null);
-          }
-          if (
-            targetMode === "replay" &&
-            selection &&
-            [400, 404, 422].includes(failure.status)
-          ) {
-            setTransientMessage(errorLabels[failure.status]);
-            setRefreshError(null);
-            setSelectedStationId(null);
-            panelTriggerRef.current = statusButtonRef.current;
-            setPanel("status");
-            if (failure.status === 404) {
-              try {
-                const currentAvailability = await getAvailability(
-                  controller.signal,
-                );
-                if (request === mapRequestRef.current)
-                  applyAvailability(currentAvailability);
-              } catch {}
-            }
-          } else {
-            setRefreshError(failure);
+          setRefreshError(failure);
+          if (targetMode === "replay" && failure.status === 404) {
+            try {
+              const currentAvailability = await getAvailability(request.signal);
+              if (request.isCurrent()) applyAvailability(currentAvailability);
+            } catch {}
           }
         } else {
           setPanel(null);
           setFatalError(failure);
         }
       } finally {
-        if (request === mapRequestRef.current) {
+        if (request.isCurrent()) {
           setLoading(false);
           setRefreshing(false);
         }
@@ -681,7 +670,7 @@ export default function App() {
 
   useEffect(() => {
     void loadMap("live");
-    return () => mapAbortRef.current?.abort();
+    return () => { requestGateRef.current.cancel(); mapAbortRef.current?.abort(); };
   }, [loadMap]);
 
   useEffect(() => {
@@ -720,7 +709,7 @@ export default function App() {
 
   const toggleMode = async (retryReplay = false) => {
     const request = ++modeRequestRef.current;
-    mapRequestRef.current += 1;
+    requestGateRef.current.cancel();
     mapAbortRef.current?.abort();
     setPanel(null);
     setSelectedStationId(null);
@@ -730,6 +719,8 @@ export default function App() {
     setMap(null);
     mapRef.current = null;
     setPlaying(false);
+    setPreviewHour(null);
+    setFlowFilter("all");
     if (mode === "replay" && !retryReplay) {
       setMode("live");
       setView("current");
@@ -755,7 +746,7 @@ export default function App() {
         return;
       }
       const date = available.dates.at(-1)!;
-      const selectedHour = date.hours[0];
+      const selectedHour = availableSelection(available.dates, date.service_date)!.hour;
       setServiceDate(date.service_date);
       setHour(selectedHour);
       await loadMap("replay", {
@@ -788,6 +779,7 @@ export default function App() {
         setPanel("status");
         return;
       }
+      setPreviewHour(null);
       setHour(nextHour);
       void loadMap("replay", { serviceDate, hour: nextHour });
     },
@@ -797,17 +789,15 @@ export default function App() {
   useEffect(() => {
     if (
       !playing ||
+      refreshError ||
+      fatalError ||
       mode !== "replay" ||
       !replayReady(map, { serviceDate, hour }, loading || refreshing)
     )
       return;
+    const next = nextAvailableHour(availableHours, hour);
+    if (next === null) { setPlaying(false); return; }
     const timer = window.setTimeout(() => {
-      const next = nextAvailableHour(availableHours, hour);
-      if (next === null) {
-        setPlaying(false);
-        setSelectedStationId(null);
-        return;
-      }
       selectHour(next, false);
     }, playbackDelay(speed));
     return () => window.clearTimeout(timer);
@@ -816,6 +806,8 @@ export default function App() {
     hour,
     mode,
     playing,
+    refreshError,
+    fatalError,
     selectHour,
     speed,
     map,
@@ -930,9 +922,18 @@ export default function App() {
       ) as Station[],
     [clockElapsedMs, expired, map, mode, view],
   );
+  const searchResults = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("zh-CN");
+    return sortedStations.filter(
+      (station) =>
+        (mode === "replay" || matchesRisk(displayStatus(station, mode, view, expired || isExpiredAt(map, station.expires_at_utc, clockElapsedMs)), riskFilter)) &&
+        (!needle || `${station.station_name ?? ""} ${station.station_id}`.toLocaleLowerCase("zh-CN").includes(needle)),
+    );
+  }, [query, sortedStations, riskFilter, mode, view, expired, map, clockElapsedMs]);
+
   const traversalStations = useMemo(
     () =>
-      sortedStations.filter((station) =>
+      searchResults.filter((station) =>
         isTraversalStatus(
           displayStatus(
             station,
@@ -943,29 +944,25 @@ export default function App() {
           mode,
         ),
       ),
-    [clockElapsedMs, expired, map, mode, sortedStations, view],
+    [clockElapsedMs, expired, map, mode, searchResults, view],
   );
-  const searchResults = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase("zh-CN");
-    return sortedStations.filter(
-      (station) =>
-        !needle ||
-        `${station.station_name ?? ""} ${station.station_id}`
-          .toLocaleLowerCase("zh-CN")
-          .includes(needle),
-    );
-  }, [query, sortedStations]);
-
-  useEffect(() => setSearchIndex(0), [query]);
-  useEffect(
-    () =>
-      setSearchIndex((index) =>
-        Math.min(index, Math.max(0, searchResults.length - 1)),
-      ),
-    [searchResults.length],
-  );
+  useEffect(() => { searchIdentityRef.current = null; setSearchIndex(0); }, [query, riskFilter]);
+  useEffect(() => {
+    const index = searchResults.findIndex((station) => station.station_id === searchIdentityRef.current);
+    setSearchIndex((current) => index >= 0 ? index : Math.min(current, Math.max(0, searchResults.length - 1)));
+  }, [searchResults]);
+  const pageStart = Math.floor(searchIndex / 50) * 50;
+  useEffect(() => {
+    const station = searchResults[searchIndex];
+    if (station) {
+      searchIdentityRef.current = station.station_id;
+      if (document.activeElement === searchInputRef.current)
+        document.getElementById(`station-option-${stableHash(station.station_id)}`)?.scrollIntoView({ block: "nearest" });
+    }
+  }, [searchIndex, searchResults]);
 
   const openStation = useCallback((stationId: string) => {
+    if (!stationDetailRef.current) savedScrollRef.current = { list: listRef.current?.scrollTop ?? 0, content: contentRef.current?.scrollTop ?? 0 };
     stationTriggerRef.current =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -979,13 +976,13 @@ export default function App() {
   const closeStation = useCallback(() => {
     setSelectedStationId(null);
     window.requestAnimationFrame(() => {
+      if (listRef.current) listRef.current.scrollTop = savedScrollRef.current.list;
+      if (contentRef.current) contentRef.current.scrollTop = savedScrollRef.current.content;
       const trigger = stationTriggerRef.current;
-      if (trigger?.isConnected) trigger.focus();
-      else if (trigger?.id && document.getElementById(trigger.id))
-        document.getElementById(trigger.id)?.focus();
-      else searchInputRef.current?.focus();
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+      else searchInputRef.current?.focus({ preventScroll: true });
     });
-  }, [selectedStationId]);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1075,9 +1072,7 @@ export default function App() {
   }, [statusHeld, transientMessage]);
 
   const changeDate = (nextDate: string) => {
-    const next = availability?.dates.find(
-      ({ service_date }) => service_date === nextDate,
-    );
+    const next = availableSelection(availability?.dates ?? [], nextDate);
     if (!next) {
       setPlaying(false);
       setTransientMessage("该日期不可用");
@@ -1087,8 +1082,9 @@ export default function App() {
     }
     setPlaying(false);
     setServiceDate(nextDate);
-    setHour(next.hours[0]);
-    void loadMap("replay", { serviceDate: nextDate, hour: next.hours[0] });
+    setPreviewHour(null);
+    setHour(next.hour);
+    void loadMap("replay", next);
   };
 
   const retry = () => {
@@ -1131,7 +1127,7 @@ export default function App() {
     if (refreshError)
       return map?.mode === "replay"
         ? {
-            text: `回放加载失败 · 保留 ${map.service_date} ${String(map.hour).padStart(2, "0")}:00`,
+            text: `请求 ${serviceDate} ${String(hour).padStart(2, "0")}:00 失败 · 仍显示 ${map.service_date} ${String(map.hour).padStart(2, "0")}:00`,
             kind: "warning",
           }
         : {
@@ -1183,6 +1179,13 @@ export default function App() {
     () => buildScene(map, view, clockElapsedMs, suggestions),
     [map, view, clockElapsedMs, suggestions],
   );
+  const flowCounts = routeSummary(scene, flowFilter, selectedStationId);
+  const listedFlows = scene?.kind === "replay" ? scene.flows : [];
+  useEffect(() => setFlowPage(0), [map?.dataset_id, map?.service_date, map?.hour]);
+  useEffect(() => {
+    const index = suggestions.findIndex((suggestion) => suggestion.suggestion_id === selectedSuggestionId);
+    setDispatchPage((page) => index >= 0 ? Math.floor(index / 50) : Math.min(page, Math.max(0, Math.ceil(suggestions.length / 50) - 1)));
+  }, [suggestions, selectedSuggestionId]);
   const handleMapBackground = () => {
     if (selectedStationId) closeStation();
     else if (panel) closePanel();
@@ -1206,6 +1209,8 @@ export default function App() {
     <main className={`app mode-${mode} view-${view}`}>
       <PrismMap
         scene={scene}
+        riskFilter={riskFilter}
+        flowFilter={flowFilter}
         selectedStationId={selectedStationId}
         selectedSuggestionId={selectedSuggestionId}
         onSelectStation={openStation}
@@ -1269,7 +1274,6 @@ export default function App() {
                   aria-pressed={view === item}
                   onClick={() => {
                     setView(item);
-                    setSelectedStationId(null);
                     setSelectedSuggestionId(null);
                   }}
                 >
@@ -1305,18 +1309,16 @@ export default function App() {
           <div className="replay-controller" aria-label="历史回放控制器">
             <label className="date-control">
               <span className="sr-only">回放日期</span>
-              <input
-                type="date"
-                value={serviceDate}
-                min={availability?.dates[0]?.service_date}
-                max={availability?.dates.at(-1)?.service_date}
-                onChange={(event) => changeDate(event.target.value)}
-              />
+              <select value={serviceDate} onChange={(event) => changeDate(event.target.value)}>
+                {!availability?.dates.some((date) => date.service_date === serviceDate) && <option value={serviceDate}>{serviceDate} · 已不可用</option>}
+                {availability?.dates.map((date) => <option key={date.service_date} value={date.service_date}>{date.service_date}</option>)}
+              </select>
             </label>
             <button
               type="button"
               className="play-button"
               aria-label={playing ? "暂停回放" : "播放回放"}
+              disabled={!playing && (loading || refreshing || Boolean(refreshError || fatalError) || !replayReady(map, { serviceDate, hour }, false) || nextAvailableHour(availableHours, hour) === null)}
               onClick={() => setPlaying((value) => !value)}
             >
               {playing ? "Ⅱ" : "▶"}
@@ -1326,26 +1328,38 @@ export default function App() {
               <input
                 type="range"
                 min="0"
-                max="23"
+                max={Math.max(0, availableHours.length - 1)}
                 step="1"
-                value={hour}
-                list="available-hours"
-                onChange={(event) => selectHour(Number(event.target.value))}
+                disabled={!availableHours.length}
+                value={Math.max(0, availableHours.indexOf(previewHour ?? hour))}
+                aria-valuetext={`${serviceDate} ${String(previewHour ?? hour).padStart(2, "0")}:00 纽约时间`}
+                onPointerDown={(event) => { draggingHourRef.current = true; event.currentTarget.setPointerCapture(event.pointerId); setPlaying(false); }}
+                onChange={(event) => {
+                  const next = hourAtIndex(availableHours, Number(event.target.value));
+                  if (next === null) return;
+                  setPlaying(false);
+                  if (draggingHourRef.current) setPreviewHour(next);
+                  else selectHour(next);
+                }}
+                onPointerUp={(event) => {
+                  draggingHourRef.current = false;
+                  const next = hourAtIndex(availableHours, Number(event.currentTarget.value));
+                  if (next !== null) selectHour(next);
+                }}
+                onPointerCancel={() => { draggingHourRef.current = false; setPreviewHour(null); }}
+                onBlur={() => { draggingHourRef.current = false; setPreviewHour(null); }}
               />
-              <datalist id="available-hours">
-                {availableHours.map((availableHour) => (
-                  <option key={availableHour} value={availableHour} />
-                ))}
-              </datalist>
               <span className="timeline-labels">
-                <span>00</span>
-                <strong>{String(hour).padStart(2, "0")}</strong>
-                <span>23</span>
+                <span>{availableHours[0] ?? "—"} 时</span>
+                <strong>{previewHour !== null ? "预览 " : "选择 "}{String(previewHour ?? hour).padStart(2, "0")}:00</strong>
+                <span>{availableHours.at(-1) ?? "—"} 时</span>
               </span>
             </label>
-            <strong className="current-hour">
-              {String(map?.hour ?? hour).padStart(2, "0")}:00
-            </strong>
+            <div className="replay-times" aria-live="polite">
+              <span>已显示：{map?.mode === "replay" ? `${map.service_date} ${String(map.hour).padStart(2, "0")}:00` : "尚无成功结果"}</span>
+              {(loading || refreshing || refreshError || fatalError) && <span>{refreshError || fatalError ? "失败目标" : "请求中"}：{serviceDate} {String(hour).padStart(2, "0")}:00</span>}
+              {previewHour !== null && <span>拖动预览：{serviceDate} {String(previewHour).padStart(2, "0")}:00 · 松开加载</span>}
+            </div>
             <button
               type="button"
               className="speed-button"
@@ -1382,6 +1396,67 @@ export default function App() {
         >
           数据状态 {panel === "status" ? "−" : "+"}
         </button>
+                    <label className="search-field">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m19 19-3.5-3.5m1.5-5A6.5 6.5 0 1 1 4 10.5a6.5 6.5 0 0 1 13 0Z" />
+              </svg>
+              <span className="sr-only">按站名或站点 ID 搜索</span>
+              <input
+                ref={searchInputRef}
+                value={query}
+                placeholder="站名或站点 ID"
+                role="combobox"
+                aria-expanded={!selectedStation}
+                aria-autocomplete="list"
+                aria-controls="station-search-results"
+                aria-activedescendant={
+                  !selectedStation && searchResults[searchIndex]
+                    ? `station-option-${stableHash(searchResults[searchIndex].station_id)}`
+                    : undefined
+                }
+                onChange={(event) => { if (selectedStationId) setSelectedStationId(null); setQuery(event.target.value); }}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setSelectedStationId(null);
+                    setSearchIndex((index) =>
+                      Math.max(
+                        0,
+                        Math.min(
+                          searchResults.length - 1,
+                          index + (event.key === "ArrowDown" ? 1 : -1),
+                        ),
+                      ),
+                    );
+                  } else if (
+                    event.key === "Enter" &&
+                    searchResults[searchIndex]
+                  ) {
+                    event.preventDefault();
+                    openStation(searchResults[searchIndex].station_id);
+                  }
+                }}
+              />
+              {query && (
+                <button aria-label="清空搜索" onClick={() => setQuery("")}>
+                  ×
+                </button>
+              )}
+            </label>
+
+        {mode === "live" && <div className="risk-filters" role="group" aria-label="站点风险筛选">
+          {([['all', '全部'], ['shortage', '缺车'], ['full', '满桩'], ['issue', '数据问题']] as const).map(([value, label]) =>
+            <button key={value} aria-pressed={riskFilter === value} onClick={() => setRiskFilter(value)}>{label}</button>)}
+          <small>地图与列表同步筛选，已选站点 / 调度端点保留</small>
+        </div>}
+        {mode === "replay" && <div className="flow-controls">
+          <label>OD 可见范围 <select value={flowFilter} onChange={(event) => setFlowFilter(event.target.value as FlowFilter)}>
+            <option value="top">骑行量 Top 20</option><option value="all">全部 OD（可能密集）</option><option value="selected">仅选中站点相关</option><option value="hidden">隐藏 OD</option>
+          </select></label>
+          <span>可绘制 {flowCounts.shown} / {flowCounts.total} 条 · {flowCounts.shownRides} / {flowCounts.totalRides} 次骑行 · 分母为完整响应</span>
+          {flowFilter === "selected" && !selectedStationId && <small>请从列表选择站点以显示相关 OD。</small>}
+        </div>}
+        <div className="pane-content" ref={contentRef}>
         {fatalError && !map && (
           <section className="fatal-card" role="alert">
             <p>
@@ -1461,7 +1536,7 @@ export default function App() {
               {refreshError && !expired && (
                 <span>
                   {map?.mode === "replay"
-                    ? "已恢复上一个可用日期和小时。"
+                    ? `目标 ${serviceDate} ${String(hour).padStart(2, "0")}:00 加载失败；地图仍显示上次成功时间，重试将请求失败目标。`
                     : "保留上次仍有效的地图数据。"}
                 </span>
               )}
@@ -1496,8 +1571,7 @@ export default function App() {
             </button>
           </>
         )}
-        {!selectedStation && (
-          <>
+        <div className="station-browser" hidden={Boolean(selectedStation)}>
             <div className="pane-heading">
               <span className="eyebrow">
                 {mode === "replay"
@@ -1518,7 +1592,7 @@ export default function App() {
                 <p className="section-note">
                   {suggestions.length} 条有效建议 · [ / ] 巡览
                 </p>
-                {suggestions.map((suggestion) => (
+                {suggestions.slice(dispatchPage * 50, (dispatchPage + 1) * 50).map((suggestion) => (
                   <button
                     key={suggestion.suggestion_id}
                     className="dispatch-row"
@@ -1539,10 +1613,16 @@ export default function App() {
                         {suggestion.move_bikes} 辆 ·{" "}
                         {suggestion.distance_meters} 米直线距离
                         {suggestion.priority <= 5 ? " · Top 5" : ""}
+                        {` · 预测可调出 ${suggestion.from_surplus} / 需补 ${suggestion.to_deficit} 辆`}
                       </small>
                     </span>
                   </button>
                 ))}
+                <div className="list-pagination" aria-label="调度建议分页">
+                  <span>{suggestions.length ? dispatchPage * 50 + 1 : 0}–{Math.min((dispatchPage + 1) * 50, suggestions.length)} / {suggestions.length} 条建议</span>
+                  <button disabled={dispatchPage === 0} onClick={() => setDispatchPage((page) => page - 1)}>上一页</button>
+                  <button disabled={(dispatchPage + 1) * 50 >= suggestions.length} onClick={() => setDispatchPage((page) => page + 1)}>下一页</button>
+                </div>
                 {!suggestions.length && (
                   <p className="empty-copy">
                     {map ? "暂无可行建议" : status.text}
@@ -1566,59 +1646,15 @@ export default function App() {
                 )}
               </section>
             )}
-            <label className="search-field">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m19 19-3.5-3.5m1.5-5A6.5 6.5 0 1 1 4 10.5a6.5 6.5 0 0 1 13 0Z" />
-              </svg>
-              <span className="sr-only">按站名或站点 ID 搜索</span>
-              <input
-                ref={searchInputRef}
-                value={query}
-                placeholder="站名或站点 ID"
-                role="combobox"
-                aria-expanded="true"
-                aria-autocomplete="list"
-                aria-controls="station-search-results"
-                aria-activedescendant={
-                  searchResults[searchIndex]
-                    ? `station-option-${stableHash(searchResults[searchIndex].station_id)}`
-                    : undefined
-                }
-                onChange={(event) => setQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                    event.preventDefault();
-                    setSearchIndex((index) =>
-                      Math.max(
-                        0,
-                        Math.min(
-                          searchResults.length - 1,
-                          index + (event.key === "ArrowDown" ? 1 : -1),
-                        ),
-                      ),
-                    );
-                  } else if (
-                    event.key === "Enter" &&
-                    searchResults[searchIndex]
-                  ) {
-                    event.preventDefault();
-                    openStation(searchResults[searchIndex].station_id);
-                  }
-                }}
-              />
-              {query && (
-                <button aria-label="清空搜索" onClick={() => setQuery("")}>
-                  ×
-                </button>
-              )}
-            </label>
             <div
+              ref={listRef}
               id="station-search-results"
               className="station-list"
               role="listbox"
               aria-label="站点结果"
             >
-              {searchResults.map((station, index) => {
+              {searchResults.slice(pageStart, pageStart + 50).map((station, offset) => {
+                const index = pageStart + offset;
                 const stationExpired =
                   expired ||
                   isExpiredAt(map, station.expires_at_utc, clockElapsedMs);
@@ -1635,6 +1671,8 @@ export default function App() {
                     tabIndex={-1}
                     id={`station-option-${stableHash(station.station_id)}`}
                     aria-selected={index === searchIndex}
+                    aria-posinset={index + 1}
+                    aria-setsize={searchResults.length}
                     className="station-row"
                     key={station.station_id}
                     onMouseEnter={() => setSearchIndex(index)}
@@ -1676,12 +1714,32 @@ export default function App() {
                 </p>
               )}
             </div>
+            <div className="list-pagination" aria-label="站点列表分页">
+              <span>{searchResults.length ? pageStart + 1 : 0}–{Math.min(pageStart + 50, searchResults.length)} / {searchResults.length} 个匹配站点</span>
+              <button disabled={pageStart === 0} onClick={() => setSearchIndex(Math.max(0, pageStart - 50))}>上一页</button>
+              <button disabled={pageStart + 50 >= searchResults.length} onClick={() => setSearchIndex(pageStart + 50)}>下一页</button>
+            </div>
             <p className="keyboard-note">
               ↑↓ 选择 · Enter 查看历史
               <br />N / Shift+N 巡览站点 · Esc 返回
             </p>
-          </>
-        )}
+        </div>
+        {mode === "replay" && <details className="history-values replay-flow-list">
+          <summary>OD 完整明细 · {listedFlows.length} 条，不受地图筛选影响</summary>
+          <p>起点 → 终点 · 骑行次数；缺坐标记录仍保留。</p>
+          <ol start={flowPage * 50 + 1}>
+            {listedFlows.slice(flowPage * 50, (flowPage + 1) * 50).map((route) => <li key={route.id}>
+              <span>{stationName(route.from)} → {stationName(route.to)}</span>
+              <strong>{route.quantity} 次</strong>
+              {(!scene?.stations.get(route.from)?.coordinate || !scene?.stations.get(route.to)?.coordinate) && <small>缺坐标，未绘制</small>}
+            </li>)}
+          </ol>
+          <div className="list-pagination" aria-label="OD 明细分页">
+            <span>{listedFlows.length ? flowPage * 50 + 1 : 0}–{Math.min((flowPage + 1) * 50, listedFlows.length)} / {listedFlows.length} 条</span>
+            <button disabled={flowPage === 0} onClick={() => setFlowPage((page) => page - 1)}>上一页</button>
+            <button disabled={(flowPage + 1) * 50 >= listedFlows.length} onClick={() => setFlowPage((page) => page + 1)}>下一页</button>
+          </div>
+        </details>}
         {selectedStation && (
           <section
             ref={stationDetailRef}
@@ -1758,18 +1816,12 @@ export default function App() {
                 </span>
               </div>
             )}
-            {(selectedStationExpired ||
-              selectedStation.current_reason ||
-              selectedStation.forecast_reason) && (
-              <p className="reason-copy">
-                {selectedStationExpired
-                  ? "数据已过期"
-                  : (reasonLabels[
-                      (view === "current"
-                        ? selectedStation.current_reason
-                        : selectedStation.forecast_reason) ?? ""
-                    ] ?? "数据暂不可用")}
-              </p>
+            {mode === "live" && (
+              <div className="reason-copy">
+                <p>当前：{selectedStationExpired ? "数据已过期" : reasonLabels[selectedStation.current_reason ?? ""] ?? (selectedInventoryAvailable ? "有效观测" : "库存不可用")}</p>
+                <p>预测：{selectedStationExpired ? "观测已过期，预测不可用" : reasonLabels[selectedStation.forecast_reason ?? ""] ?? (selectedForecastAvailable ? "有效一小时估计" : "预测不可用")}</p>
+                <p>目标：{formatNewYorkDateTime(selectedStation.forecast_for_utc)} · 库存粒子始终为当前观测</p>
+              </div>
             )}
             {mode === "live" && (
               <dl className="detail-facts">
@@ -1878,6 +1930,7 @@ export default function App() {
             </footer>
           </section>
         )}
+        </div>
       </aside>
       <div className="map-legend" aria-label="地图图例">
         <strong>
@@ -1885,7 +1938,7 @@ export default function App() {
         </strong>
         <span>
           {mode === "replay"
-            ? "箭头为起点 → 终点 · 数字为骑行次数 · 无当前库存"
+            ? "箭头为起点 → 终点 · 精确骑行次数见 OD 明细 · 无当前库存"
             : "银白库存点 = 1 辆当前可用车 · 风险环随视图变化"}
         </span>
         {mode === "live" && (

@@ -160,6 +160,17 @@ class Day2ContractTests(unittest.TestCase):
             for row in rows:
                 self.assertEqual(set(row), columns, name)
 
+    def test_historical_lookup_index_has_dataset_and_date_prefix(self):
+        ddl = (ROOT / "sql/serving.sql").read_text()
+        migration = (ROOT / "sql/migrate-historical-lookup.sql").read_text()
+        columns = r"historical_lookup\s*\(dataset_id,\s*service_date,\s*hour\)"
+        self.assertRegex(ddl, columns)
+        self.assertRegex(migration, columns)
+        self.assertIn("information_schema.STATISTICS", migration)
+        self.assertIn("TABLE_SCHEMA = DATABASE()", migration)
+        self.assertIn("ALGORITHM=INPLACE, LOCK=NONE", migration)
+        self.assertNotRegex(migration.upper(), r"\b(?:DELETE|TRUNCATE|DROP)\s+(?:FROM|TABLE|INDEX)\b")
+
     def test_local_document_links(self):
         paths = [ROOT / "README.md", ROOT / "CONTEXT.md", FIXTURE / "README.md"]
         paths += list((ROOT / "docs/contracts").glob("*.md"))
