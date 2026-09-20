@@ -1,0 +1,190 @@
+{
+  "code_commit": "3b362dee6f27119daed06ba391713157197cb0b8",
+  "status": "PARTIAL_BROWSER_BLOCKED",
+  "offline": {
+    "status": "PASS",
+    "contract_version": "1.1",
+    "dataset_id": "44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f",
+    "metadata_version": "da6418119bbe089b9c8438240564eeba75f336f5a60586212d5b5941fd485112",
+    "source_months": [
+      "2025-01"
+    ],
+    "ingest_batch_ids": [
+      "ed3b0138903960afe50386ab44fec8bf52d69474b26f5c0af83e648094aea096"
+    ],
+    "built_at_utc": "2026-09-20T20:13:21Z",
+    "published_at_utc": "2026-09-20T20:15:54Z",
+    "min_service_date": "2024-12-31",
+    "max_service_date": "2025-01-31",
+    "counts": {
+      "source": 2124475,
+      "dwd": 2124475,
+      "valid": 2119681,
+      "duplicate": 0,
+      "invalid": 4794,
+      "missing_start_station": 564,
+      "missing_end_station": 4322,
+      "missing_or_invalid_start_coordinate": 564,
+      "missing_or_invalid_end_coordinate": 4310,
+      "non_positive_duration": 0,
+      "flow": 1606848,
+      "profile": 376824,
+      "od": 1987675,
+      "inbound": 2119681,
+      "outbound": 2119681,
+      "od_rides": 2119681,
+      "duplicate_conflict": 0,
+      "invalid_critical_timestamp": 0,
+      "dim": 2672,
+      "metadata_distinct_historical_ids": 2277,
+      "metadata_matched_historical_ids": 2125,
+      "ods": 2124475
+    },
+    "release_format": "immutable-v1",
+    "serving_format": "tsv-unquoted-v1",
+    "release_root": "/integration/citibike-20260921/warehouse/releases/44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f",
+    "tsv_null_token": "__CITIBIKE_NULL_44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f_0__",
+    "paths": {
+      "dwd_trip_v1": "/integration/citibike-20260921/warehouse/releases/44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f/dwd/dwd_trip_v1",
+      "dim_station_v1": "/integration/citibike-20260921/warehouse/releases/44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f/dim/dim_station_v1",
+      "dws_station_hourly_flow_v1": "/integration/citibike-20260921/warehouse/releases/44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f/dws/dws_station_hourly_flow_v1",
+      "dws_station_hour_profile_v1": "/integration/citibike-20260921/warehouse/releases/44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f/dws/dws_station_hour_profile_v1",
+      "dws_station_od_hourly_v1": "/integration/citibike-20260921/warehouse/releases/44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f/dws/dws_station_od_hourly_v1",
+      "export_dim_station_v1": "/integration/citibike-20260921/warehouse/releases/44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f/serving_export/dim_station_v1",
+      "export_dws_station_hourly_flow_v1": "/integration/citibike-20260921/warehouse/releases/44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f/serving_export/dws_station_hourly_flow_v1",
+      "export_dws_station_hour_profile_v1": "/integration/citibike-20260921/warehouse/releases/44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f/serving_export/dws_station_hour_profile_v1",
+      "export_dws_station_od_hourly_v1": "/integration/citibike-20260921/warehouse/releases/44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f/serving_export/dws_station_od_hourly_v1"
+    }
+  },
+  "export": {
+    "status": "PASS",
+    "dataset_id": "44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f",
+    "staging_counts": {
+      "dim_station_v1": 2672,
+      "dws_station_hourly_flow_v1": 1606848,
+      "dws_station_hour_profile_v1": 376824,
+      "dws_station_od_hourly_v1": 1987675
+    },
+    "published": true
+  },
+  "hive": {
+    "status": "PASS",
+    "dataset_id": "44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f",
+    "counts": {
+      "dwd_trip_v1": 2124475,
+      "dim_station_v1": 2672,
+      "dws_station_hourly_flow_v1": 1606848,
+      "dws_station_hour_profile_v1": 376824,
+      "dws_station_od_hourly_v1": 1987675
+    }
+  },
+  "mysql": {
+    "status": "PASS",
+    "dataset_id": "44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f",
+    "published_counts": {
+      "dim_station_v1": 2672,
+      "dws_station_hourly_flow_v1": 1606848,
+      "dws_station_hour_profile_v1": 376824,
+      "dws_station_od_hourly_v1": 1987675
+    },
+    "inbound": 2119681,
+    "outbound": 2119681,
+    "od_rides": 2119681,
+    "replay_od_pairs": 7337,
+    "replay_rides": 8088
+  },
+  "api": {
+    "status": "PASS",
+    "dataset_id": "44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f",
+    "snapshot_id": "2ba50eadab7d13828ae1a8776e167f82ca0a826fee9cb76d4126ede5ee146949",
+    "metadata_version": "8eb0178fca9052f4649eb588b0f6a548a1528aeb8496fbf4c6b18de9826ebbaf",
+    "origin": "GBFS_LIVE",
+    "live_stations": 2520,
+    "predicted_stations": 980,
+    "suggestions": 231,
+    "current_status_counts": {
+      "OVERFLOW_RISK": 323,
+      "STALE_DATA": 1326,
+      "HIGH_INVENTORY": 177,
+      "HEALTHY": 390,
+      "SHORTAGE_RISK": 142,
+      "LOW_INVENTORY": 149,
+      "SERVICE_UNAVAILABLE": 11,
+      "INSUFFICIENT_DATA": 2
+    },
+    "replay_stations": 2210,
+    "replay_od_pairs": 7337,
+    "replay_rides": 8088,
+    "history_station": "2872.02",
+    "history_profile_hours": 24,
+    "history_actual_hours": 24,
+    "error_statuses": {
+      "/api/v1/map?mode=bad": 400,
+      "/api/v1/map?mode=replay": 400,
+      "/api/v1/map?mode=replay&service_date=2025-01-15&hour=24": 400,
+      "/api/v1/stations/nonexistent/history?day_of_week=3": 404
+    }
+  },
+  "restart": {
+    "status": "PASS",
+    "durable_release_unchanged": true,
+    "snapshot_id": "f4ade67fe716b26c40eb3a1b275142073613b892613221359b458a6f549435a2",
+    "baseline": "44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f",
+    "stations": 2520,
+    "suggestions": 153,
+    "expired_predictions": 1529
+  },
+  "gbfs": [
+    {
+      "status": "PUBLISHED",
+      "station_count": 2520,
+      "snapshot_id": "2ba50eadab7d13828ae1a8776e167f82ca0a826fee9cb76d4126ede5ee146949",
+      "metadata_version": "8eb0178fca9052f4649eb588b0f6a548a1528aeb8496fbf4c6b18de9826ebbaf",
+      "provider_last_updated": 1789935808
+    },
+    {
+      "status": "PUBLISHED",
+      "station_count": 2520,
+      "snapshot_id": "153470cb477af371f57bed7337b32654fbbf8fa68e76d36fb540efa7fb16646e",
+      "metadata_version": "f896e137d42e13f28e13849d3242f8e6abb700b2c40b6ebcd056eb59cc710beb",
+      "provider_last_updated": 1789935928
+    },
+    {
+      "status": "PUBLISHED",
+      "station_count": 2520,
+      "snapshot_id": "f4ade67fe716b26c40eb3a1b275142073613b892613221359b458a6f549435a2",
+      "metadata_version": "49ccdc16cfa7dd8d34e14892787eb96b2bb1b5919a60010a81ea6fa74f2a4992",
+      "provider_last_updated": 1789935988
+    }
+  ],
+  "flume": {
+    "status": "PASS",
+    "path": "/audit/citibike/integration-20260921-verified/runtime.*",
+    "source_lines": 2,
+    "bytes": 25161,
+    "sha256": "6b665f3574dcd34241cc2ab32ba62fe87f9ff204a5a5bf66703d4a00cd325309",
+    "byte_exact": true,
+    "method": "actual collector/backend log extract -> spooldir -> file channel -> HDFS",
+    "maxLineLength": 100000
+  },
+  "tests": {
+    "python": {
+      "tests": 76,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    "java": {
+      "tests": 43,
+      "skipped": 0,
+      "status": "PASS"
+    },
+    "frontend": {
+      "tests": 5,
+      "status": "PASS"
+    },
+    "browser": {
+      "status": "NOT_EXECUTED",
+      "reason": "Browser is not available: iab; cua.getState timed out"
+    }
+  }
+}

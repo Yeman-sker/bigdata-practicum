@@ -83,6 +83,8 @@ CI 同时启动 MySQL 8.0.46 和 Kafka 3.9.2，并启用上述检查及现有 AP
 
 本地原始 feed、producer/app 日志、HTTP 响应和检查输出保留在 `/tmp/pr36-completion/`，未提交全量数据或凭据。录制样例标为 `GBFS_REPLAY`，自动集成样例标为 `FIXTURE`；两者不作为真实输入证据。
 
-## Issue #29 尚待外部交付
+## Issue #29 后续集成状态
 
-#28 尚无已交付的真实 2025-01 historical_release/profile 和 dataset_id；本 PR 不能证明真实历史基线命中后的预测/调度，也不能代替负责人和直接消费者签收。已有真实实时无基线链路与 fixture 基线链路均已验证。保持 `Refs #29`，取得同版真实基线、完成交叉验收后再申请关闭 Issue。
+2026-09-21 在合并基线 `3b362de` 上重新运行完整 2025-01，Sqoop 发布真实历史基线后，新采集的三批 GBFS 已经 Kafka → 规则 → MySQL → HTTP 消费。dataset_id 为 `44ff32b770d259c871d6d532bd890be01f34a959bc2e1fe109b210f96696515f`；一次 HTTP 核验观察到 980 站有效预测、231 条建议，数量随源数据与过期时间变化。真实 MySQL/Kafka 的 43 项测试及 live 重启检查通过，详见 [集成记录](../integration/2026-09-21.md)。
+
+这补齐了旧记录中的真实历史基线缺口，不代表负责人和直接消费者已签收。当前 Prism 的真实浏览器验收因工具不可用未执行。保持 `Refs #29`，在交叉签收完成后再申请关闭 Issue。
