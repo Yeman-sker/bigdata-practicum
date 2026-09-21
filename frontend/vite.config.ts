@@ -6,6 +6,6 @@ export default defineConfig({
   server: {
     port: 5173,
     fs: { allow: [searchForWorkspaceRoot(process.cwd())] },
-    proxy: { "/api": "http://localhost:8080" },
+    proxy: { "/api": process.env.CITIBIKE_API_TARGET || "http://localhost:8080" },
   },
 });

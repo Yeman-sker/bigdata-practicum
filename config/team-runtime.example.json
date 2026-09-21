@@ -1,0 +1,23 @@
+{
+  "DATA_DIR": "/srv/citibike-data",
+  "JAVA8_HOME": "/opt/jdk8",
+  "JAVA17_HOME": "/opt/jdk17",
+  "HADOOP_HOME": "/opt/hadoop",
+  "HADOOP_CONF_DIR": "/opt/hadoop/etc/hadoop",
+  "HIVE_HOME": "/opt/hive",
+  "HIVE_CONF_DIR": "/opt/hive/conf",
+  "SPARK_HOME": "/opt/spark",
+  "SPARK_CONF_DIR": "/opt/spark/conf",
+  "SQOOP_HOME": "/opt/sqoop",
+  "KAFKA_HOME": "/opt/kafka",
+  "KAFKA_BOOTSTRAP_SERVERS": "127.0.0.1:9092",
+  "KAFKA_TOPIC": "bike.station.status.v1",
+  "SPRING_KAFKA_CONSUMER_GROUP_ID": "citibike-live-v1",
+  "MYSQL_HOST": "127.0.0.1",
+  "MYSQL_PORT": 3306,
+  "MYSQL_DATABASE": "citibike",
+  "MYSQL_USER": "citibike",
+  "MYSQL_PASSWORD_FILE": "/srv/citibike-private/mysql.password",
+  "BACKEND_PORT": 8080,
+  "FRONTEND_PORT": 5173
+}

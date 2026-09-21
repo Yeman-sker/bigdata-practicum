@@ -19,6 +19,8 @@ git diff --check
 
 ## 环境与配置
 
+组员独立部署入口见 [真实数据 quickstart](team-runtime.md)：外部 JSON 配置、只读 doctor/plan、完整官方月份校验、真实 collector metadata、offline/Sqoop 发布和前台启停。使用每人自己的课堂 Ubuntu 组件与数据库，不依赖其他成员的服务；启动器不自动安装或重置基础设施。
+
 运行基础使用 [README 版本矩阵](../README.md)；已有环境交接见 [HDFS/Hive](hdfs-hive/README.md)、[Spark](spark/README.md)、[GBFS](gbfs/README.md)。JDK 8 运行 Hadoop/Hive/Spark/Sqoop/Flume，JDK 17 运行 Kafka/Spring Boot/Maven，各进程独立切换，不修改同一 shell 的全局服务环境来控制已运行进程。
 
 | 配置 | 用途 / 默认 |
