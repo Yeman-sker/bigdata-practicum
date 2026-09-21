@@ -108,3 +108,38 @@ export function nextAvailableHour(hours, current, direction = 1) {
 export function playbackDelay(speed) {
   return 2000 / speed;
 }
+
+export function matchesRisk(status, filter = "all") {
+  if (filter === "all") return true;
+  if (filter === "shortage") return ["SHORTAGE_RISK", "LOW_INVENTORY"].includes(status);
+  if (filter === "full") return ["OVERFLOW_RISK", "HIGH_INVENTORY"].includes(status);
+  return !["SHORTAGE_RISK", "LOW_INVENTORY", "OVERFLOW_RISK", "HIGH_INVENTORY", "HEALTHY", "NOT_APPLICABLE"].includes(status);
+}
+
+// Cancellation also invalidates completed/cached requests and failures awaiting metadata.
+export function latestRequestGate() {
+  let controller;
+  return {
+    cancel() {
+      controller?.abort();
+    },
+    start() {
+      controller?.abort();
+      const current = new AbortController();
+      controller = current;
+      return {
+        signal: current.signal,
+        isCurrent: () => controller === current && !current.signal.aborted,
+      };
+    },
+  };
+}
+
+export function availableSelection(dates, serviceDate) {
+  const date = dates.find((entry) => entry.service_date === serviceDate);
+  return date?.hours.length ? { serviceDate, hour: Math.min(...date.hours) } : null;
+}
+
+export function hourAtIndex(hours, index) {
+  return hours[Math.max(0, Math.min(hours.length - 1, index))] ?? null;
+}

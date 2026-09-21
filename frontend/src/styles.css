@@ -1028,3 +1028,38 @@ input {
   padding: 8px;
   text-align: left;
 }
+
+/* Keep operating controls fixed while list/detail content scrolls independently. */
+.work-pane { display: flex; flex-direction: column; overflow: hidden; }
+.work-pane > :not(.pane-content) { flex-shrink: 0; }
+.pane-content { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.station-list { max-height: 42vh; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.search-field { margin: 4px 0 6px; }
+.data-status-button { margin-bottom: 6px; }
+.workspace-nav { margin: 8px 0; }
+.instrument-heading { padding-bottom: 8px; }
+.keyboard-note { margin: 8px 0; }
+.risk-filters { display: flex; gap: 4px; margin-bottom: 8px; }
+.risk-filters button { flex: 1; min-height: 36px; padding: 4px; font-size: 11px; border-color: var(--border); }
+.risk-filters button[aria-pressed="true"] { color: var(--accent); background: #e5a9ff14; border-color: var(--accent); }
+.list-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: 11px; color: var(--muted); }
+.list-pagination span { width: 100%; margin-top: 8px; }
+.list-pagination button { padding: 4px 8px; min-height: 36px; }
+.date-control select, .flow-controls select { width: 100%; min-height: 38px; border: 1px solid var(--border); background: #17151f; border-radius: 3px; padding: 4px; }
+.replay-times { grid-column: 1 / -1; display: grid; gap: 4px; font-size: 11px; color: var(--muted); line-height: 1.5; }
+.timeline-control { grid-column: 1 / -1; }
+.flow-controls { display: grid; gap: 4px; font-size: 11px; margin-bottom: 8px; color: var(--muted); }
+.flow-controls label { display: flex; gap: 8px; align-items: center; }
+.flow-controls select { width: auto; flex: 1; min-width: 0; }
+
+@media (max-width: 640px) {
+  .work-pane { height: 700px; max-height: 95dvh; }
+  .station-list { max-height: 40vh; }
+
+}
+.risk-filters { flex-wrap: wrap; }
+.risk-filters small { width: 100%; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.replay-flow-list ol { padding-left: 24px; }
+.replay-flow-list li { padding: 8px 0; border-bottom: 1px solid var(--border); line-height: 1.6; }
+.replay-flow-list li strong, .replay-flow-list li small { display: block; }
+.replay-flow-list li strong { color: var(--replay); }

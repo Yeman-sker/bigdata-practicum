@@ -115,3 +115,39 @@ export function replayReady(
     !pending && Boolean(response && sameReplaySelection(response, selection))
   );
 }
+
+export type RiskFilter = "all" | "shortage" | "full" | "issue";
+export type FlowFilter = "top" | "all" | "selected" | "hidden";
+
+export function visibleRoutes(
+  scene: Scene | null,
+  filter: FlowFilter,
+  selectedStationId: string | null,
+) {
+  if (!scene) return [];
+  if (scene.kind === "live") return scene.dispatches;
+  if (filter === "top") {
+    return [...scene.flows].sort((a, b) => b.quantity - a.quantity || a.id.localeCompare(b.id)).slice(0, 20);
+  }
+  return scene.flows.filter((route) =>
+    filter === "all" || (filter === "selected" &&
+      (route.from === selectedStationId || route.to === selectedStationId)),
+  );
+}
+
+export function routeSummary(
+  scene: Scene | null,
+  filter: FlowFilter,
+  selectedStationId: string | null,
+) {
+  const total = scene?.kind === "replay" ? scene.flows : [];
+  const shown = visibleRoutes(scene, filter, selectedStationId).filter((route) =>
+    scene?.stations.get(route.from)?.coordinate && scene?.stations.get(route.to)?.coordinate,
+  );
+  return {
+    total: total.length,
+    shown: shown.length,
+    totalRides: total.reduce((sum, route) => sum + route.quantity, 0),
+    shownRides: shown.reduce((sum, route) => sum + route.quantity, 0),
+  };
+}

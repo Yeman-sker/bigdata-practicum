@@ -6,6 +6,8 @@
 
 ## 组员从这里开始
 
+要在自己的 Ubuntu 22.04 上运行完整真实历史月和实时 GBFS，先按 [组员独立运行指南](docs/team-runtime.md) 配置本机组件与外部凭据，执行只读 doctor，再走冷启动或后续重启流程。
+
 1. 阅读 [产品与交互](docs/product.md)、[DESIGN.md](DESIGN.md) 和 [前端交互与视觉设计](docs/frontend-design.md)，了解五条 P0 使用路径、设计 token 及页面呈现。
 2. 阅读 [架构与模块边界](docs/architecture.md)，找到自己生产/消费的数据。
 3. 按 [契约索引](docs/contracts/README.md) 查看字段、表、事件、规则和 [OpenAPI](docs/contracts/openapi.yaml)。
