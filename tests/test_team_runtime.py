@@ -132,10 +132,13 @@ class TeamRuntimeTests(unittest.TestCase):
             with self.assertRaises(BlockingIOError):
                 runtime.run_service(config, "collector")
             execute.assert_not_called()
-        with patch.object(runtime.socket, "socket") as socket, patch.object(runtime.os, "execvpe") as execute:
+        with patch.object(runtime.socket, "socket") as socket, patch.object(runtime.os, "execvpe") as execute, \
+             patch.object(runtime.shutil, "which", return_value="test-executable"), \
+             patch.object(Path, "is_file", return_value=True):
             socket.return_value.__enter__.return_value.bind.side_effect = OSError("in use")
             with self.assertRaises(OSError):
                 runtime.run_service(config, "frontend")
+            socket.return_value.__enter__.return_value.bind.assert_called_once()
             execute.assert_not_called()
 
     def test_metadata_uses_published_live_batch_and_validates_bytes(self):
@@ -223,6 +226,17 @@ class TeamRuntimeTests(unittest.TestCase):
             [config["JAVA17_HOME"] + "/bin/java", "-version"], ["node", "--version"]])
         self.assertIn("GAP", output.getvalue())
         self.assertFalse(Path(config["DATA_DIR"]).exists())
+
+    def test_missing_frontend_dependencies_fail_before_port_or_process(self):
+        config = self.write_config()
+        with patch.object(runtime.shutil, "which", return_value="test-executable"), \
+             patch.object(Path, "is_file", return_value=False), \
+             patch.object(runtime.socket, "socket") as socket, \
+             patch.object(runtime.os, "execvpe") as execute:
+            with self.assertRaisesRegex(ValueError, "locked dependencies"):
+                runtime.run_service(config, "frontend")
+            socket.assert_not_called()
+            execute.assert_not_called()
 
     def test_missing_collector_binary_fails_before_any_collection_or_lock(self):
         config = self.write_config()
