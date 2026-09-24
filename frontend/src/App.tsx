@@ -1,12 +1,18 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
 } from "react";
+import type { CSSProperties } from "react";
 import { parseMap, parseAvailability, parseHistory } from "./parse";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { PrismMap } from "./PrismMap";
+import { AnimatedNumber } from "./AnimatedNumber";
+import { SkeletonChart, SkeletonRows } from "./Skeleton";
+import { easeOut, enterFromRight, pillSpring } from "./motion";
 import { buildScene, replayReady, routeSummary } from "./scene";
 import type { RiskFilter, FlowFilter } from "./scene";
 import type {
@@ -378,6 +384,39 @@ function FlowChart({
     ...history.actual.map((item) => item.net_flow),
   ];
   const extent = Math.max(2, ...values.map((value) => Math.abs(value)));
+  const clipId = `chart-reveal-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  const [hoverHour, setHoverHour] = useState<number | null>(null);
+  const xAt = (hour: number) => 24 + (hour / 23) * 292;
+  const yAt = (value: number) => 52 - (value / extent) * 27;
+  // Filled band under the baseline net flow, split wherever hours are missing.
+  const netArea = (() => {
+    const runs: { hour: number; value: number }[][] = [];
+    for (const item of [...history.profile].sort((a, b) => a.hour - b.hour)) {
+      const run = runs.at(-1);
+      const point = { hour: item.hour, value: item.avg_net_flow };
+      if (run && run.at(-1)!.hour + 1 === item.hour) run.push(point);
+      else runs.push([point]);
+    }
+    return runs
+      .filter((run) => run.length > 1)
+      .map(
+        (run) =>
+          `M${xAt(run[0].hour)},52 ${run.map((p) => `L${xAt(p.hour)},${yAt(p.value)}`).join(" ")} L${xAt(run.at(-1)!.hour)},52Z`,
+      )
+      .join(" ");
+  })();
+  const hoverProfile = history.profile.find((item) => item.hour === hoverHour);
+  const hoverActual = replay
+    ? history.actual.find((item) => item.hour === hoverHour)
+    : undefined;
+  const hoverText =
+    hoverHour === null
+      ? ""
+      : `${String(hoverHour).padStart(2, "0")} 时 · ${
+          hoverProfile
+            ? `入 ${hoverProfile.avg_inbound} 出 ${hoverProfile.avg_outbound} 净 ${hoverProfile.avg_net_flow}`
+            : "无基线"
+        }${hoverActual ? ` · 当日净 ${hoverActual.net_flow}` : ""}`;
   const points = (items: { hour: number; value: number }[]) => {
     let previous = -2;
     return [...items]
@@ -404,7 +443,29 @@ function FlowChart({
         viewBox="0 0 340 105"
         role="img"
         aria-label={`24 小时流入、流出和净流量曲线${currentHour === null ? "" : `，当前 ${String(currentHour).padStart(2, "0")} 时`}`}
+        onPointerMove={(event) => {
+          const box = event.currentTarget.getBoundingClientRect();
+          const x = ((event.clientX - box.left) / box.width) * 340;
+          setHoverHour(Math.min(23, Math.max(0, Math.round(((x - 24) / 292) * 23))));
+        }}
+        onPointerLeave={() => setHoverHour(null)}
       >
+        <defs>
+          <linearGradient id={`${clipId}-fill`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#c6bcff" stopOpacity="0.35" />
+            <stop offset="1" stopColor="#c6bcff" stopOpacity="0" />
+          </linearGradient>
+          <clipPath id={clipId}>
+            <motion.rect
+              x="0"
+              y="0"
+              height="105"
+              initial={{ width: 0 }}
+              animate={{ width: 340 }}
+              transition={{ duration: 0.8, ease: easeOut }}
+            />
+          </clipPath>
+        </defs>
         <path className="chart-axis" d="M24 25V82H322M24 52H322" />
         {currentHour !== null && (
           <>
@@ -432,6 +493,8 @@ function FlowChart({
             {String(hour).padStart(2, "0")}
           </text>
         ))}
+        <g clipPath={`url(#${clipId})`}>
+        {netArea && <path className="chart-area" d={netArea} fill={`url(#${clipId}-fill)`} />}
         {history.profile.length > 0 && (
           <>
             <path
@@ -473,6 +536,20 @@ function FlowChart({
               })),
             )}
           />
+        )}
+        </g>
+        {hoverHour !== null && (
+          <g className="chart-hover" aria-hidden="true">
+            <path d={`M${xAt(hoverHour)} 25V82`} />
+            {hoverProfile && <circle cx={xAt(hoverHour)} cy={yAt(hoverProfile.avg_net_flow)} r="3" />}
+            <text
+              x={Math.min(322, Math.max(24, xAt(hoverHour)))}
+              y="8"
+              textAnchor={xAt(hoverHour) < 110 ? "start" : xAt(hoverHour) > 236 ? "end" : "middle"}
+            >
+              {hoverText}
+            </text>
+          </g>
         )}
       </svg>
       <details className="history-values">
@@ -520,8 +597,9 @@ function FlowChart({
 export default function App() {
   const [mode, setMode] = useState<Mode>("live");
   const [view, setView] = useState<View>("current");
+  // Open by default on phones (stacked layout) and roomy desktops; collapse only in between.
   const [panelOpen, setPanelOpen] = useState(
-    () => window.matchMedia("(max-width: 640px)").matches,
+    () => !window.matchMedia("(min-width: 641px) and (max-width: 1279px)").matches,
   );
   const paneToggleRef = useRef<HTMLButtonElement>(null);
   const [map, setMap] = useState<MapResponse | null>(null);
@@ -1224,6 +1302,7 @@ export default function App() {
     id;
 
   return (
+    <MotionConfig reducedMotion="user">
     <main className={`app mode-${mode} view-${view}${panelOpen ? "" : " panel-collapsed"}`}>
       <PrismMap
         scene={scene}
@@ -1237,11 +1316,9 @@ export default function App() {
       />
       <header className="app-header">
         <div className="brand">
-          <span className="brand-symbol" aria-hidden="true">
-            ◈
-          </span>
+          <span className="brand-dot" aria-hidden="true" />
           <strong>
-            PRISM <span>/ NYC</span>
+            Citi Bike <span>· 纽约</span>
           </strong>
         </div>
         <div className="source-summary">
@@ -1282,16 +1359,18 @@ export default function App() {
         </button>
         <div id="operations-panel-body" className="operations-panel-body" inert={!panelOpen}>
         <div className="instrument-heading">
-          <h1>棱镜空间</h1>
-          <span>城市单车 / 01</span>
+          <h1>{mode === "replay" ? "历史回放" : viewLabel}</h1>
+          <span>{map ? `${map.stations.length} 个站点` : status.kind === "loading" ? "载入中" : "—"}</span>
         </div>
         <nav className="workspace-nav" aria-label="运营模式与地图视角">
           <div className="mode-switch">
-            {(["current", "forecast", "dispatch", "replay"] as const).map((item) => (
+            {(["current", "forecast", "dispatch", "replay"] as const).map((item) => {
+              const pressed = item === "replay" ? mode === "replay" : mode === "live" && view === item;
+              return (
               <button
                 key={item}
                 type="button"
-                aria-pressed={item === "replay" ? mode === "replay" : mode === "live" && view === item}
+                aria-pressed={pressed}
                 onClick={() => {
                   if (item === "replay") {
                     if (mode !== "replay") void toggleMode();
@@ -1303,14 +1382,25 @@ export default function App() {
                   }
                 }}
               >
-                {item === "current" ? "当前" : item === "forecast" ? "预测" : item === "dispatch" ? "调度" : "回放"}
+                {pressed && <motion.span layoutId="mode-pill" className="switch-pill" transition={pillSpring} />}
+                <span className="switch-label">
+                  {item === "current" ? "当前" : item === "forecast" ? "预测" : item === "dispatch" ? "调度" : "回放"}
+                </span>
               </button>
-            ))}
+              );
+            })}
           </div>
         </nav>
         <div className={`status-strip ${status.kind}`} role="status">
           <span className="status-dot" aria-hidden="true" />
-          <span>{status.text}</span>
+          <motion.span
+            key={status.text}
+            initial={{ opacity: 0.4, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            {status.text}
+          </motion.span>
           {map?.expires_at_utc && (
             <small>快照到期 {formatNewYorkTime(map.expires_at_utc)}</small>
           )}
@@ -1342,7 +1432,12 @@ export default function App() {
             >
               {playing ? "Ⅱ" : "▶"}
             </button>
-            <label className="timeline-control">
+            <label
+              className="timeline-control"
+              style={{
+                "--progress": `${availableHours.length > 1 ? (Math.max(0, availableHours.indexOf(previewHour ?? hour)) / (availableHours.length - 1)) * 100 : 0}%`,
+              } as CSSProperties}
+            >
               <span className="sr-only">回放小时</span>
               <input
                 type="range"
@@ -1368,6 +1463,11 @@ export default function App() {
                 onPointerCancel={() => { draggingHourRef.current = false; setPreviewHour(null); }}
                 onBlur={() => { draggingHourRef.current = false; setPreviewHour(null); }}
               />
+              {previewHour !== null && (
+                <span className="timeline-bubble" aria-hidden="true">
+                  {String(previewHour).padStart(2, "0")}:00
+                </span>
+              )}
               <span className="timeline-labels">
                 <span>{availableHours[0] ?? "—"} 时</span>
                 <strong>{previewHour !== null ? "预览 " : "选择 "}{String(previewHour ?? hour).padStart(2, "0")}:00</strong>
@@ -1452,7 +1552,10 @@ export default function App() {
 
         {mode === "live" && <div className="risk-filters" role="group" aria-label="站点风险筛选">
           {([['all', '全部'], ['shortage', '缺车'], ['full', '满桩'], ['issue', '数据问题']] as const).map(([value, label]) =>
-            <button key={value} aria-pressed={riskFilter === value} onClick={() => setRiskFilter(value)}>{label}</button>)}
+            <button key={value} aria-pressed={riskFilter === value} onClick={() => setRiskFilter(value)}>
+              {riskFilter === value && <motion.span layoutId="risk-pill" className="switch-pill" transition={pillSpring} />}
+              <span className="switch-label">{label}</span>
+            </button>)}
         </div>}
         {mode === "replay" && <div className="flow-controls">
           <label>OD 可见范围 <select value={flowFilter} onChange={(event) => setFlowFilter(event.target.value as FlowFilter)}>
@@ -1668,6 +1771,7 @@ export default function App() {
                     aria-posinset={index + 1}
                     aria-setsize={searchResults.length}
                     className="station-row"
+                    style={{ "--i": Math.min(offset, 12) } as CSSProperties}
                     key={station.station_id}
                     onMouseEnter={() => setSearchIndex(index)}
                     onClick={() => openStation(station.station_id)}
@@ -1676,7 +1780,9 @@ export default function App() {
                       className={`result-marker ${statusClass(stationStatus)}`}
                     />
                     <span className="station-row-name">
-                      <strong>{station.station_name || "未命名站点"}</strong>
+                      <motion.strong layoutId={`station-name-${station.station_id}`}>
+                        {station.station_name || "未命名站点"}
+                      </motion.strong>
                       <small>{station.station_id}</small>
                       <span>
                         {statusLabels[stationStatus] ?? "状态未知"}
@@ -1688,9 +1794,12 @@ export default function App() {
                     {mode === "live" && (
                       <span className="station-row-value">
                         <strong>
-                          {canDrawInventory(station, stationExpired)
-                            ? station.num_bikes_available
-                            : "—"}
+                          {canDrawInventory(station, stationExpired) &&
+                          station.num_bikes_available !== null ? (
+                            <AnimatedNumber value={station.num_bikes_available} />
+                          ) : (
+                            "—"
+                          )}
                         </strong>
                         <small>当前车辆</small>
                       </span>
@@ -1698,7 +1807,10 @@ export default function App() {
                   </button>
                 );
               })}
-              {!searchResults.length && (
+              {!searchResults.length && !map && status.kind === "loading" && (
+                <SkeletonRows />
+              )}
+              {!searchResults.length && (map || status.kind !== "loading") && (
                 <p className="empty-copy">
                   {!map
                     ? status.text
@@ -1734,7 +1846,9 @@ export default function App() {
           </div>
         </details>}
         {selectedStation && (
-          <section
+          <motion.section
+            key={selectedStation.station_id}
+            {...enterFromRight}
             ref={stationDetailRef}
             className="station-detail"
             role="region"
@@ -1751,7 +1865,9 @@ export default function App() {
               ← 返回列表
             </button>
             <header>
-              <h2>{selectedStation.station_name || "未命名站点"}</h2>
+              <motion.h2 layoutId={`station-name-${selectedStation.station_id}`}>
+                {selectedStation.station_name || "未命名站点"}
+              </motion.h2>
               <span
                 className={`station-state ${statusClass(displayStatus(selectedStation, mode, view, selectedStationExpired))}`}
               >
@@ -1781,9 +1897,12 @@ export default function App() {
                 >
                   <small>当前车辆</small>
                   <strong>
-                    {selectedInventoryAvailable
-                      ? selectedStation.num_bikes_available
-                      : "—"}
+                    {selectedInventoryAvailable &&
+                    selectedStation.num_bikes_available !== null ? (
+                      <AnimatedNumber value={selectedStation.num_bikes_available} />
+                    ) : (
+                      "—"
+                    )}
                   </strong>
                 </span>
                 <span
@@ -1794,17 +1913,36 @@ export default function App() {
                 >
                   <small>一小时估计</small>
                   <strong>
-                    {selectedForecastAvailable
-                      ? selectedStation.projected_bikes_1h
-                      : "—"}
+                    {selectedForecastAvailable &&
+                    selectedStation.projected_bikes_1h !== null ? (
+                      <AnimatedNumber value={selectedStation.projected_bikes_1h} />
+                    ) : (
+                      "—"
+                    )}
+                    {selectedForecastAvailable &&
+                      selectedInventoryAvailable &&
+                      selectedStation.projected_bikes_1h !== null &&
+                      selectedStation.num_bikes_available !== null &&
+                      selectedStation.projected_bikes_1h !== selectedStation.num_bikes_available && (
+                        <em
+                          className={`metric-delta ${selectedStation.projected_bikes_1h > selectedStation.num_bikes_available ? "up" : "down"}`}
+                          aria-hidden="true"
+                        >
+                          {selectedStation.projected_bikes_1h > selectedStation.num_bikes_available ? "↑" : "↓"}
+                          {Math.abs(selectedStation.projected_bikes_1h - selectedStation.num_bikes_available)}
+                        </em>
+                      )}
                   </strong>
                 </span>
                 <span>
                   <small>可用空桩</small>
                   <strong>
-                    {selectedInventoryAvailable
-                      ? (selectedStation.num_docks_available ?? "—")
-                      : "—"}
+                    {selectedInventoryAvailable &&
+                    selectedStation.num_docks_available !== null ? (
+                      <AnimatedNumber value={selectedStation.num_docks_available} />
+                    ) : (
+                      "—"
+                    )}
                   </strong>
                 </span>
               </div>
@@ -1864,7 +2002,10 @@ export default function App() {
             )}
             <h3 className="history-heading">24 小时供需</h3>
             {historyLoading && (
-              <p className="history-loading">正在加载 24 小时曲线…</p>
+              <div className="history-loading" role="status">
+                <span className="sr-only">正在加载 24 小时曲线…</span>
+                <SkeletonChart />
+              </div>
             )}
             {!historyLoading && historyError && (
               <p className="history-error" role="alert">
@@ -1921,11 +2062,30 @@ export default function App() {
                 </span>
               )}
             </footer>
-          </section>
+          </motion.section>
         )}
         </div>
         </div>
       </aside>
+      <AnimatePresence>
+        {transientMessage && (
+          <motion.div
+            key={transientMessage}
+            className="toast"
+            aria-hidden="true"
+            initial={{ opacity: 0, y: 16, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: 12, x: "-50%" }}
+            transition={{ duration: 0.24, ease: easeOut }}
+          >
+            <span className="toast-dot" />
+            <strong>{transientMessage}</strong>
+            {transientDetails[transientMessage] && (
+              <span>{transientDetails[transientMessage]}</span>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="map-legend" aria-label="地图图例">
         <strong>
           {mode === "replay" ? "历史 OD · 无当前库存" : viewLabel}
@@ -1953,13 +2113,14 @@ export default function App() {
         <details className="legend-detail"><summary>图例说明</summary>
           <span>{mode === "replay"
             ? "箭头为起点 → 终点 · 精确骑行次数见 OD 明细 · 无当前库存"
-            : "银白库存点 = 1 辆当前可用车 · 风险环随视图变化"}</span>
+            : "银白库存点 = 1 辆当前可用车 · 风险环随视图变化 · 外弧 = 车辆 / 容量"}</span>
           {mode === "live" && <small>地图与列表同步筛选；已选站点及已选调度路线端点保留。</small>}
           {view === "dispatch" && mode === "live" && <small>粉紫线 = 调度建议 · Top 5 与选中路线高亮 · 直线距离；建议未执行。</small>}
-          <small>建筑扫描 / 道路光点为城市装饰，不代表车辆或 GPS。</small>
+          <small>建筑扫描带 / 道路光点为城市装饰，不代表车辆或 GPS；选中光柱只标示当前选择。</small>
           {hiddenFlows.length > 0 && <small>无坐标未绘制 {hiddenFlows.length} 条 OD · {hiddenFlowRides} 次骑行</small>}
         </details>
       </div>
     </main>
+    </MotionConfig>
   );
 }

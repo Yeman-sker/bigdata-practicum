@@ -6,6 +6,23 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { cityStyle } from "./map-style";
 import { particleOffsets, matchesRisk } from "./model.mjs";
 import { visibleRoutes } from "./scene";
+import {
+  PARTICLE_METERS_X,
+  PARTICLE_METERS_Y,
+  PULSES_PER_ROUTE,
+  RING_METERS,
+  createGlowCache,
+  cubicPoint,
+  gaugeRatio,
+  groundAxes,
+  orbitSpeed,
+  placeLabel,
+  rgba,
+  routeWidth,
+  scanIntensity,
+  smoothstep,
+  zoomScale,
+} from "./map-fx";
 import type { RiskFilter, FlowFilter } from "./scene";
 import type { Scene, SceneRoute, SceneStation } from "./scene";
 
@@ -48,6 +65,7 @@ function riskColor(status: string) {
   if (status === "NOT_APPLICABLE") return "#c6bcff";
   return "#9893a3";
 }
+const majorRoads = new Set(["motorway", "trunk", "primary", "secondary"]);
 function coordinate(value: number[]): Coordinate {
   return [value[0], value[1]];
 }
@@ -67,6 +85,8 @@ export function PrismMap(props: Props) {
     () => !matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const [density, setDensity] = useState(1);
+  const [densityOpen, setDensityOpen] = useState(false);
+  const densityButtonRef = useRef<HTMLButtonElement>(null);
   const currentRef = useRef({ ...props, motion, density });
   currentRef.current = { ...props, motion, density };
 
@@ -100,18 +120,24 @@ export function PrismMap(props: Props) {
     let lastSuggestionId: string | null = null;
     let lastRightPadding = 0;
     let highlightedStations = new Set<string>();
-    let roads: Coordinate[][] = [];
+    let roads: { line: Coordinate[]; major: boolean }[] = [];
     let buildingPoints: Coordinate[] = [];
-    let projectedBuildings: Point[] = [];
+    let scale = 1;
+    let glow = createGlowCache(Math.min(devicePixelRatio, 2));
+    let projectedBuildings: (Point & { sweep: number })[] = [];
     let projectedRoads: {
       points: Point[];
       cumulative: number[];
       length: number;
+      major: boolean;
     }[] = [];
     let projectedStations: {
       station: SceneStation;
       point: Point;
-      particles: Point[];
+      u: Point;
+      v: Point;
+      particles: { radius: number; angle: number }[];
+      gauge: number | null;
     }[] = [];
     let paths: { route: SceneRoute; a: Point; b: Point; c: Point; d: Point }[] =
       [];
@@ -330,7 +356,10 @@ export function PrismMap(props: Props) {
           const key = `${line[0]}:${line.at(-1)}`;
           if (!seen.has(key)) {
             seen.add(key);
-            roads.push(line.map(coordinate));
+            roads.push({
+              line: line.map(coordinate),
+              major: majorRoads.has(feature.properties.class),
+            });
           }
         }
       }
@@ -353,7 +382,7 @@ export function PrismMap(props: Props) {
       });
       // ponytail: sample decorative geometry to bound redraw cost; use GPU particles for denser scenes.
       roads = roads.filter(
-        (_, index) => index % Math.max(1, Math.ceil(roads.length / 420)) === 0,
+        (_, index) => index % Math.max(1, Math.ceil(roads.length / 360)) === 0,
       );
       buildingPoints = buildingPoints.filter(
         (_, index) =>
@@ -366,11 +395,19 @@ export function PrismMap(props: Props) {
     }
 
     function project() {
-      projectedBuildings = buildingPoints
-        .map((point) => map.project(point))
-        .filter((p) => p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height);
+      scale = zoomScale(map.getZoom());
+      projectedBuildings = [];
+      for (const point of buildingPoints) {
+        const p = map.project(point);
+        if (p.x < 0 || p.x > width || p.y < 0 || p.y > height) continue;
+        projectedBuildings.push({
+          x: p.x,
+          y: p.y,
+          sweep: (p.x / width + 1 - p.y / height) / 2,
+        });
+      }
       projectedRoads = roads
-        .map((line) => {
+        .map(({ line, major }) => {
           const points = line.map((point) => map.project(point));
           const cumulative = [0];
           for (let index = 1; index < points.length; index++)
@@ -385,6 +422,7 @@ export function PrismMap(props: Props) {
             points,
             cumulative,
             length: cumulative[cumulative.length - 1],
+            major,
           };
         })
         .filter(
@@ -401,16 +439,27 @@ export function PrismMap(props: Props) {
           const anchor = station.coordinate;
           if (!anchor) return [];
           if (scene?.kind !== "replay" && !matchesRisk(station.status, riskFilter) && !highlightedStations.has(station.id)) return [];
-          const particles = particleOffsets(
-            station.id,
-            station.inventory ?? 0,
-          ).map((offset: Point) =>
-            map.project([
-              anchor[0] + offset.x * 0.000019,
-              anchor[1] + offset.y * 0.000014,
-            ]),
+          const point = map.project(anchor);
+          const axes = groundAxes(anchor, RING_METERS);
+          const east = map.project(axes.east),
+            north = map.project(axes.north);
+          // One offset per available bike; orbiting only rotates them.
+          const particles = particleOffsets(station.id, station.inventory ?? 0).map(
+            (offset: Point) => ({
+              radius: Math.hypot(offset.x, offset.y),
+              angle: Math.atan2(offset.y, offset.x),
+            }),
           );
-          return [{ station, point: map.project(anchor), particles }];
+          return [
+            {
+              station,
+              point,
+              u: { x: east.x - point.x, y: east.y - point.y },
+              v: { x: north.x - point.x, y: north.y - point.y },
+              particles,
+              gauge: gaugeRatio(station.inventory, station.capacity),
+            },
+          ];
         },
       );
       const routes = visibleRoutes(scene, flowFilter, selectedStationId);
@@ -453,19 +502,7 @@ export function PrismMap(props: Props) {
       dirty = false;
     }
     function curve(path: (typeof paths)[number], t: number): Point {
-      const u = 1 - t;
-      return {
-        x:
-          u ** 3 * path.a.x +
-          3 * u * u * t * path.c.x +
-          3 * u * t * t * path.d.x +
-          t ** 3 * path.b.x,
-        y:
-          u ** 3 * path.a.y +
-          3 * u * u * t * path.c.y +
-          3 * u * t * t * path.d.y +
-          t ** 3 * path.b.y,
-      };
+      return cubicPoint(path.a, path.c, path.d, path.b, t);
     }
     function roadPoint(
       line: (typeof projectedRoads)[number],
@@ -480,16 +517,280 @@ export function PrismMap(props: Props) {
       const t = distance ? (target - line.cumulative[i - 1]) / distance : 0;
       return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
     }
-    function dot(p: Point, radius: number, color: string, alpha: number) {
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = color;
+    function glowAt(p: Point, radius: number, color: string, alpha: number) {
+      if (alpha <= 0.01) return;
+      const { sprite, radius: r } = glow(color, radius);
+      ctx.globalAlpha = Math.min(1, alpha);
+      ctx.drawImage(sprite, p.x - r, p.y - r, r * 2, r * 2);
+    }
+    /** Trace an arc lying on the ground plane around a projected station. */
+    function groundArc(
+      s: (typeof projectedStations)[number],
+      k: number,
+      start = 0,
+      end = Math.PI * 2,
+      anticlockwise = false,
+    ) {
+      ctx.save();
+      ctx.transform(s.u.x, s.u.y, s.v.x, s.v.y, s.point.x, s.point.y);
       ctx.beginPath();
-      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(0, 0, k, start, end, anticlockwise);
+      ctx.restore();
+    }
+    function tracePath(path: (typeof paths)[number]) {
+      ctx.beginPath();
+      ctx.moveTo(path.a.x, path.a.y);
+      ctx.bezierCurveTo(path.c.x, path.c.y, path.d.x, path.d.y, path.b.x, path.b.y);
     }
     function schedule() {
       if (!frame && ready && !document.hidden && !disposed)
         frame = requestAnimationFrame(draw);
+    }
+    function drawCity(amount: number) {
+      // Faint building vertices, lit briefly as the scan band passes.
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.07;
+      ctx.fillStyle = "#e8dcff";
+      ctx.beginPath();
+      for (const p of projectedBuildings) ctx.rect(p.x - 0.5, p.y - 0.5, 1, 1);
+      ctx.fill();
+      for (const p of projectedBuildings) {
+        const scan = scanIntensity(p.sweep, time);
+        if (scan > 0.05) glowAt(p, (2 + scan * 3) * scale, "#e8dcff", scan * 0.75);
+      }
+      // Road comets: tails batched by brightness level, heads as glow sprites.
+      const levels = 5;
+      const tails: number[][] = Array.from({ length: levels }, () => []);
+      const heads: { p: Point; major: boolean; fade: number }[] = [];
+      projectedRoads.forEach((line, index) => {
+        const count = Math.max(
+          1,
+          Math.min(3, Math.round((line.length / 180) * amount)),
+        );
+        const pixelsPerMs = (line.major ? 0.05 : 0.028) * (0.85 + (index % 4) * 0.1);
+        const tail = Math.min(0.3, (line.major ? 46 : 30) / line.length);
+        for (let i = 0; i < count; i++) {
+          const phase =
+            (i / count + index * 0.173 + (time * pixelsPerMs) / line.length) % 1;
+          const head = roadPoint(line, phase);
+          if (head.x < 0 || head.x > width || head.y < 0 || head.y > height) continue;
+          const fade = smoothstep(0, 0.06, phase) * (1 - smoothstep(0.94, 1, phase));
+          heads.push({ p: head, major: line.major, fade });
+          let previous = roadPoint(line, Math.max(0, phase - tail));
+          for (let level = 0; level < levels; level++) {
+            const t = phase - tail * (1 - (level + 1) / levels);
+            if (t <= 0) continue;
+            const next = roadPoint(line, t);
+            tails[level].push(previous.x, previous.y, next.x, next.y);
+            previous = next;
+          }
+        }
+      });
+      ctx.strokeStyle = "#e8dcff";
+      ctx.lineCap = "round";
+      ctx.lineWidth = Math.max(0.7, scale);
+      tails.forEach((segments, level) => {
+        ctx.globalAlpha = ((level + 1) / levels) * 0.3;
+        ctx.beginPath();
+        for (let i = 0; i < segments.length; i += 4) {
+          ctx.moveTo(segments[i], segments[i + 1]);
+          ctx.lineTo(segments[i + 2], segments[i + 3]);
+        }
+        ctx.stroke();
+      });
+      for (const { p, major, fade } of heads)
+        glowAt(p, (major ? 4.5 : 3) * scale, "#e8dcff", fade * (major ? 0.75 : 0.4));
+    }
+    function drawRoutes(kind: Scene["kind"] | undefined, selectedSuggestionId: string | null) {
+      const color = kind === "replay" ? "#c6bcff" : "#efa3ff";
+      const placed: Parameters<typeof placeLabel>[1] = [];
+      // Thousands of replay OD arcs: keep the essentials, drop the ornaments.
+      const busy = paths.length > 120;
+      const labelled = new Set(
+        paths.length > 40
+          ? [...paths]
+              .sort((a, b) => b.route.quantity - a.route.quantity)
+              .slice(0, 20)
+              .map((path) => path.route.id)
+          : paths.map((path) => path.route.id),
+      );
+      const speed = 0.00009;
+      for (const path of paths) {
+        const selected = path.route.id === selectedSuggestionId;
+        const dimmed = Boolean(selectedSuggestionId) && !selected;
+        const strength =
+          (selected ? 1 : path.route.top ? 0.75 : 0.25) * (dimmed ? 0.4 : 1);
+        const lineWidth = routeWidth(path.route.quantity) * Math.min(1.3, scale + 0.2);
+        ctx.globalCompositeOperation = "lighter";
+        tracePath(path);
+        ctx.globalAlpha = 1;
+        ctx.lineCap = "round";
+        if (!busy || selected) {
+          ctx.strokeStyle = rgba(color, 0.1 * strength);
+          ctx.lineWidth = lineWidth * 6;
+          ctx.stroke();
+        }
+        const gradient = ctx.createLinearGradient(path.a.x, path.a.y, path.b.x, path.b.y);
+        gradient.addColorStop(0, rgba(color, 0.3 * strength));
+        gradient.addColorStop(1, rgba(color, strength));
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = lineWidth;
+        ctx.stroke();
+        if (!busy && (selected || path.route.top)) {
+          ctx.strokeStyle = rgba("#ffffff", 0.35 * strength);
+          ctx.lineWidth = Math.max(0.5, lineWidth * 0.3);
+          ctx.stroke();
+        }
+        // Direction chevrons brighten as the flow passes them.
+        const flow = (time * speed) % 1;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.4;
+        for (let t = busy && !selected ? 0.8 : 0.14; t < 0.9; t += 0.12) {
+          const wave = Math.pow(Math.max(0, Math.cos(Math.PI * 2 * (t - flow * PULSES_PER_ROUTE))), 6);
+          const tip = curve(path, t),
+            back = curve(path, t - 0.02);
+          const angle = Math.atan2(tip.y - back.y, tip.x - back.x);
+          const size = 4.5 * Math.min(1.3, scale + 0.2);
+          ctx.globalAlpha = strength * (0.25 + 0.75 * wave);
+          ctx.beginPath();
+          ctx.moveTo(tip.x - size * Math.cos(angle - 0.6), tip.y - size * Math.sin(angle - 0.6));
+          ctx.lineTo(tip.x, tip.y);
+          ctx.lineTo(tip.x - size * Math.cos(angle + 0.6), tip.y - size * Math.sin(angle + 0.6));
+          ctx.stroke();
+        }
+        if (!dimmed) {
+          const trail = busy && !selected ? 1 : 6;
+          for (let i = 0; i < PULSES_PER_ROUTE; i++) {
+            const head = (i / PULSES_PER_ROUTE + time * speed) % 1;
+            for (let k = trail - 1; k >= 0; k--) {
+              const t = head - k * 0.014;
+              if (t < 0) continue;
+              glowAt(
+                curve(path, t),
+                (selected ? 7 : 5.5) * (1 - k / (trail + 1)) * Math.min(1.3, scale + 0.2),
+                color,
+                strength * (1 - k / trail),
+              );
+            }
+          }
+        }
+        if (selected || (path.route.top && labelled.has(path.route.id))) {
+          const mid = curve(path, 0.5);
+          const [amount, ...rest] = path.route.label.split(" · ");
+          const detail = rest.length ? ` · ${rest.join(" · ")}` : "";
+          ctx.globalCompositeOperation = "source-over";
+          ctx.font = "600 12px Inter, 'PingFang SC', sans-serif";
+          const amountWidth = ctx.measureText(amount).width;
+          ctx.font = "400 11px Inter, 'PingFang SC', sans-serif";
+          const detailWidth = ctx.measureText(detail).width;
+          const w = amountWidth + detailWidth + 20,
+            h = 22;
+          const box = placeLabel({ x: mid.x - w / 2, y: mid.y - h - 6, w, h }, placed);
+          ctx.globalAlpha = dimmed ? 0.5 : 1;
+          ctx.fillStyle = "rgba(20,18,29,0.9)";
+          ctx.strokeStyle = rgba(color, selected ? 0.8 : 0.4);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.roundRect(box.x, box.y, box.w, box.h, 11);
+          ctx.fill();
+          ctx.stroke();
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          ctx.font = "600 12px Inter, 'PingFang SC', sans-serif";
+          ctx.fillStyle = color;
+          ctx.fillText(amount, box.x + 10, box.y + h / 2 + 0.5);
+          ctx.font = "400 11px Inter, 'PingFang SC', sans-serif";
+          ctx.fillStyle = "#aaa4b2";
+          ctx.fillText(detail, box.x + 10 + amountWidth, box.y + h / 2 + 0.5);
+        }
+      }
+    }
+    function drawStations(moving: boolean) {
+      for (const s of projectedStations) {
+        const { station, point } = s;
+        const selected = highlightedStations.has(station.id);
+        const color = riskColor(station.status);
+        const solid = [
+          "HEALTHY",
+          "SHORTAGE_RISK",
+          "OVERFLOW_RISK",
+          "NOT_APPLICABLE",
+        ].includes(station.status);
+        const full = ["OVERFLOW_RISK", "HIGH_INVENTORY"].includes(station.status);
+        ctx.globalCompositeOperation = "source-over";
+        // Ground wash, base ring and inventory gauge (bikes / capacity).
+        groundArc(s, selected ? 1.3 : 1.05);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = rgba(color, selected ? 0.1 : 0.05);
+        ctx.fill();
+        groundArc(s, selected ? 1.3 : 1);
+        ctx.setLineDash(solid ? [] : [4, 4]);
+        ctx.strokeStyle = rgba(color, selected ? 0.95 : 0.55);
+        ctx.lineWidth = selected ? 1.5 : 1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (full) {
+          groundArc(s, selected ? 1.5 : 1.22);
+          ctx.strokeStyle = rgba(color, 0.3);
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+        if (s.gauge !== null && solid) {
+          const k = selected ? 1.42 : 1.12;
+          groundArc(s, k);
+          ctx.strokeStyle = rgba(color, 0.12);
+          ctx.lineWidth = 2.2 * scale;
+          ctx.stroke();
+          if (s.gauge > 0) {
+            groundArc(s, k, Math.PI / 2, Math.PI / 2 - s.gauge * Math.PI * 2, true);
+            ctx.lineCap = "round";
+            ctx.strokeStyle = rgba(color, selected ? 1 : 0.85);
+            ctx.stroke();
+          }
+        }
+        ctx.globalCompositeOperation = "lighter";
+        if (selected) {
+          for (let i = 0; i < 2; i++) {
+            const phase = moving ? ((time / 2400 + i / 2) % 1) : 0.35 + i * 0.25;
+            groundArc(s, 1.3 + phase * 1.7);
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = rgba(color, (1 - phase) * 0.45);
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+          }
+          const top = { x: point.x, y: point.y - 90 * scale };
+          const beam = ctx.createLinearGradient(point.x, point.y, top.x, top.y);
+          beam.addColorStop(0, rgba(color, 0.85));
+          beam.addColorStop(1, rgba(color, 0));
+          ctx.strokeStyle = beam;
+          ctx.lineCap = "round";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(point.x, point.y);
+          ctx.lineTo(top.x, top.y);
+          ctx.stroke();
+          ctx.lineWidth = 8;
+          ctx.globalAlpha = 0.25;
+          ctx.stroke();
+        }
+        glowAt(point, (selected ? 14 : 9) * scale, color, selected ? 0.9 : 0.5);
+        // Inventory cluster: one sprite per bike, slowly orbiting the dock.
+        for (const particle of s.particles) {
+          const angle = particle.angle + time * orbitSpeed(particle.radius);
+          const east = (particle.radius * Math.cos(angle) * PARTICLE_METERS_X) / RING_METERS;
+          const north = (particle.radius * Math.sin(angle) * PARTICLE_METERS_Y) / RING_METERS;
+          const near = 0.5 - Math.sin(angle) * 0.5;
+          glowAt(
+            {
+              x: point.x + east * s.u.x + north * s.v.x,
+              y: point.y + east * s.u.y + north * s.v.y,
+            },
+            (4.2 + near * 1.6) * Math.min(1.4, scale + 0.15),
+            "#f2edf8",
+            0.62 + near * 0.38,
+          );
+        }
+      }
     }
     function draw(now: number) {
       frame = 0;
@@ -508,129 +809,9 @@ export function PrismMap(props: Props) {
       lastPaint = now;
       if (dirty) project();
       ctx.clearRect(0, 0, width, height);
-      ctx.globalCompositeOperation = "lighter";
-      for (const p of projectedBuildings) {
-        const scan = Math.pow(
-          Math.max(0, Math.sin(time * 0.00075 + p.y * 0.006 + p.x * 0.002)),
-          6,
-        );
-        dot(p, scan > 0.6 ? 1.1 : 0.6, "#e8dcff", 0.08 + scan * 0.55);
-      }
-      projectedRoads.forEach((line, index) => {
-        const count = Math.max(
-          1,
-          Math.min(12, Math.round((line.length / 32) * amount)),
-        );
-        for (let i = 0; i < count; i++) {
-          const phase =
-            (i / count +
-              index * 0.173 +
-              time * 0.000045 * (0.8 + (index % 4) * 0.18)) %
-            1;
-          const p = roadPoint(line, phase);
-          if (p.x < 0 || p.x > width || p.y < 0 || p.y > height) continue;
-          const tail = roadPoint(line, Math.max(0, phase - 0.005));
-          ctx.globalAlpha = 0.4;
-          ctx.strokeStyle = "#e8dcff";
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(tail.x, tail.y);
-          ctx.lineTo(p.x, p.y);
-          ctx.stroke();
-          dot(p, i % 4 === 0 ? 1.5 : 0.85, "#e8dcff", 0.75);
-        }
-      });
-      for (const path of paths) {
-        const selected = path.route.id === selectedSuggestionId;
-        const color = scene?.kind === "replay" ? "#c6bcff" : "#efa3ff";
-        ctx.globalAlpha = selected ? 1 : path.route.top ? 0.7 : 0.22;
-        ctx.strokeStyle = color;
-        ctx.lineWidth =
-          (path.route.quantity >= 20 ? 3 : path.route.quantity >= 8 ? 2 : 1) +
-          (selected ? 1 : 0);
-        ctx.beginPath();
-        ctx.moveTo(path.a.x, path.a.y);
-        ctx.bezierCurveTo(
-          path.c.x,
-          path.c.y,
-          path.d.x,
-          path.d.y,
-          path.b.x,
-          path.b.y,
-        );
-        ctx.stroke();
-        for (let i = 0; i < 4; i++)
-          dot(
-            curve(path, (i / 4 + time * 0.00009) % 1),
-            selected ? 2 : 1.5,
-            color,
-            selected ? 1 : 0.7,
-          );
-        const arrow = curve(path, 0.83),
-          before = curve(path, 0.8);
-        const angle = Math.atan2(arrow.y - before.y, arrow.x - before.x);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(arrow.x, arrow.y);
-        ctx.lineTo(
-          arrow.x - 9 * Math.cos(angle - 0.45),
-          arrow.y - 9 * Math.sin(angle - 0.45),
-        );
-        ctx.lineTo(
-          arrow.x - 9 * Math.cos(angle + 0.45),
-          arrow.y - 9 * Math.sin(angle + 0.45),
-        );
-        ctx.fill();
-        if (selected || path.route.top) {
-          const p = curve(path, 0.5);
-          ctx.globalCompositeOperation = "source-over";
-          ctx.font = "12px sans-serif";
-          const labelWidth = ctx.measureText(path.route.label).width + 16;
-          ctx.fillStyle = "rgba(20,18,29,.94)";
-          ctx.fillRect(p.x - labelWidth / 2, p.y - 21, labelWidth, 22);
-          ctx.fillStyle = color;
-          ctx.textAlign = "center";
-          ctx.fillText(path.route.label, p.x, p.y - 6);
-          ctx.globalCompositeOperation = "lighter";
-        }
-      }
-      for (const { station, point, particles } of projectedStations) {
-        const selected = highlightedStations.has(station.id);
-        const color = riskColor(station.status);
-        ctx.globalAlpha = selected ? 0.9 : 0.5;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = selected ? 1.5 : 1;
-        ctx.setLineDash(
-          [
-            "HEALTHY",
-            "SHORTAGE_RISK",
-            "OVERFLOW_RISK",
-            "NOT_APPLICABLE",
-          ].includes(station.status)
-            ? []
-            : [4, 4],
-        );
-        ctx.beginPath();
-        ctx.ellipse(
-          point.x,
-          point.y,
-          selected ? 38 : 29,
-          selected ? 22 : 16,
-          0,
-          0,
-          Math.PI * 2,
-        );
-        ctx.stroke();
-        ctx.setLineDash([]);
-        for (let i = 0; i < particles.length; i++)
-          dot(
-            particles[i],
-            1.65,
-            "#f2edf8",
-            0.72 + 0.25 * Math.sin(time * 0.001 + i),
-          );
-      }
+      drawCity(amount);
+      drawRoutes(scene?.kind, selectedSuggestionId);
+      drawStations(moving);
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "source-over";
       canvas.dataset.motion = String(moving);
@@ -644,6 +825,7 @@ export function PrismMap(props: Props) {
       canvas.width = Math.round(width * ratio);
       canvas.height = Math.round(height * ratio);
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      glow = createGlowCache(ratio);
       map.resize();
       dirty = true;
       schedule();
@@ -727,32 +909,44 @@ export function PrismMap(props: Props) {
           © OpenStreetMap
         </a>
       </div>
+      <div className="map-atmosphere" aria-hidden="true" />
       <canvas ref={canvasRef} className="city-particles" aria-hidden="true" />
-      <div className="map-tools" aria-label="地图视角工具">
+      <div className="map-dock" role="toolbar" aria-label="地图视角与光效">
         <button
+          className="dock-button"
           aria-label="地图归位"
           title="地图归位"
           onClick={() => homeRef.current()}
         >
-          ⌖
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="6.5" />
+            <path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4" />
+          </svg>
         </button>
         <button
+          className="dock-button"
           aria-label="放大地图"
           title="放大"
           onClick={() => mapRef.current?.zoomIn({ duration: motion ? 300 : 0 })}
         >
-          ＋
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
         </button>
         <button
+          className="dock-button"
           aria-label="缩小地图"
           title="缩小"
           onClick={() =>
             mapRef.current?.zoomOut({ duration: motion ? 300 : 0 })
           }
         >
-          −
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 12h14" />
+          </svg>
         </button>
         <button
+          className="dock-button dock-text"
           aria-label="切换二维三维视角"
           title="二维 / 三维"
           onClick={() => {
@@ -766,29 +960,74 @@ export function PrismMap(props: Props) {
         >
           3D
         </button>
-      </div>
-      <div className="particle-controls">
+        <span className="dock-divider" aria-hidden="true" />
         <button
+          className="dock-button"
           aria-pressed={motion}
+          aria-label={motion ? "暂停光效" : "播放光效"}
+          title={motion ? "暂停光效" : "播放光效"}
           onClick={() => setMotion((value) => !value)}
         >
-          {motion ? "Ⅱ 暂停光效" : "▶ 播放光效"}
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {motion ? (
+              <path d="M9 6.5v11M15 6.5v11" />
+            ) : (
+              <path className="filled" d="M8.5 6v12l10-6z" />
+            )}
+          </svg>
         </button>
-        <label>
-          装饰密度
-          <input
-            aria-label="城市装饰密度"
-            type="range"
-            min="0.4"
-            max="1.6"
-            step="0.2"
-            value={density}
-            onChange={(event) => setDensity(Number(event.target.value))}
-          />
-        </label>
+        <div
+          className="dock-density"
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && densityOpen) {
+              event.stopPropagation();
+              setDensityOpen(false);
+              densityButtonRef.current?.focus();
+            }
+          }}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget))
+              setDensityOpen(false);
+          }}
+        >
+          <button
+            ref={densityButtonRef}
+            className="dock-button"
+            aria-label="调节城市装饰密度"
+            title="装饰密度"
+            aria-expanded={densityOpen}
+            aria-controls="density-popover"
+            onClick={() => setDensityOpen((open) => !open)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3.5l1.8 5.2 5.2 1.8-5.2 1.8L12 17.5l-1.8-5.2L5 10.5l5.2-1.8z" />
+              <path d="M18.5 16v4M16.5 18h4" />
+            </svg>
+          </button>
+          {densityOpen && (
+            <div id="density-popover" className="dock-popover">
+              <label>
+                <span>
+                  装饰密度 <output>{density.toFixed(1)}×</output>
+                </span>
+                <input
+                  aria-label="城市装饰密度"
+                  type="range"
+                  min="0.4"
+                  max="1.6"
+                  step="0.2"
+                  value={density}
+                  onChange={(event) => setDensity(Number(event.target.value))}
+                />
+              </label>
+              <small>只影响道路光点等装饰，不改变任何业务数量。</small>
+            </div>
+          )}
+        </div>
       </div>
       {mapState !== "ready" && (
         <div className="city-state" role="status">
+          {mapState === "loading" && <span className="loader-dot" aria-hidden="true" />}
           <span>
             {mapState === "error"
               ? "城市底图暂不可用，业务面板仍可使用。"
