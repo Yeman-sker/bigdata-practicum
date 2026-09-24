@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { CSSProperties } from "react";
 import { parseMap, parseAvailability, parseHistory } from "./parse";
-import { MotionConfig, motion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { PrismMap } from "./PrismMap";
 import { AnimatedNumber } from "./AnimatedNumber";
 import { SkeletonChart, SkeletonRows } from "./Skeleton";
@@ -1360,7 +1360,7 @@ export default function App() {
         <div id="operations-panel-body" className="operations-panel-body" inert={!panelOpen}>
         <div className="instrument-heading">
           <h1>{mode === "replay" ? "历史回放" : viewLabel}</h1>
-          <span>{map ? `${map.stations.length} 个站点` : "载入中"}</span>
+          <span>{map ? `${map.stations.length} 个站点` : status.kind === "loading" ? "载入中" : "—"}</span>
         </div>
         <nav className="workspace-nav" aria-label="运营模式与地图视角">
           <div className="mode-switch">
@@ -1780,7 +1780,9 @@ export default function App() {
                       className={`result-marker ${statusClass(stationStatus)}`}
                     />
                     <span className="station-row-name">
-                      <strong>{station.station_name || "未命名站点"}</strong>
+                      <motion.strong layoutId={`station-name-${station.station_id}`}>
+                        {station.station_name || "未命名站点"}
+                      </motion.strong>
                       <small>{station.station_id}</small>
                       <span>
                         {statusLabels[stationStatus] ?? "状态未知"}
@@ -1863,7 +1865,9 @@ export default function App() {
               ← 返回列表
             </button>
             <header>
-              <h2>{selectedStation.station_name || "未命名站点"}</h2>
+              <motion.h2 layoutId={`station-name-${selectedStation.station_id}`}>
+                {selectedStation.station_name || "未命名站点"}
+              </motion.h2>
               <span
                 className={`station-state ${statusClass(displayStatus(selectedStation, mode, view, selectedStationExpired))}`}
               >
@@ -2063,6 +2067,25 @@ export default function App() {
         </div>
         </div>
       </aside>
+      <AnimatePresence>
+        {transientMessage && (
+          <motion.div
+            key={transientMessage}
+            className="toast"
+            aria-hidden="true"
+            initial={{ opacity: 0, y: 16, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, y: 12, x: "-50%" }}
+            transition={{ duration: 0.24, ease: easeOut }}
+          >
+            <span className="toast-dot" />
+            <strong>{transientMessage}</strong>
+            {transientDetails[transientMessage] && (
+              <span>{transientDetails[transientMessage]}</span>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="map-legend" aria-label="地图图例">
         <strong>
           {mode === "replay" ? "历史 OD · 无当前库存" : viewLabel}

@@ -95,6 +95,16 @@ input {
   pointer-events: none;
   z-index: 2;
 }
+/* Horizon haze and vignette give the pitched city depth; purely decorative. */
+.map-atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(40, 30, 58, 0.55) 0%, rgba(24, 19, 36, 0.18) 22%, transparent 42%),
+    radial-gradient(120% 90% at 50% 60%, transparent 55%, rgba(8, 8, 13, 0.7) 100%);
+}
 .city-map .maplibregl-canvas:focus-visible {
   outline-offset: -3px;
 }
@@ -1726,4 +1736,51 @@ input {
 /* Compact panel copy: default paragraph margins waste vertical space. */
 .reason-copy p {
   margin: 2px 0;
+}
+
+/* Transient notice over the map; flat like the sidebar. */
+.toast {
+  position: absolute;
+  z-index: 7;
+  left: calc((100% - 350px) / 2);
+  bottom: 56px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, calc(100% - 420px));
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 173, 128, 0.4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(20px) saturate(140%);
+  font-size: 12px;
+  pointer-events: none;
+}
+.toast strong {
+  color: var(--shortage);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.toast > span:last-child:not(.toast-dot) {
+  color: var(--muted);
+}
+.toast-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--shortage);
+}
+.app.panel-collapsed .toast {
+  left: 50%;
+  max-width: calc(100% - 48px);
+}
+@media (max-width: 640px) {
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 16px;
+    max-width: calc(100% - 32px);
+  }
 }

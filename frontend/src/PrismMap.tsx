@@ -909,6 +909,7 @@ export function PrismMap(props: Props) {
           © OpenStreetMap
         </a>
       </div>
+      <div className="map-atmosphere" aria-hidden="true" />
       <canvas ref={canvasRef} className="city-particles" aria-hidden="true" />
       <div className="map-dock" role="toolbar" aria-label="地图视角与光效">
         <button
