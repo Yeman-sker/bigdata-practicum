@@ -15,6 +15,7 @@ type Point = { x: number; y: number };
 type Coordinate = [number, number];
 type Props = {
   scene: Scene | null;
+  panelOpen: boolean;
   riskFilter: RiskFilter;
   flowFilter: FlowFilter;
   selectedStationId: string | null;
@@ -56,6 +57,7 @@ export function PrismMap(props: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<CityMap | null>(null);
   const refreshRef = useRef<() => void>(() => {});
+  const reframeRef = useRef<() => void>(() => {});
   const homeRef = useRef<() => void>(() => {});
   const [attempt, setAttempt] = useState(0);
   const [mapState, setMapState] = useState<"loading" | "ready" | "error">(
@@ -96,6 +98,7 @@ export function PrismMap(props: Props) {
     let fitted = false;
     let lastSelectedId: string | null = null;
     let lastSuggestionId: string | null = null;
+    let lastRightPadding = 0;
     let highlightedStations = new Set<string>();
     let roads: Coordinate[][] = [];
     let buildingPoints: Coordinate[] = [];
@@ -149,6 +152,12 @@ export function PrismMap(props: Props) {
     };
     map.getCanvas().addEventListener("webglcontextlost", contextLost);
 
+    function rightPadding() {
+      if (window.innerWidth <= 640) return 40;
+      if (!currentRef.current.panelOpen) return 118;
+      return window.innerWidth <= 900 ? 336 : 368;
+    }
+
     function home() {
       const located = [
         ...(currentRef.current.scene?.stations.values() ?? []),
@@ -174,12 +183,46 @@ export function PrismMap(props: Props) {
           top: 100,
           bottom: 150,
           left: 90,
-          right: width > 720 ? 380 : 40,
+          right: rightPadding(),
         },
         duration: currentRef.current.motion ? 650 : 0,
       });
     }
     homeRef.current = home;
+
+    function reframeSelection() {
+      if (!ready || disposed) return;
+      const { scene, selectedStationId, selectedSuggestionId, panelOpen } = currentRef.current;
+      const stations = scene?.stations ?? new Map<string, SceneStation>();
+      const selectedRoute = scene?.kind === "live"
+        ? scene.dispatches.find((route) => route.id === selectedSuggestionId)
+        : undefined;
+      const selected = selectedStationId ? stations.get(selectedStationId) : null;
+      const paddingRight = rightPadding();
+      const newlyObscured = panelOpen && paddingRight !== lastRightPadding;
+      if (selected?.coordinate && (selectedStationId !== lastSelectedId || newlyObscured)) {
+        const p = map.project(selected.coordinate);
+        if (p.x < 85 || p.x > width - paddingRight || p.y < 110 || p.y > height - 160) {
+          map.easeTo({
+            center: selected.coordinate,
+            offset: [-paddingRight / 2 + 20, -20],
+            duration: currentRef.current.motion ? 500 : 0,
+          });
+        }
+      }
+      if (selectedRoute && (selectedSuggestionId !== lastSuggestionId || newlyObscured)) {
+        const endpoints = [stations.get(selectedRoute.from)?.coordinate, stations.get(selectedRoute.to)?.coordinate].filter((p): p is Coordinate => Boolean(p));
+        if (endpoints.some((coordinate) => { const p = map.project(coordinate); return p.x < 85 || p.x > width - paddingRight || p.y < 110 || p.y > height - 160; })) {
+          const bounds = new maplibregl.LngLatBounds();
+          endpoints.forEach((p) => bounds.extend(p));
+          map.fitBounds(bounds, { maxZoom: 16, padding: { top: 110, bottom: 160, left: 85, right: paddingRight }, duration: currentRef.current.motion ? 500 : 0 });
+        }
+      }
+      lastRightPadding = paddingRight;
+      lastSuggestionId = selectedSuggestionId;
+      lastSelectedId = selectedStationId;
+    }
+    reframeRef.current = reframeSelection;
 
     function refresh() {
       if (!ready || disposed) return;
@@ -256,34 +299,7 @@ export function PrismMap(props: Props) {
         fitted = true;
         home();
       }
-      const selected = selectedStationId
-        ? stations.get(selectedStationId)
-        : null;
-      if (selected?.coordinate && selectedStationId !== lastSelectedId) {
-        const p = map.project(selected.coordinate);
-        if (
-          p.x < 85 ||
-          p.x > width - (width > 720 ? 380 : 40) ||
-          p.y < 110 ||
-          p.y > height - 160
-        ) {
-          map.easeTo({
-            center: selected.coordinate,
-            offset: [width > 720 ? -160 : 0, -20],
-            duration: currentRef.current.motion ? 500 : 0,
-          });
-        }
-      }
-      if (selectedRoute && selectedSuggestionId !== lastSuggestionId) {
-        const endpoints = [stations.get(selectedRoute.from)?.coordinate, stations.get(selectedRoute.to)?.coordinate].filter((p): p is Coordinate => Boolean(p));
-        if (endpoints.some((coordinate) => { const p = map.project(coordinate); return p.x < 85 || p.x > width - (width > 720 ? 380 : 40) || p.y < 110 || p.y > height - 160; })) {
-          const bounds = new maplibregl.LngLatBounds();
-          endpoints.forEach((p) => bounds.extend(p));
-          map.fitBounds(bounds, { maxZoom: 16, padding: { top: 110, bottom: 160, left: 85, right: width > 720 ? 380 : 40 }, duration: currentRef.current.motion ? 500 : 0 });
-        }
-      }
-      lastSuggestionId = selectedSuggestionId;
-      lastSelectedId = selectedStationId;
+      reframeSelection();
       dirty = true;
       schedule();
     }
@@ -672,6 +688,7 @@ export function PrismMap(props: Props) {
       map.remove();
       mapRef.current = null;
       refreshRef.current = () => {};
+      reframeRef.current = () => {};
       homeRef.current = () => {};
     };
   }, [attempt]);
@@ -688,6 +705,7 @@ export function PrismMap(props: Props) {
       density,
     ],
   );
+  useEffect(() => reframeRef.current(), [props.panelOpen]);
 
   return (
     <section className="map-stage" aria-label="纽约三维运营地图">

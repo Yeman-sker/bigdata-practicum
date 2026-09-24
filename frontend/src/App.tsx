@@ -1,5 +1,4 @@
 import {
-  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -42,8 +41,7 @@ type Example = { value: unknown; "x-status"?: number };
 const examples = examplesJson as Record<string, Example>;
 const pageQuery = new URLSearchParams(window.location.search);
 const fixtureParameter = pageQuery.get("fixture");
-const usesFixture =
-  fixtureParameter !== null || (import.meta.env.DEV && !pageQuery.has("api"));
+const usesFixture = fixtureParameter !== null;
 const fixtureScenario = fixtureParameter || "live";
 const speeds = [0.5, 1, 2, 5] as const;
 
@@ -522,6 +520,10 @@ function FlowChart({
 export default function App() {
   const [mode, setMode] = useState<Mode>("live");
   const [view, setView] = useState<View>("current");
+  const [panelOpen, setPanelOpen] = useState(
+    () => window.matchMedia("(max-width: 640px)").matches,
+  );
+  const paneToggleRef = useRef<HTMLButtonElement>(null);
   const [map, setMap] = useState<MapResponse | null>(null);
   const [availability, setAvailability] = useState<AvailabilityResponse | null>(
     null,
@@ -560,6 +562,15 @@ export default function App() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof speeds)[number]>(1);
   const [clockElapsedMs, setClockElapsedMs] = useState(0);
+
+  useEffect(() => {
+    const narrow = window.matchMedia("(max-width: 640px)");
+    const onChange = (event: MediaQueryListEvent) => {
+      if (event.matches) setPanelOpen(true);
+    };
+    narrow.addEventListener("change", onChange);
+    return () => narrow.removeEventListener("change", onChange);
+  }, []);
 
   const mapRef = useRef<MapResponse | null>(null);
   const mapAbortRef = useRef<AbortController | null>(null);
@@ -707,7 +718,7 @@ export default function App() {
     setPanel(next);
   };
 
-  const toggleMode = async (retryReplay = false) => {
+  const toggleMode = async (retryReplay = false, nextView: View = "current") => {
     const request = ++modeRequestRef.current;
     requestGateRef.current.cancel();
     mapAbortRef.current?.abort();
@@ -723,7 +734,7 @@ export default function App() {
     setFlowFilter("all");
     if (mode === "replay" && !retryReplay) {
       setMode("live");
-      setView("current");
+      setView(nextView);
       await loadMap("live");
       return;
     }
@@ -969,8 +980,12 @@ export default function App() {
         : null;
     setPanel(null);
     setSelectedStationId(stationId);
+    setPanelOpen(true);
     setTransientMessage(null);
-    window.requestAnimationFrame(() => stationDetailRef.current?.focus());
+    window.setTimeout(() => {
+      if (stationDetailRef.current && !stationDetailRef.current.closest("[inert]"))
+        stationDetailRef.current.focus();
+    }, 430);
   }, []);
 
   const closeStation = useCallback(() => {
@@ -1058,8 +1073,11 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (fatalError && !map)
-      window.requestAnimationFrame(() => retryButtonRef.current?.focus());
+    if (fatalError && !map) {
+      setPanelOpen(true);
+      const timer = window.setTimeout(() => retryButtonRef.current?.focus(), 430);
+      return () => window.clearTimeout(timer);
+    }
   }, [fatalError, map]);
 
   useEffect(() => {
@@ -1206,9 +1224,10 @@ export default function App() {
     id;
 
   return (
-    <main className={`app mode-${mode} view-${view}`}>
+    <main className={`app mode-${mode} view-${view}${panelOpen ? "" : " panel-collapsed"}`}>
       <PrismMap
         scene={scene}
+        panelOpen={panelOpen}
         riskFilter={riskFilter}
         flowFilter={flowFilter}
         selectedStationId={selectedStationId}
@@ -1233,6 +1252,7 @@ export default function App() {
                 ? `${map.data_origin} · ${originLabels[map.data_origin]}`
                 : "业务接口"}
             {map?.clock_mode === "recorded" ? " · 录制时钟" : ""}
+            {expired ? " · 数据已过期" : ""}
           </strong>
           <span>
             {map?.mode === "replay"
@@ -1243,51 +1263,50 @@ export default function App() {
         </div>
       </header>
       <aside className="work-pane" aria-label="站点与建议">
+        <button
+          ref={paneToggleRef}
+          type="button"
+          className="pane-toggle"
+          aria-controls="operations-panel-body"
+          aria-expanded={panelOpen}
+          aria-label={`${panelOpen ? "收起操作面板，专注地图" : "展开操作面板"}；数据状态：${status.text}`}
+          title={`${panelOpen ? "收起面板" : "展开面板"} · ${status.text}`}
+          onClick={() => {
+            paneToggleRef.current?.focus();
+            setPanelOpen((open) => !open);
+          }}
+        >
+          <span className="toggle-mark" aria-hidden="true">
+            <i className="upper" /><i className="lower" /><i className="shaft" />
+          </span>
+        </button>
+        <div id="operations-panel-body" className="operations-panel-body" inert={!panelOpen}>
         <div className="instrument-heading">
           <h1>棱镜空间</h1>
           <span>城市单车 / 01</span>
         </div>
         <nav className="workspace-nav" aria-label="运营模式与地图视角">
           <div className="mode-switch">
-            <button
-              aria-pressed={mode === "live"}
-              onClick={() => {
-                if (mode !== "live") void toggleMode();
-              }}
-            >
-              实时
-            </button>
-            <button
-              aria-pressed={mode === "replay"}
-              onClick={() => {
-                if (mode !== "replay") void toggleMode();
-              }}
-            >
-              回放
-            </button>
-          </div>
-          {mode === "live" ? (
-            <div className="view-switch">
-              {(["current", "forecast", "dispatch"] as const).map((item) => (
-                <button
-                  key={item}
-                  aria-pressed={view === item}
-                  onClick={() => {
+            {(["current", "forecast", "dispatch", "replay"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                aria-pressed={item === "replay" ? mode === "replay" : mode === "live" && view === item}
+                onClick={() => {
+                  if (item === "replay") {
+                    if (mode !== "replay") void toggleMode();
+                  } else if (mode === "replay") {
+                    void toggleMode(false, item);
+                  } else {
                     setView(item);
                     setSelectedSuggestionId(null);
-                  }}
-                >
-                  {item === "current"
-                    ? "当前库存"
-                    : item === "forecast"
-                      ? "预测 +1h"
-                      : "调度建议"}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <span className="nav-note">历史 OD · 纽约当地日期与小时</span>
-          )}
+                  }
+                }}
+              >
+                {item === "current" ? "当前" : item === "forecast" ? "预测" : item === "dispatch" ? "调度" : "回放"}
+              </button>
+            ))}
+          </div>
         </nav>
         <div className={`status-strip ${status.kind}`} role="status">
           <span className="status-dot" aria-hidden="true" />
@@ -1360,27 +1379,14 @@ export default function App() {
               {(loading || refreshing || refreshError || fatalError) && <span>{refreshError || fatalError ? "失败目标" : "请求中"}：{serviceDate} {String(hour).padStart(2, "0")}:00</span>}
               {previewHour !== null && <span>拖动预览：{serviceDate} {String(previewHour).padStart(2, "0")}:00 · 松开加载</span>}
             </div>
-            <button
-              type="button"
+            <select
               className="speed-button"
-              aria-label={`回放速度 ${speed} 倍，点击切换`}
-              onClick={() =>
-                setSpeed(speeds[(speeds.indexOf(speed) + 1) % speeds.length])
-              }
-              onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
-                if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
-                event.preventDefault();
-                const delta = event.key === "ArrowRight" ? 1 : -1;
-                setSpeed(
-                  speeds[
-                    (speeds.indexOf(speed) + delta + speeds.length) %
-                      speeds.length
-                  ],
-                );
-              }}
+              aria-label="回放倍速"
+              value={speed}
+              onChange={(event) => setSpeed(Number(event.target.value) as (typeof speeds)[number])}
             >
-              {speed}×
-            </button>
+              {speeds.map((value) => <option key={value} value={value}>{value}×</option>)}
+            </select>
           </div>
         )}
 
@@ -1447,7 +1453,6 @@ export default function App() {
         {mode === "live" && <div className="risk-filters" role="group" aria-label="站点风险筛选">
           {([['all', '全部'], ['shortage', '缺车'], ['full', '满桩'], ['issue', '数据问题']] as const).map(([value, label]) =>
             <button key={value} aria-pressed={riskFilter === value} onClick={() => setRiskFilter(value)}>{label}</button>)}
-          <small>地图与列表同步筛选，已选站点 / 调度端点保留</small>
         </div>}
         {mode === "replay" && <div className="flow-controls">
           <label>OD 可见范围 <select value={flowFilter} onChange={(event) => setFlowFilter(event.target.value as FlowFilter)}>
@@ -1573,19 +1578,8 @@ export default function App() {
         )}
         <div className="station-browser" hidden={Boolean(selectedStation)}>
             <div className="pane-heading">
-              <span className="eyebrow">
-                {mode === "replay"
-                  ? "HISTORICAL FLOWS"
-                  : view === "dispatch"
-                    ? "REBALANCING"
-                    : "STATION INVENTORY"}
-              </span>
-              <h1>{mode === "replay" ? "历史站点" : viewLabel}</h1>
-              <p>
-                {map
-                  ? `已载入快照 · ${map.stations.length} 个站点`
-                  : status.text}
-              </p>
+              <h2>{mode === "replay" ? "历史站点" : view === "dispatch" ? "站点与调度" : "站点"}</h2>
+              <span>{map ? `${searchResults.length} / ${map.stations.length}` : status.text}</span>
             </div>
             {mode === "live" && view === "dispatch" && (
               <section className="dispatch-list" aria-label="调度建议列表">
@@ -1719,10 +1713,9 @@ export default function App() {
               <button disabled={pageStart === 0} onClick={() => setSearchIndex(Math.max(0, pageStart - 50))}>上一页</button>
               <button disabled={pageStart + 50 >= searchResults.length} onClick={() => setSearchIndex(pageStart + 50)}>下一页</button>
             </div>
-            <p className="keyboard-note">
-              ↑↓ 选择 · Enter 查看历史
-              <br />N / Shift+N 巡览站点 · Esc 返回
-            </p>
+            <details className="keyboard-note"><summary>操作提示</summary>
+              ↑↓ 选择 · Enter 查看历史<br />N / Shift+N 巡览站点 · Esc 返回
+            </details>
         </div>
         {mode === "replay" && <details className="history-values replay-flow-list">
           <summary>OD 完整明细 · {listedFlows.length} 条，不受地图筛选影响</summary>
@@ -1931,21 +1924,17 @@ export default function App() {
           </section>
         )}
         </div>
+        </div>
       </aside>
       <div className="map-legend" aria-label="地图图例">
         <strong>
-          {mode === "replay" ? "历史 OD / 聚合骑行流向" : viewLabel}
+          {mode === "replay" ? "历史 OD · 无当前库存" : viewLabel}
         </strong>
-        <span>
-          {mode === "replay"
-            ? "箭头为起点 → 终点 · 精确骑行次数见 OD 明细 · 无当前库存"
-            : "银白库存点 = 1 辆当前可用车 · 风险环随视图变化"}
-        </span>
         {mode === "live" && (
           <div className="legend-keys">
             <span>
               <i className="result-marker shortage" />
-              缺车 / 偏低
+              缺车
             </span>
             <span>
               <i className="result-marker healthy" />
@@ -1953,7 +1942,7 @@ export default function App() {
             </span>
             <span>
               <i className="result-marker overflow" />
-              偏高 / 满桩
+              偏高/满桩
             </span>
             <span>
               <i className="result-marker neutral" />
@@ -1961,15 +1950,15 @@ export default function App() {
             </span>
           </div>
         )}
-        {view === "dispatch" && mode === "live" && (
-          <span>粉紫线 = 调度建议 · Top 5 与选中路线高亮 · 直线距离</span>
-        )}
-        <small>建筑扫描 / 道路光点为城市装饰，不代表车辆或 GPS。</small>
-        {hiddenFlows.length > 0 && (
-          <small>
-            无坐标未绘制 {hiddenFlows.length} 条 OD · {hiddenFlowRides} 次骑行
-          </small>
-        )}
+        <details className="legend-detail"><summary>图例说明</summary>
+          <span>{mode === "replay"
+            ? "箭头为起点 → 终点 · 精确骑行次数见 OD 明细 · 无当前库存"
+            : "银白库存点 = 1 辆当前可用车 · 风险环随视图变化"}</span>
+          {mode === "live" && <small>地图与列表同步筛选；已选站点及已选调度路线端点保留。</small>}
+          {view === "dispatch" && mode === "live" && <small>粉紫线 = 调度建议 · Top 5 与选中路线高亮 · 直线距离；建议未执行。</small>}
+          <small>建筑扫描 / 道路光点为城市装饰，不代表车辆或 GPS。</small>
+          {hiddenFlows.length > 0 && <small>无坐标未绘制 {hiddenFlows.length} 条 OD · {hiddenFlowRides} 次骑行</small>}
+        </details>
       </div>
     </main>
   );
