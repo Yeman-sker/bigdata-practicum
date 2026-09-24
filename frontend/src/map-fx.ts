@@ -70,9 +70,19 @@ export function smoothstep(edge0: number, edge1: number, value: number) {
   return t * t * (3 - 2 * t);
 }
 
+const rgbaCache = new Map<string, Map<number, string>>();
+/** `#rrggbb` + alpha → CSS rgba(), memoised because the frame loop asks for the same few values. */
 export function rgba(hex: string, alpha: number) {
-  const value = Number.parseInt(hex.slice(1), 16);
-  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
+  let byAlpha = rgbaCache.get(hex);
+  if (!byAlpha) rgbaCache.set(hex, (byAlpha = new Map()));
+  let css = byAlpha.get(alpha);
+  if (css === undefined) {
+    if (byAlpha.size > 512) byAlpha.clear();
+    const value = Number.parseInt(hex.slice(1), 16);
+    css = `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
+    byAlpha.set(alpha, css);
+  }
+  return css;
 }
 
 export function cubicPoint(
@@ -113,16 +123,23 @@ export function placeLabel(rect: Rect, placed: Rect[], step = 26, tries = 4) {
   return candidate;
 }
 
+/** Sprite radius bucket (half-pixel steps) used for a requested glow radius. */
+export function glowRadius(radius: number) {
+  return Math.max(1, Math.round(radius * 2) / 2);
+}
+
 /**
- * Pre-rendered radial glow sprites, bucketed by color and radius, so the
- * frame loop uses drawImage instead of building gradients per dot.
+ * Pre-rendered radial glow sprites, bucketed by color and half-pixel radius,
+ * so the frame loop uses drawImage instead of building gradients per dot.
+ * Lookups are array-indexed to keep the hot path allocation-free.
  */
 export function createGlowCache(ratio: number) {
-  const cache = new Map<string, HTMLCanvasElement>();
-  return function glow(color: string, radius: number) {
-    const bucket = Math.max(1, Math.round(radius * 2) / 2);
-    const key = `${color}:${bucket}`;
-    let sprite = cache.get(key);
+  const byColor = new Map<string, HTMLCanvasElement[]>();
+  return function glow(color: string, bucket: number) {
+    let sprites = byColor.get(color);
+    if (!sprites) byColor.set(color, (sprites = []));
+    const index = bucket * 2;
+    let sprite = sprites[index];
     if (!sprite) {
       const size = Math.ceil(bucket * 2 * ratio);
       sprite = document.createElement("canvas");
@@ -142,8 +159,8 @@ export function createGlowCache(ratio: number) {
       gradient.addColorStop(1, rgba(color, 0));
       g.fillStyle = gradient;
       g.fillRect(0, 0, size, size);
-      cache.set(key, sprite);
+      sprites[index] = sprite;
     }
-    return { sprite, radius: bucket };
+    return sprite;
   };
 }

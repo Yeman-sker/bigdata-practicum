@@ -6,12 +6,14 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { cityStyle } from "./map-style";
 import { particleOffsets, matchesRisk } from "./model.mjs";
 import { visibleRoutes } from "./scene";
+import { PARTICLE_STRIDE, createBikeLayer } from "./bike-layer";
 import {
   PARTICLE_METERS_X,
   PARTICLE_METERS_Y,
   PULSES_PER_ROUTE,
   RING_METERS,
   createGlowCache,
+  glowRadius,
   cubicPoint,
   gaugeRatio,
   groundAxes,
@@ -73,6 +75,8 @@ function coordinate(value: number[]): Coordinate {
 export function PrismMap(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const bikeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const markCanvasRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<CityMap | null>(null);
   const refreshRef = useRef<() => void>(() => {});
   const reframeRef = useRef<() => void>(() => {});
@@ -101,10 +105,30 @@ export function PrismMap(props: Props) {
     const hostElement = hostRef.current;
     const canvasElement = canvasRef.current;
     const context = canvasElement?.getContext("2d");
-    if (!hostElement || !canvasElement || !context) return;
+    const markContext = markCanvasRef.current?.getContext("2d");
+    const bikeCanvas = bikeCanvasRef.current;
+    if (!hostElement || !canvasElement || !context || !markContext || !bikeCanvas)
+      return;
     const host = hostElement,
       canvas = canvasElement,
-      ctx = context;
+      ctx = context,
+      markCtx = markContext;
+    // Offscreen layers for static station art (see renderStationLayers).
+    const ringLayer = document.createElement("canvas");
+    const coreLayer = document.createElement("canvas");
+    const ringCtx = ringLayer.getContext("2d")!;
+    const coreCtx = coreLayer.getContext("2d")!;
+    let bikes = createBikeLayer(bikeCanvas, [242 / 255, 237 / 255, 248 / 255]);
+    // If the GPU context is lost, fall back to the identical canvas path.
+    const bikesLost = () => {
+      bikes = null;
+      dirty = true;
+      schedule();
+    };
+    bikeCanvas.addEventListener("webglcontextlost", bikesLost);
+    let particleData = new Float32Array(0);
+    let particleCount = 0;
+    let marksDirty = true;
     let map: CityMap;
     let ready = false;
     let failed = false;
@@ -123,7 +147,8 @@ export function PrismMap(props: Props) {
     let roads: { line: Coordinate[]; major: boolean }[] = [];
     let buildingPoints: Coordinate[] = [];
     let scale = 1;
-    let glow = createGlowCache(Math.min(devicePixelRatio, 2));
+    let pixelRatio = Math.min(devicePixelRatio, 2);
+    let glow = createGlowCache(pixelRatio);
     let projectedBuildings: (Point & { sweep: number })[] = [];
     let projectedRoads: {
       points: Point[];
@@ -136,15 +161,82 @@ export function PrismMap(props: Props) {
       point: Point;
       u: Point;
       v: Point;
-      particles: { radius: number; angle: number }[];
+      particles: { radius: number; angle: number; speed: number }[];
       gauge: number | null;
     }[] = [];
     let paths: { route: SceneRoute; a: Point; b: Point; c: Point; d: Point }[] =
       [];
+    // Idle station diamonds are painted on the canvas (same size, colors and
+    // stacking as the DOM markers). A real <button> marker is attached only for
+    // stations that are hovered, selected/highlighted or focused, so the CSS
+    // hover scale and glass tooltip still play. 2,520 always-attached DOM
+    // markers cost more than the whole canvas. `state` memoises written attributes.
     const markers = new Map<
       string,
-      { marker: Marker; button: HTMLButtonElement }
+      {
+        marker: Marker;
+        button: HTMLButtonElement;
+        attached: boolean;
+        state: string;
+        lngLat: Coordinate;
+        order: number;
+      }
     >();
+    // Stations near the pointer get real DOM markers *before* the pointer enters
+    // their 44px button, so the CSS hover transition still animates.
+    let nearIds = new Set<string>();
+    const lingering = new Set<string>();
+    let hostRect = host.getBoundingClientRect();
+    // Polar particle layout per station and bike count; stable between moves.
+    const layouts = new Map<string, { radius: number; angle: number; speed: number }[]>();
+    function orbitLayout(id: string, count: number) {
+      const key = `${id}:${count}`;
+      let layout = layouts.get(key);
+      if (!layout) {
+        if (layouts.size > 8000) layouts.clear();
+        layout = particleOffsets(id, count).map((offset: Point) => {
+          const radius = Math.hypot(offset.x, offset.y);
+          return {
+            radius,
+            angle: Math.atan2(offset.y, offset.x),
+            speed: orbitSpeed(radius),
+          };
+        });
+        layouts.set(key, layout!);
+      }
+      return layout!;
+    }
+    function attach(entry: { marker: Marker; attached: boolean; order: number }) {
+      if (entry.attached) return;
+      entry.marker.addTo(map);
+      entry.attached = true;
+      // Keep attached markers in scene order so stacking and click targets
+      // match the painted diamonds (and the former all-DOM markers).
+      const element = entry.marker.getElement();
+      element.dataset.order = String(entry.order);
+      let next = element.parentElement?.firstElementChild ?? null;
+      while (next && !(next !== element && next.classList.contains("maplibregl-marker") && Number((next as HTMLElement).dataset.order) > entry.order))
+        next = next.nextElementSibling;
+      if (next) element.parentElement!.insertBefore(element, next);
+    }
+    function detach(entry: { marker: Marker; attached: boolean }) {
+      if (entry.attached) {
+        entry.marker.remove();
+        entry.attached = false;
+      }
+    }
+    function syncMarkers() {
+      for (const [id, entry] of markers) {
+        if (
+          nearIds.has(id) ||
+          lingering.has(id) ||
+          highlightedStations.has(id) ||
+          document.activeElement === entry.button
+        )
+          attach(entry);
+        else detach(entry);
+      }
+    }
     setMapState("loading");
     try {
       map = new maplibregl.Map({
@@ -269,10 +361,11 @@ export function PrismMap(props: Props) {
       for (const [id, entry] of markers) {
         const station = stations.get(id);
         if (!station?.coordinate || (scene?.kind !== "replay" && !matchesRisk(station.status, currentRef.current.riskFilter) && !highlightedStations.has(id))) {
-          entry.marker.remove();
+          detach(entry);
           markers.delete(id);
         }
       }
+      let order = 0;
       for (const station of stations.values()) {
         if (!station.coordinate) continue;
         if (scene?.kind !== "replay" && !matchesRisk(station.status, currentRef.current.riskFilter) && !highlightedStations.has(station.id)) continue;
@@ -291,13 +384,29 @@ export function PrismMap(props: Props) {
           };
           entry = {
             button,
-            marker: new maplibregl.Marker({ element: button })
-              .setLngLat(station.coordinate)
-              .addTo(map),
+            marker: new maplibregl.Marker({ element: button }).setLngLat(
+              station.coordinate,
+            ),
+            attached: false,
+            state: "",
+            lngLat: station.coordinate,
+            order: 0,
           };
           markers.set(station.id, entry);
         }
-        entry.marker.setLngLat(station.coordinate);
+        if (
+          entry.lngLat[0] !== station.coordinate[0] ||
+          entry.lngLat[1] !== station.coordinate[1]
+        ) {
+          entry.marker.setLngLat(station.coordinate);
+          entry.lngLat = station.coordinate;
+        }
+        entry.order = order++;
+        const pressed = station.id === selectedStationId;
+        const highlighted = highlightedStations.has(station.id);
+        const state = `${station.status}|${station.inventory}|${station.name}|${pressed}|${highlighted}`;
+        if (entry.state === state) continue;
+        entry.state = state;
         entry.button.style.setProperty(
           "--station-color",
           riskColor(station.status),
@@ -306,13 +415,8 @@ export function PrismMap(props: Props) {
           "aria-label",
           `${station.name}，${station.id}，${statusNames[station.status] ?? "状态未知"}${station.inventory === null ? "" : `，当前 ${station.inventory} 辆`}`,
         );
-        entry.button.setAttribute(
-          "aria-pressed",
-          String(station.id === selectedStationId),
-        );
-        entry.button.dataset.highlighted = String(
-          highlightedStations.has(station.id),
-        );
+        entry.button.setAttribute("aria-pressed", String(pressed));
+        entry.button.dataset.highlighted = String(highlighted);
         entry.button.dataset.inventory =
           station.inventory === null
             ? "unavailable"
@@ -434,22 +538,28 @@ export function PrismMap(props: Props) {
             ),
         );
       const { scene, riskFilter, flowFilter, selectedStationId } = currentRef.current;
+      let inventoryDots = 0;
       projectedStations = [...(scene?.stations.values() ?? [])].flatMap(
         (station) => {
           const anchor = station.coordinate;
           if (!anchor) return [];
           if (scene?.kind !== "replay" && !matchesRisk(station.status, riskFilter) && !highlightedStations.has(station.id)) return [];
+          inventoryDots += station.inventory ?? 0;
           const point = map.project(anchor);
+          // Cull by a margin wide enough for ripples, beam and tooltips.
+          if (
+            point.x < -160 ||
+            point.x > width + 160 ||
+            point.y < -160 ||
+            point.y > height + 220
+          ) {
+            if (!highlightedStations.has(station.id)) return [];
+          }
           const axes = groundAxes(anchor, RING_METERS);
           const east = map.project(axes.east),
             north = map.project(axes.north);
           // One offset per available bike; orbiting only rotates them.
-          const particles = particleOffsets(station.id, station.inventory ?? 0).map(
-            (offset: Point) => ({
-              radius: Math.hypot(offset.x, offset.y),
-              angle: Math.atan2(offset.y, offset.x),
-            }),
-          );
+          const particles = orbitLayout(station.id, station.inventory ?? 0);
           return [
             {
               station,
@@ -491,12 +601,9 @@ export function PrismMap(props: Props) {
           },
         ];
       });
-      canvas.dataset.inventoryDots = String(
-        projectedStations.reduce(
-          (sum, station) => sum + station.particles.length,
-          0,
-        ),
-      );
+      // Total over every drawable station, independent of on-screen culling.
+      canvas.dataset.inventoryDots = String(inventoryDots);
+      syncMarkers();
       canvas.dataset.routes = String(paths.length);
       canvas.dataset.scene = scene?.kind ?? "empty";
       dirty = false;
@@ -518,10 +625,20 @@ export function PrismMap(props: Props) {
       return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
     }
     function glowAt(p: Point, radius: number, color: string, alpha: number) {
+      glowXY(p.x, p.y, radius, color, alpha);
+    }
+    function glowXY(
+      x: number,
+      y: number,
+      radius: number,
+      color: string,
+      alpha: number,
+      g: CanvasRenderingContext2D = ctx,
+    ) {
       if (alpha <= 0.01) return;
-      const { sprite, radius: r } = glow(color, radius);
-      ctx.globalAlpha = Math.min(1, alpha);
-      ctx.drawImage(sprite, p.x - r, p.y - r, r * 2, r * 2);
+      const r = glowRadius(radius);
+      g.globalAlpha = alpha < 1 ? alpha : 1;
+      g.drawImage(glow(color, r), x - r, y - r, r * 2, r * 2);
     }
     /** Trace an arc lying on the ground plane around a projected station. */
     function groundArc(
@@ -530,17 +647,115 @@ export function PrismMap(props: Props) {
       start = 0,
       end = Math.PI * 2,
       anticlockwise = false,
+      g: CanvasRenderingContext2D = ctx,
     ) {
-      ctx.save();
-      ctx.transform(s.u.x, s.u.y, s.v.x, s.v.y, s.point.x, s.point.y);
-      ctx.beginPath();
-      ctx.arc(0, 0, k, start, end, anticlockwise);
-      ctx.restore();
+      // The path is built in the station's ground frame; restoring the plain
+      // device transform before stroking keeps line widths in screen pixels.
+      const r = pixelRatio;
+      g.setTransform(r * s.u.x, r * s.u.y, r * s.v.x, r * s.v.y, r * s.point.x, r * s.point.y);
+      g.beginPath();
+      g.arc(0, 0, k, start, end, anticlockwise);
+      g.setTransform(r, 0, 0, r, 0, 0);
     }
     function tracePath(path: (typeof paths)[number]) {
       ctx.beginPath();
       ctx.moveTo(path.a.x, path.a.y);
       ctx.bezierCurveTo(path.c.x, path.c.y, path.d.x, path.d.y, path.b.x, path.b.y);
+    }
+    /** Whether a point is inside a marker button (44px, border-radius 50%). */
+    function inMarker(p: Point, x: number, y: number) {
+      const dx = x - Math.round(p.x),
+        dy = y - Math.round(p.y);
+      return dx * dx + dy * dy <= 22 * 22;
+    }
+    /** Topmost drawn station whose marker button contains the point. */
+    function hitTest(x: number, y: number) {
+      for (let i = projectedStations.length - 1; i >= 0; i--)
+        if (inMarker(projectedStations[i].point, x, y))
+          return projectedStations[i].station.id;
+      return null;
+    }
+    /**
+     * Every station whose 44px button contains the pointer, plus the nearest
+     * others within 64px (capped) so an approaching pointer finds real buttons.
+     */
+    function stationsNear(x: number, y: number) {
+      const near = new Set<string>();
+      const around: { id: string; distance: number }[] = [];
+      for (const { station, point } of projectedStations) {
+        const dx = Math.abs(point.x - x),
+          dy = Math.abs(point.y - y);
+        if (inMarker(point, x, y)) near.add(station.id);
+        else if (dx <= 64 && dy <= 64) around.push({ id: station.id, distance: dx * dx + dy * dy });
+      }
+      around.sort((a, b) => a.distance - b.distance);
+      for (const { id } of around) {
+        if (near.size >= 24) break;
+        near.add(id);
+      }
+      return near;
+    }
+    function setNear(next: Set<string>) {
+      let changed = false;
+      for (const id of nearIds)
+        if (!next.has(id)) {
+          changed = true;
+          // Keep the DOM marker until its CSS hover-out transition has played.
+          lingering.add(id);
+          window.setTimeout(() => {
+            if (nearIds.has(id)) return;
+            lingering.delete(id);
+            if (disposed) return;
+            syncMarkers();
+            marksDirty = true;
+            schedule();
+          }, 260);
+        }
+      for (const id of next)
+        if (!nearIds.has(id)) {
+          changed = true;
+          lingering.delete(id);
+        }
+      nearIds = next;
+      if (!changed) return;
+      syncMarkers();
+      marksDirty = true;
+      schedule();
+    }
+    /** Idle diamonds on their own top canvas, above particles like the DOM markers were. */
+    function drawDiamonds(g: CanvasRenderingContext2D) {
+      g.clearRect(0, 0, width, height);
+      g.globalCompositeOperation = "source-over";
+      g.globalAlpha = 1;
+      g.lineWidth = 1;
+      g.strokeStyle = "rgba(255,255,255,0.85)";
+      // The DOM ::before is a 7px content box plus a 1px border (pseudo-elements
+      // are not covered by the global border-box rule): a 9px square rotated
+      // 45°, whose box starts at 18.5px inside the 44px button, i.e. centered
+      // 1px right and below the marker point.
+      const outer = 4.5 * Math.SQRT2,
+        inner = outer - Math.SQRT1_2;
+      for (const { station, point } of projectedStations) {
+        if (markers.get(station.id)?.attached) continue;
+        // maplibre places DOM markers on whole pixels; match it.
+        const x = Math.round(point.x) + 1,
+          y = Math.round(point.y) + 1;
+        g.fillStyle = riskColor(station.status);
+        g.beginPath();
+        g.moveTo(x, y - outer);
+        g.lineTo(x + outer, y);
+        g.lineTo(x, y + outer);
+        g.lineTo(x - outer, y);
+        g.closePath();
+        g.fill();
+        g.beginPath();
+        g.moveTo(x, y - inner);
+        g.lineTo(x + inner, y);
+        g.lineTo(x, y + inner);
+        g.lineTo(x - inner, y);
+        g.closePath();
+        g.stroke();
+      }
     }
     function schedule() {
       if (!frame && ready && !document.hidden && !disposed)
@@ -705,91 +920,135 @@ export function PrismMap(props: Props) {
         }
       }
     }
-    function drawStations(moving: boolean) {
+    const statusSolid = new Set(["HEALTHY", "SHORTAGE_RISK", "OVERFLOW_RISK", "NOT_APPLICABLE"]);
+    const statusFull = new Set(["OVERFLOW_RISK", "HIGH_INVENTORY"]);
+    /**
+     * Static station art, re-rendered only when the projection or data change:
+     * wash, rings and gauge (source-over) on one layer, core glows (additive)
+     * on another. Per-frame work is then two drawImage calls.
+     */
+    function renderStationLayers() {
+      ringCtx.clearRect(0, 0, width, height);
+      coreCtx.clearRect(0, 0, width, height);
+      coreCtx.globalCompositeOperation = "lighter";
+      const g = ringCtx;
       for (const s of projectedStations) {
         const { station, point } = s;
         const selected = highlightedStations.has(station.id);
         const color = riskColor(station.status);
-        const solid = [
-          "HEALTHY",
-          "SHORTAGE_RISK",
-          "OVERFLOW_RISK",
-          "NOT_APPLICABLE",
-        ].includes(station.status);
-        const full = ["OVERFLOW_RISK", "HIGH_INVENTORY"].includes(station.status);
-        ctx.globalCompositeOperation = "source-over";
-        // Ground wash, base ring and inventory gauge (bikes / capacity).
-        groundArc(s, selected ? 1.3 : 1.05);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = rgba(color, selected ? 0.1 : 0.05);
-        ctx.fill();
-        groundArc(s, selected ? 1.3 : 1);
-        ctx.setLineDash(solid ? [] : [4, 4]);
-        ctx.strokeStyle = rgba(color, selected ? 0.95 : 0.55);
-        ctx.lineWidth = selected ? 1.5 : 1;
-        ctx.stroke();
-        ctx.setLineDash([]);
-        if (full) {
-          groundArc(s, selected ? 1.5 : 1.22);
-          ctx.strokeStyle = rgba(color, 0.3);
-          ctx.lineWidth = 1;
-          ctx.stroke();
+        const solid = statusSolid.has(station.status);
+        groundArc(s, selected ? 1.3 : 1.05, 0, Math.PI * 2, false, g);
+        g.globalAlpha = 1;
+        g.fillStyle = rgba(color, selected ? 0.1 : 0.05);
+        g.fill();
+        groundArc(s, selected ? 1.3 : 1, 0, Math.PI * 2, false, g);
+        g.setLineDash(solid ? [] : [4, 4]);
+        g.strokeStyle = rgba(color, selected ? 0.95 : 0.55);
+        g.lineWidth = selected ? 1.5 : 1;
+        g.stroke();
+        g.setLineDash([]);
+        if (statusFull.has(station.status)) {
+          groundArc(s, selected ? 1.5 : 1.22, 0, Math.PI * 2, false, g);
+          g.strokeStyle = rgba(color, 0.3);
+          g.lineWidth = 1;
+          g.stroke();
         }
         if (s.gauge !== null && solid) {
           const k = selected ? 1.42 : 1.12;
-          groundArc(s, k);
-          ctx.strokeStyle = rgba(color, 0.12);
-          ctx.lineWidth = 2.2 * scale;
-          ctx.stroke();
+          groundArc(s, k, 0, Math.PI * 2, false, g);
+          g.strokeStyle = rgba(color, 0.12);
+          g.lineWidth = 2.2 * scale;
+          g.stroke();
           if (s.gauge > 0) {
-            groundArc(s, k, Math.PI / 2, Math.PI / 2 - s.gauge * Math.PI * 2, true);
-            ctx.lineCap = "round";
-            ctx.strokeStyle = rgba(color, selected ? 1 : 0.85);
-            ctx.stroke();
+            groundArc(s, k, Math.PI / 2, Math.PI / 2 - s.gauge * Math.PI * 2, true, g);
+            g.lineCap = "round";
+            g.strokeStyle = rgba(color, selected ? 1 : 0.85);
+            g.stroke();
           }
         }
-        ctx.globalCompositeOperation = "lighter";
-        if (selected) {
-          for (let i = 0; i < 2; i++) {
-            const phase = moving ? ((time / 2400 + i / 2) % 1) : 0.35 + i * 0.25;
-            groundArc(s, 1.3 + phase * 1.7);
-            ctx.globalAlpha = 1;
-            ctx.strokeStyle = rgba(color, (1 - phase) * 0.45);
-            ctx.lineWidth = 1.2;
-            ctx.stroke();
-          }
-          const top = { x: point.x, y: point.y - 90 * scale };
-          const beam = ctx.createLinearGradient(point.x, point.y, top.x, top.y);
-          beam.addColorStop(0, rgba(color, 0.85));
-          beam.addColorStop(1, rgba(color, 0));
-          ctx.strokeStyle = beam;
-          ctx.lineCap = "round";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(point.x, point.y);
-          ctx.lineTo(top.x, top.y);
-          ctx.stroke();
-          ctx.lineWidth = 8;
-          ctx.globalAlpha = 0.25;
+        glowXY(point.x, point.y, (selected ? 14 : 9) * scale, color, selected ? 0.9 : 0.5, coreCtx);
+      }
+    }
+    /** Animated ripples and beam for highlighted stations only. */
+    function drawSelection(moving: boolean) {
+      ctx.globalCompositeOperation = "lighter";
+      for (const s of projectedStations) {
+        if (!highlightedStations.has(s.station.id)) continue;
+        const { point } = s;
+        const color = riskColor(s.station.status);
+        for (let i = 0; i < 2; i++) {
+          const phase = moving ? ((time / 2400 + i / 2) % 1) : 0.35 + i * 0.25;
+          groundArc(s, 1.3 + phase * 1.7);
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = rgba(color, (1 - phase) * 0.45);
+          ctx.lineWidth = 1.2;
           ctx.stroke();
         }
-        glowAt(point, (selected ? 14 : 9) * scale, color, selected ? 0.9 : 0.5);
-        // Inventory cluster: one sprite per bike, slowly orbiting the dock.
+        const top = { x: point.x, y: point.y - 90 * scale };
+        const beam = ctx.createLinearGradient(point.x, point.y, top.x, top.y);
+        beam.addColorStop(0, rgba(color, 0.85));
+        beam.addColorStop(1, rgba(color, 0));
+        ctx.strokeStyle = beam;
+        ctx.lineCap = "round";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y);
+        ctx.lineTo(top.x, top.y);
+        ctx.stroke();
+        ctx.lineWidth = 8;
+        ctx.globalAlpha = 0.25;
+        ctx.stroke();
+      }
+    }
+    /** Orbiting inventory particles; one per available bike. */
+    function particleSize() {
+      return Math.min(1.4, scale + 0.15);
+    }
+    function buildParticles() {
+      let count = 0;
+      for (const s of projectedStations) count += s.particles.length;
+      if (particleData.length < count * PARTICLE_STRIDE)
+        particleData = new Float32Array(Math.ceil(count * 1.25) * PARTICLE_STRIDE);
+      let o = 0;
+      for (const s of projectedStations) {
+        if (!s.particles.length) continue;
+        const ex = (s.u.x * PARTICLE_METERS_X) / RING_METERS,
+          ey = (s.u.y * PARTICLE_METERS_X) / RING_METERS,
+          nx = (s.v.x * PARTICLE_METERS_Y) / RING_METERS,
+          ny = (s.v.y * PARTICLE_METERS_Y) / RING_METERS;
         for (const particle of s.particles) {
-          const angle = particle.angle + time * orbitSpeed(particle.radius);
-          const east = (particle.radius * Math.cos(angle) * PARTICLE_METERS_X) / RING_METERS;
-          const north = (particle.radius * Math.sin(angle) * PARTICLE_METERS_Y) / RING_METERS;
-          const near = 0.5 - Math.sin(angle) * 0.5;
-          glowAt(
-            {
-              x: point.x + east * s.u.x + north * s.v.x,
-              y: point.y + east * s.u.y + north * s.v.y,
-            },
-            (4.2 + near * 1.6) * Math.min(1.4, scale + 0.15),
-            "#f2edf8",
-            0.62 + near * 0.38,
-          );
+          particleData[o++] = s.point.x;
+          particleData[o++] = s.point.y;
+          particleData[o++] = ex;
+          particleData[o++] = ey;
+          particleData[o++] = nx;
+          particleData[o++] = ny;
+          particleData[o++] = particle.radius;
+          particleData[o++] = particle.angle;
+          particleData[o++] = particle.speed;
         }
+      }
+      particleCount = count;
+      bikes?.setParticles(particleData, count);
+    }
+    /** Canvas fallback when WebGL2 is unavailable (identical formula). */
+    function drawParticles2D() {
+      ctx.globalCompositeOperation = "lighter";
+      const size = particleSize();
+      for (let i = 0, o = 0; i < particleCount; i++, o += PARTICLE_STRIDE) {
+        const radius = particleData[o + 6];
+        const angle = particleData[o + 7] + time * particleData[o + 8];
+        const cos = radius * Math.cos(angle);
+        const sin = Math.sin(angle);
+        const north = radius * sin;
+        const near = 0.5 - sin * 0.5;
+        glowXY(
+          particleData[o] + cos * particleData[o + 2] + north * particleData[o + 4],
+          particleData[o + 1] + cos * particleData[o + 3] + north * particleData[o + 5],
+          (4.2 + near * 1.6) * size,
+          "#f2edf8",
+          0.62 + near * 0.38,
+        );
       }
     }
     function draw(now: number) {
@@ -802,16 +1061,32 @@ export function PrismMap(props: Props) {
         selectedSuggestionId,
       } = currentRef.current;
       if (moving && lastPaint) time += Math.min(now - lastPaint, 80);
-      if (now - lastPaint < 32 && !dirty) {
+      if (now - lastPaint < 32 && !dirty && !marksDirty) {
         if (moving) schedule();
         return;
       }
       lastPaint = now;
-      if (dirty) project();
+      if (dirty) {
+        project();
+        renderStationLayers();
+        buildParticles();
+        marksDirty = true;
+      }
       ctx.clearRect(0, 0, width, height);
       drawCity(amount);
       drawRoutes(scene?.kind, selectedSuggestionId);
-      drawStations(moving);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+      ctx.drawImage(ringLayer, 0, 0, width, height);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.drawImage(coreLayer, 0, 0, width, height);
+      drawSelection(moving);
+      if (bikes) bikes.draw(time, particleSize());
+      else drawParticles2D();
+      if (marksDirty) {
+        drawDiamonds(markCtx);
+        marksDirty = false;
+      }
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "source-over";
       canvas.dataset.motion = String(moving);
@@ -819,9 +1094,22 @@ export function PrismMap(props: Props) {
       if (moving) schedule();
     }
     const resize = () => {
+      hostRect = host.getBoundingClientRect();
       width = host.clientWidth;
       height = host.clientHeight;
       const ratio = Math.min(devicePixelRatio, 2);
+      pixelRatio = ratio;
+      for (const [layer, layerCtx] of [
+        [ringLayer, ringCtx],
+        [coreLayer, coreCtx],
+        [markCtx.canvas, markCtx],
+      ] as const) {
+        layer.width = Math.round(width * ratio);
+        layer.height = Math.round(height * ratio);
+        layerCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      }
+      bikes?.resize(width, height, ratio);
+      marksDirty = true;
       canvas.width = Math.round(width * ratio);
       canvas.height = Math.round(height * ratio);
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -856,7 +1144,19 @@ export function PrismMap(props: Props) {
     });
     map.on("idle", collectGeometry);
     map.on("move", moved);
-    map.on("click", () => currentRef.current.onBackground());
+    // Clicks on a painted diamond (e.g. a tap before any hover) select the station.
+    map.on("click", (event) => {
+      const id = hitTest(event.point.x, event.point.y);
+      if (id) currentRef.current.onSelectStation(id);
+      else currentRef.current.onBackground();
+    });
+    const pointerMove = (event: PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      setNear(stationsNear(event.clientX - hostRect.left, event.clientY - hostRect.top));
+    };
+    const pointerLeave = () => setNear(new Set());
+    host.addEventListener("pointermove", pointerMove);
+    host.addEventListener("pointerleave", pointerLeave);
     map.on("error", fail);
     resize();
     return () => {
@@ -864,9 +1164,13 @@ export function PrismMap(props: Props) {
       window.clearTimeout(timeout);
       cancelAnimationFrame(frame);
       observer.disconnect();
+      bikes?.dispose();
+      bikeCanvas.removeEventListener("webglcontextlost", bikesLost);
+      host.removeEventListener("pointermove", pointerMove);
+      host.removeEventListener("pointerleave", pointerLeave);
       document.removeEventListener("visibilitychange", visibility);
       map.getCanvas().removeEventListener("webglcontextlost", contextLost);
-      for (const entry of markers.values()) entry.marker.remove();
+      for (const entry of markers.values()) detach(entry);
       map.remove();
       mapRef.current = null;
       refreshRef.current = () => {};
@@ -911,6 +1215,8 @@ export function PrismMap(props: Props) {
       </div>
       <div className="map-atmosphere" aria-hidden="true" />
       <canvas ref={canvasRef} className="city-particles" aria-hidden="true" />
+      <canvas ref={bikeCanvasRef} className="city-particles" aria-hidden="true" />
+      <canvas ref={markCanvasRef} className="city-particles" aria-hidden="true" />
       <div className="map-dock" role="toolbar" aria-label="地图视角与光效">
         <button
           className="dock-button"
