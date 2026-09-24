@@ -171,3 +171,20 @@ test("live refreshes do not drag the station list page via hover or default rows
   assert.match(app, /searchIdentityRef\.current = followSearchRef\.current \? station\.station_id : null/);
   assert.match(app, /followSearchRef\.current = true;\s*setSearchIndex\(\(index\) =>/);
 });
+
+test("map performance paths keep the canvas visuals in lockstep", () => {
+  const map = readFileSync(new URL("./PrismMap.tsx", import.meta.url), "utf8");
+  const gpu = readFileSync(new URL("./bike-layer.ts", import.meta.url), "utf8");
+  // Idle markers are painted; DOM buttons are attached on demand, not on creation.
+  assert.doesNotMatch(map, /new maplibregl\.Marker\(\{ element: button \}\)[\s\S]{0,80}\.addTo\(map\)/);
+  assert.match(map, /function drawDiamonds\(g: CanvasRenderingContext2D\)/);
+  assert.match(map, /return dx \* dx \+ dy \* dy <= 22 \* 22;/);
+  // GPU particles and the canvas fallback use the same size/alpha/orbit formula.
+  for (const source of [map, gpu]) {
+    assert.match(source, /4\.2 \+ near \* 1\.6/);
+    assert.match(source, /0\.62 \+ near \* 0\.38/);
+  }
+  assert.match(gpu, /blendFunc\(gl\.ONE, gl\.ONE\)/);
+  // Total inventory dots stay independent of on-screen culling.
+  assert.match(map, /canvas\.dataset\.inventoryDots = String\(inventoryDots\)/);
+});

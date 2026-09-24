@@ -54,11 +54,23 @@ export function sameReplaySelection(map, selection) {
   );
 }
 
+// Timestamps repeat across thousands of stations and every re-sort; parse once.
+const parsedTimes = new Map();
+function parseTime(value) {
+  let time = parsedTimes.get(value);
+  if (time === undefined) {
+    if (parsedTimes.size > 50000) parsedTimes.clear();
+    time = Date.parse(value);
+    parsedTimes.set(value, time);
+  }
+  return time;
+}
+
 export function isExpiredAt(map, expiresAt, elapsedMs = 0) {
   if (!map || !expiresAt) return false;
   const reference =
-    Date.parse(map.as_of_utc) + (map.clock_mode === "recorded" ? 0 : Math.max(0, elapsedMs));
-  return reference >= Date.parse(expiresAt);
+    parseTime(map.as_of_utc) + (map.clock_mode === "recorded" ? 0 : Math.max(0, elapsedMs));
+  return reference >= parseTime(expiresAt);
 }
 
 export function isMapExpired(map, elapsedMs = 0) {

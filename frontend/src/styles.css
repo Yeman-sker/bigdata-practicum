@@ -1720,12 +1720,21 @@ input {
   font-weight: 500;
   white-space: nowrap;
   transform: translate(-50%, 4px);
-  transition: opacity var(--dur-fast) ease, transform var(--dur-base) var(--ease-out);
+  /* visibility (switched after the fade) keeps idle tooltips out of paint and
+     compositing, so thousands of markers do not each carry a blur layer. */
+  visibility: hidden;
+  transition: opacity var(--dur-fast) ease, transform var(--dur-base) var(--ease-out),
+    visibility 0s linear var(--dur-base);
 }
 .city-marker:hover span,
 .city-marker:focus-visible span,
 .city-marker[aria-pressed="true"] span {
   transform: translate(-50%, 0);
+  visibility: visible;
+  transition-delay: 0s;
+}
+.city-marker {
+  contain: layout style;
 }
 
 .pane-content,

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   PULSES_PER_ROUTE,
   gaugeRatio,
+  glowRadius,
+  rgba,
   groundAxes,
   placeLabel,
   scanIntensity,
@@ -45,4 +47,12 @@ test("route labels are nudged apart instead of overlapping", () => {
   const second = placeLabel({ x: 10, y: 100, w: 80, h: 22 }, placed);
   assert.deepEqual(first, { x: 0, y: 100, w: 80, h: 22 });
   assert.ok(second.y + second.h <= first.y || second.y >= first.y + first.h);
+});
+
+test("glow buckets and memoised colors are stable for the frame loop", () => {
+  assert.equal(glowRadius(0.2), 1);
+  assert.equal(glowRadius(4.2), 4);
+  assert.equal(glowRadius(4.26), 4.5);
+  assert.equal(rgba("#f2edf8", 0.5), "rgba(242,237,248,0.5)");
+  assert.equal(rgba("#f2edf8", 0.5), rgba("#f2edf8", 0.5));
 });
