@@ -140,3 +140,27 @@ test("availability selections and replay readiness separate displayed time from 
   assert.equal(nextAvailableHour(dates[0].hours, 23), null);
   assert.deepEqual([0.5, 1, 2, 5].map(playbackDelay), [4000, 2000, 1000, 400]);
 });
+
+test("map-first panel morph preserves business controls and accessible state", () => {
+  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+  const map = readFileSync(new URL("./PrismMap.tsx", import.meta.url), "utf8");
+  assert.match(app, /aria-expanded=\{panelOpen\}/);
+  assert.match(app, /aria-controls="operations-panel-body"/);
+  assert.match(app, /className="pane-toggle"/);
+  assert.match(app, /className="toggle-mark"/);
+  assert.match(app, /inert=\{!panelOpen\}/);
+  assert.match(app, /panelOpen=\{panelOpen\}/);
+  assert.match(app, /className="legend-detail"/);
+  assert.match(app, /aria-label="回放倍速"/);
+  assert.match(app, /const usesFixture = fixtureParameter !== null;/);
+  assert.doesNotMatch(app, /import\.meta\.env\.DEV && !pageQuery\.has\("api"\)/);
+  assert.match(css, /\.app\.panel-collapsed \.work-pane/);
+  assert.match(css, /\.pane-toggle \.toggle-mark/);
+  assert.match(css, /\.app\.panel-collapsed \.pane-toggle \{[^}]*width: 44px/);
+  assert.match(css, /\.operations-panel-body/);
+  assert.match(map, /function rightPadding\(\)/);
+  assert.match(map, /useEffect\(\(\) => reframeRef\.current\(\), \[props\.panelOpen\]\)/);
+  assert.doesNotMatch(map, /props\.scene,\s*props\.panelOpen/);
+  assert.doesNotMatch(map, /width > 720 \? 380 : 40/);
+});

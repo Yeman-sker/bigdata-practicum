@@ -855,10 +855,10 @@ input {
   max-width: calc(100% - 405px);
   padding: 12px 14px;
   border-left: 1px solid #e5a9ff66;
-  background: linear-gradient(90deg, rgba(8, 8, 13, 0.9), rgba(8, 8, 13, 0.2));
+  background: rgba(8, 8, 13, 0.78);
   font-size: 11px;
   line-height: 1.5;
-  pointer-events: none;
+  pointer-events: auto;
 }
 .map-legend strong {
   font-size: 12px;
@@ -1029,11 +1029,102 @@ input {
   text-align: left;
 }
 
-/* Keep operating controls fixed while list/detail content scrolls independently. */
-.work-pane { display: flex; flex-direction: column; overflow: hidden; }
-.work-pane > :not(.pane-content) { flex-shrink: 0; }
-.pane-content { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+/* All four panel edges converge on the circular control without moving its centre. */
+.work-pane {
+  bottom: auto;
+  height: calc(100% - 48px);
+  overflow: hidden;
+  transition: top .42s cubic-bezier(.22,1,.36,1), right .42s cubic-bezier(.22,1,.36,1),
+    width .42s cubic-bezier(.22,1,.36,1), height .42s cubic-bezier(.22,1,.36,1),
+    border-radius .42s cubic-bezier(.22,1,.36,1);
+}
+.app.panel-collapsed .work-pane {
+  top: 42px;
+  right: 42px;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border-radius: 50%;
+}
+.pane-toggle {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 28px;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  transition: top .42s cubic-bezier(.22,1,.36,1), right .42s cubic-bezier(.22,1,.36,1),
+    width .42s cubic-bezier(.22,1,.36,1), height .42s cubic-bezier(.22,1,.36,1), background-color .16s ease;
+}
+.app.panel-collapsed .pane-toggle { top: 3px; right: 3px; width: 44px; height: 44px; min-height: 44px; }
+.pane-toggle:focus-visible { outline-offset: -4px; }
+.pane-toggle:active { background: #e5a9ff28; }
+.pane-toggle .toggle-mark {
+  position: relative;
+  display: block;
+  width: 24px;
+  height: 24px;
+  transform: scale(.7);
+  transition: transform .42s cubic-bezier(.22,1,.36,1);
+}
+.app.panel-collapsed .toggle-mark { transform: scale(1); }
+.toggle-mark i {
+  position: absolute;
+  display: block;
+  height: 1.5px;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: left .24s cubic-bezier(.2,.8,.2,1), top .24s cubic-bezier(.2,.8,.2,1),
+    width .24s cubic-bezier(.2,.8,.2,1), transform .24s cubic-bezier(.2,.8,.2,1), opacity .12s ease;
+}
+.toggle-mark .upper { left: 2px; top: 11px; width: 20px; transform: rotate(45deg); }
+.toggle-mark .lower { left: 2px; top: 11px; width: 20px; transform: rotate(-45deg); }
+.toggle-mark .shaft { left: 3px; top: 11px; width: 18px; opacity: 0; transform: scaleX(.2); transform-origin: right center; }
+.app.panel-collapsed .toggle-mark .upper { left: 13px; top: 8px; width: 9px; }
+.app.panel-collapsed .toggle-mark .lower { left: 13px; top: 14px; width: 9px; }
+.app.panel-collapsed .toggle-mark .shaft { opacity: 1; transform: scaleX(1); }
+.operations-panel-body {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  bottom: 16px;
+  width: 288px;
+  min-height: 0;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity .18s ease .16s, visibility 0s;
+}
+.app.panel-collapsed .operations-panel-body {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .07s ease, visibility 0s linear .08s;
+}
+.operations-panel-body > :not(.pane-content) { flex-shrink: 0; }
+.operations-panel-body > .instrument-heading { padding-right: 48px; }
+.pane-content { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .station-list { max-height: 42vh; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.pane-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pane-heading h2 { font-size: 13px; margin: 0; font-weight: 500; letter-spacing: .08em; }
+.pane-heading > span { font-size: 11px; color: var(--muted); }
+.mode-switch { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.mode-switch button { min-width: 0; padding: 7px 2px; transition: background .16s, color .16s, border-color .16s, transform .16s; }
+.mode-switch button:hover, .risk-filters button:hover { border-color: var(--accent); }
+.mode-switch button:active, .risk-filters button:active { transform: scale(.95); }
+.app.panel-collapsed .app-header { max-width: calc(100% - 160px); }
+.app.panel-collapsed .map-legend { max-width: calc(100% - 150px); }
+.legend-detail { font-size: 10px; color: var(--muted); }
+.legend-detail > span, .legend-detail > small { display: block; line-height: 1.5; margin-top: 4px; }
+.legend-detail summary { cursor: pointer; width: max-content; }
+.speed-button { background: #17151f; color: var(--text); border: 1px solid var(--border); border-radius: 3px; }
 .search-field { margin: 4px 0 6px; }
 .data-status-button { margin-bottom: 6px; }
 .workspace-nav { margin: 8px 0; }
@@ -1053,7 +1144,15 @@ input {
 .flow-controls select { width: auto; flex: 1; min-width: 0; }
 
 @media (max-width: 640px) {
-  .work-pane { height: 700px; max-height: 95dvh; }
+  .work-pane, .app.panel-collapsed .work-pane {
+    position: relative; inset: auto; width: calc(100% - 24px); height: 700px;
+    max-height: 95dvh; margin: 0 12px 12px; padding: 16px; border-radius: 4px;
+    transition: none;
+  }
+  .pane-toggle { display: none; }
+  .operations-panel-body, .app.panel-collapsed .operations-panel-body {
+    position: static; width: 100%; height: 100%; opacity: 1; visibility: visible; pointer-events: auto;
+  }
   .station-list { max-height: 40vh; }
 
 }
