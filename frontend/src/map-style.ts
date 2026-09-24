@@ -14,8 +14,8 @@ export const cityStyle: StyleSpecification = {
   light: {
     anchor: "viewport",
     color: "#ffffff",
-    intensity: 0.48,
-    position: [1.5, 160, 45],
+    intensity: 0.55,
+    position: [1.35, 200, 38],
   },
   layers: [
     {
@@ -82,10 +82,22 @@ export const cityStyle: StyleSpecification = {
       minzoom: 13,
       filter: ["!=", ["get", "hide_3d"], true],
       paint: {
-        "fill-extrusion-color": "#2d293d",
+        // Taller towers drift from the building violet toward muted silver.
+        "fill-extrusion-color": [
+          "interpolate",
+          ["linear"],
+          ["coalesce", ["get", "render_height"], 8],
+          0,
+          "#2d293d",
+          120,
+          "#3b3550",
+          320,
+          "#5a5468",
+        ],
         "fill-extrusion-height": ["coalesce", ["get", "render_height"], 8],
         "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
-        "fill-extrusion-opacity": 0.48,
+        "fill-extrusion-opacity": 0.56,
+        "fill-extrusion-vertical-gradient": true,
       },
     },
     {

@@ -16,8 +16,8 @@ test("restored Prism visual defaults keep original camera, light and full statio
   assert.match(source, /pitch: 58/);
   assert.match(source, /const \[density, setDensity\] = useState\(1\)/);
   assert.match(source, /\(\) => !matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches/);
-  assert.match(source, /0\.08 \+ scan \* 0\.55/);
-  assert.match(source, /for \(let i = 0; i < 4; i\+\+\)/);
+  assert.match(source, /scanIntensity\(p\.sweep, time\)/);
+  assert.match(source, /for \(let i = 0; i < PULSES_PER_ROUTE; i\+\+\)/);
   assert.doesNotMatch(source, /detailVisible|station-clusters|stationMapStyle|map-level|<details/);
   assert.match(source, /if \(!fitted &&/); // Preserve refresh camera stability.
   const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");

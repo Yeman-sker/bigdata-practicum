@@ -12,6 +12,7 @@ export type SceneStation = {
   coordinate: [number, number] | null;
   status: string;
   inventory: number | null;
+  capacity: number | null;
 };
 export type SceneRoute = {
   id: string;
@@ -31,7 +32,10 @@ export type Scene =
       kind: "replay";
       stations: Map<
         string,
-        Omit<SceneStation, "inventory"> & { inventory: null }
+        Omit<SceneStation, "inventory" | "capacity"> & {
+          inventory: null;
+          capacity: null;
+        }
       >;
       flows: SceneRoute[];
     };
@@ -67,6 +71,7 @@ export function buildScene(
         response.mode === "live" && canDrawInventory(station, expired)
           ? station.num_bikes_available
           : null,
+      capacity: response.mode === "live" ? station.capacity : null,
     });
   }
   if (response.mode === "replay")
@@ -75,7 +80,7 @@ export function buildScene(
       stations: new Map(
         [...stations].map(([id, station]) => [
           id,
-          { ...station, inventory: null } as const,
+          { ...station, inventory: null, capacity: null } as const,
         ]),
       ),
       flows: response.flows
