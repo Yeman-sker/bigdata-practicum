@@ -390,7 +390,7 @@ input {
 }
 .mode-switch button {
   flex: 1;
-  min-height: 36px;
+  min-height: 30px;
   padding: 4px 8px;
   font-size: 12px;
 }
@@ -445,14 +445,14 @@ input {
   background: var(--shortage);
 }
 .status-strip button {
-  min-height: 32px;
+  min-height: 26px;
   padding: 2px 10px;
   margin-left: auto;
 }
 .data-status-button {
   display: block;
   width: 100%;
-  min-height: 32px;
+  min-height: 26px;
   padding: 4px 0;
   text-align: left;
   font-size: 11px;
@@ -480,6 +480,8 @@ input {
 }
 .quiet-button,
 .primary-button {
+  min-height: 28px;
+  padding: 4px 10px;
   border-color: var(--border);
   font-size: 12px;
 }
@@ -493,7 +495,7 @@ input {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 16px;
+  margin-top: 10px;
 }
 .eyebrow {
   display: none;
@@ -531,14 +533,14 @@ input {
   width: 100%;
   background: transparent;
   border: 0;
-  min-height: 40px;
+  min-height: 32px;
   font-size: 12px;
 }
 .search-field button {
-  min-width: 32px;
-  min-height: 32px;
+  min-width: 26px;
+  min-height: 26px;
   padding: 0;
-  font-size: 18px;
+  font-size: 16px;
 }
 .station-row {
   display: flex;
@@ -557,14 +559,14 @@ input {
   min-width: 0;
   flex: 1;
   display: grid;
-  gap: 5px;
+  gap: 2px;
   font-size: 11px;
 }
 .station-row-name strong {
   font-size: 12px;
   font-weight: 500;
   overflow-wrap: anywhere;
-  line-height: 1.55;
+  line-height: 1.35;
 }
 .station-row-name small,
 .station-row-value small {
@@ -574,7 +576,7 @@ input {
 .station-row-value {
   display: grid;
   text-align: right;
-  gap: 5px;
+  gap: 1px;
   flex-shrink: 0;
 }
 .station-row-value strong {
@@ -623,7 +625,7 @@ input {
   padding: 12px 0;
 }
 .station-detail header {
-  margin: 16px 0;
+  margin: 10px 0;
 }
 .station-detail h2 {
   font-size: 16px;
@@ -658,7 +660,7 @@ input {
   gap: 8px;
   padding: 14px 0;
   border-block: 1px solid var(--border);
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 .station-metrics > span {
   display: grid;
@@ -726,7 +728,7 @@ input {
 .history-heading {
   font-size: 13px;
   font-weight: 500;
-  margin: 20px 0 12px;
+  margin: 14px 0 8px;
 }
 .chart-legend {
   display: flex;
@@ -846,7 +848,7 @@ input {
   display: block;
   font-size: 11px;
   color: var(--muted);
-  margin-top: 6px;
+  margin-top: 2px;
 }
 .route-rank {
   color: var(--accent);
@@ -867,7 +869,7 @@ input {
 }
 .replay-controller {
   display: grid;
-  grid-template-columns: 1fr 44px 54px;
+  grid-template-columns: 1fr 32px 54px;
   gap: 8px;
   align-items: center;
   margin: 4px 0 10px;
@@ -886,7 +888,7 @@ input {
 }
 .play-button,
 .speed-button {
-  min-height: 38px;
+  min-height: 30px;
   padding: 4px;
   border-color: var(--border);
 }
@@ -905,7 +907,7 @@ input {
 }
 .timeline-control input {
   width: 100%;
-  min-height: 30px;
+  min-height: 24px;
   margin: 0;
 }
 .timeline-labels {
@@ -1206,7 +1208,7 @@ input {
 .pane-heading h2 { font-size: 13px; margin: 0; font-weight: 500; letter-spacing: .08em; }
 .pane-heading > span { font-size: 11px; color: var(--muted); }
 .mode-switch { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
-.mode-switch button { min-width: 0; padding: 7px 2px; transition: background .16s, color .16s, border-color .16s, transform .16s; }
+.mode-switch button { min-width: 0; padding: 4px 2px; transition: background .16s, color .16s, border-color .16s, transform .16s; }
 .mode-switch button:hover, .risk-filters button:hover { border-color: var(--accent); }
 .mode-switch button:active, .risk-filters button:active { transform: scale(.95); }
 .app.panel-collapsed .app-header { max-width: calc(100% - 160px); }
@@ -1221,12 +1223,12 @@ input {
 .instrument-heading { padding-bottom: 8px; }
 .keyboard-note { margin: 8px 0; }
 .risk-filters { display: flex; gap: 4px; margin-bottom: 8px; }
-.risk-filters button { flex: 1; min-height: 36px; padding: 4px; font-size: 11px; border-color: var(--border); }
+.risk-filters button { flex: 1; min-height: 28px; padding: 4px; font-size: 11px; border-color: var(--border); }
 .risk-filters button[aria-pressed="true"] { color: var(--accent); background: #e5a9ff14; border-color: var(--accent); }
 .list-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: 11px; color: var(--muted); }
-.list-pagination span { width: 100%; margin-top: 8px; }
-.list-pagination button { padding: 4px 8px; min-height: 36px; }
-.date-control select, .flow-controls select { width: 100%; min-height: 38px; border: 1px solid var(--border); background: #17151f; border-radius: 3px; padding: 4px; }
+.list-pagination span { width: 100%; margin-top: 4px; }
+.list-pagination button { padding: 2px 8px; min-height: 28px; }
+.date-control select, .flow-controls select { width: 100%; min-height: 30px; border: 1px solid var(--border); background: #17151f; border-radius: 3px; padding: 4px; }
 .replay-times { grid-column: 1 / -1; display: grid; gap: 4px; font-size: 11px; color: var(--muted); line-height: 1.5; }
 .timeline-control { grid-column: 1 / -1; }
 .flow-controls { display: grid; gap: 4px; font-size: 11px; margin-bottom: 8px; color: var(--muted); }
@@ -1291,7 +1293,7 @@ input {
   border-bottom-color: var(--hairline);
 }
 .instrument-heading h1 {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -1345,8 +1347,8 @@ input {
 .risk-filters button {
   border-color: transparent;
   border-radius: calc(var(--radius-md) - 3px);
-  min-height: 34px;
-  font-size: 12px;
+  min-height: 28px;
+  font-size: 11px;
 }
 .risk-filters button[aria-pressed="true"] .switch-pill {
   border-radius: calc(var(--radius-md) - 3px);
@@ -1375,10 +1377,11 @@ input {
 
 /* Station rows: soft cards with a hover glow and a staggered entrance. */
 .station-row {
+  min-height: 0;
   border-bottom: 0;
-  border-radius: var(--radius-md);
-  padding: 12px 10px;
-  margin-bottom: 2px;
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  margin-bottom: 1px;
   animation: row-in 0.32s var(--ease-out) both;
   animation-delay: calc(var(--i, 0) * 22ms);
 }
@@ -1392,7 +1395,7 @@ input {
   font-variant-numeric: tabular-nums;
 }
 .station-row-value strong {
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 500;
 }
 .station-browser:not([hidden]) {
@@ -1407,7 +1410,7 @@ input {
   gap: 4px 10px;
 }
 .station-detail h2 {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.35;
   margin: 0;
@@ -1438,8 +1441,8 @@ input {
   border: 0;
 }
 .station-metrics > span {
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 3px;
+  padding: 7px 9px;
   border-radius: var(--radius-md);
   background: var(--surface-3);
   border: 1px solid var(--hairline);
@@ -1451,7 +1454,7 @@ input {
   display: flex;
   align-items: baseline;
   gap: 4px;
-  font-size: 28px;
+  font-size: 21px;
   font-weight: 500;
   line-height: 1.1;
   letter-spacing: -0.02em;
@@ -1486,13 +1489,13 @@ input {
 }
 .detail-facts > div {
   display: grid;
-  gap: 3px;
-  padding: 8px 10px;
+  gap: 1px;
+  padding: 5px 8px;
   background: rgba(20, 18, 29, 0.96);
 }
 .detail-facts dd {
   text-align: left;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
 }
 
@@ -1524,7 +1527,7 @@ input {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 10px;
+  padding: 9px 8px;
 }
 .skeleton-row span {
   flex: 1;
@@ -1554,11 +1557,11 @@ input {
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   background: var(--surface-3);
-  padding: 10px;
+  padding: 8px;
 }
 .play-button {
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: 0;
   color: #17151f;
@@ -1580,7 +1583,7 @@ input {
 .timeline-control input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  height: 30px;
+  height: 24px;
   background: transparent;
 }
 .timeline-control input[type="range"]::-webkit-slider-runnable-track {
@@ -1629,9 +1632,10 @@ input {
 
 /* Dispatch list. */
 .dispatch-row {
+  min-height: 0;
   border-top: 0;
-  border-radius: var(--radius-md);
-  padding: 12px 10px;
+  border-radius: var(--radius-sm);
+  padding: 8px;
   margin-bottom: 2px;
 }
 .dispatch-row:hover {
@@ -1717,4 +1721,9 @@ input {
 .pane-content,
 .station-list {
   scrollbar-color: #53465f transparent;
+}
+
+/* Compact panel copy: default paragraph margins waste vertical space. */
+.reason-copy p {
+  margin: 2px 0;
 }
