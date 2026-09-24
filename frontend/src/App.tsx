@@ -618,6 +618,8 @@ export default function App() {
   const [previewHour, setPreviewHour] = useState<number | null>(null);
   const draggingHourRef = useRef(false);
   const searchIdentityRef = useRef<string | null>(null);
+  // Only a keyboard-chosen row is followed across refreshes; otherwise the page stays put.
+  const followSearchRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const savedScrollRef = useRef({ list: 0, content: 0 });
@@ -1035,7 +1037,7 @@ export default function App() {
       ),
     [clockElapsedMs, expired, map, mode, searchResults, view],
   );
-  useEffect(() => { searchIdentityRef.current = null; setSearchIndex(0); }, [query, riskFilter]);
+  useEffect(() => { searchIdentityRef.current = null; followSearchRef.current = false; setSearchIndex(0); }, [query, riskFilter]);
   useEffect(() => {
     const index = searchResults.findIndex((station) => station.station_id === searchIdentityRef.current);
     setSearchIndex((current) => index >= 0 ? index : Math.min(current, Math.max(0, searchResults.length - 1)));
@@ -1044,7 +1046,7 @@ export default function App() {
   useEffect(() => {
     const station = searchResults[searchIndex];
     if (station) {
-      searchIdentityRef.current = station.station_id;
+      searchIdentityRef.current = followSearchRef.current ? station.station_id : null;
       if (document.activeElement === searchInputRef.current)
         document.getElementById(`station-option-${stableHash(station.station_id)}`)?.scrollIntoView({ block: "nearest" });
     }
@@ -1525,6 +1527,7 @@ export default function App() {
                   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                     event.preventDefault();
                     setSelectedStationId(null);
+                    followSearchRef.current = true;
                     setSearchIndex((index) =>
                       Math.max(
                         0,
@@ -1773,7 +1776,6 @@ export default function App() {
                     className="station-row"
                     style={{ "--i": Math.min(offset, 12) } as CSSProperties}
                     key={station.station_id}
-                    onMouseEnter={() => setSearchIndex(index)}
                     onClick={() => openStation(station.station_id)}
                   >
                     <span
@@ -1822,8 +1824,8 @@ export default function App() {
             </div>
             <div className="list-pagination" aria-label="站点列表分页">
               <span>{searchResults.length ? pageStart + 1 : 0}–{Math.min(pageStart + 50, searchResults.length)} / {searchResults.length} 个匹配站点</span>
-              <button disabled={pageStart === 0} onClick={() => setSearchIndex(Math.max(0, pageStart - 50))}>上一页</button>
-              <button disabled={pageStart + 50 >= searchResults.length} onClick={() => setSearchIndex(pageStart + 50)}>下一页</button>
+              <button disabled={pageStart === 0} onClick={() => { followSearchRef.current = false; setSearchIndex(Math.max(0, pageStart - 50)); }}>上一页</button>
+              <button disabled={pageStart + 50 >= searchResults.length} onClick={() => { followSearchRef.current = false; setSearchIndex(pageStart + 50); }}>下一页</button>
             </div>
             <details className="keyboard-note"><summary>操作提示</summary>
               ↑↓ 选择 · Enter 查看历史<br />N / Shift+N 巡览站点 · Esc 返回

@@ -164,3 +164,10 @@ test("map-first panel morph preserves business controls and accessible state", (
   assert.doesNotMatch(map, /props\.scene,\s*props\.panelOpen/);
   assert.doesNotMatch(map, /width > 720 \? 380 : 40/);
 });
+
+test("live refreshes do not drag the station list page via hover or default rows", () => {
+  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(app, /onMouseEnter=\{\(\) => setSearchIndex/);
+  assert.match(app, /searchIdentityRef\.current = followSearchRef\.current \? station\.station_id : null/);
+  assert.match(app, /followSearchRef\.current = true;\s*setSearchIndex\(\(index\) =>/);
+});
